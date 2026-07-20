@@ -1,0 +1,17 @@
+# Go build output
+*.exe
+*.wasm
+/bin/
+
+# Go test/coverage
+*.test
+*.out
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local env
+.env
+.env.local
