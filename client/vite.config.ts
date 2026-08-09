@@ -1,4 +1,4 @@
-import {defineConfig, type Plugin} from 'vite'
+import {defineConfig, type Plugin, type UserConfig} from 'vite'
 import react from '@vitejs/plugin-react'
 import {execFile} from 'node:child_process'
 import {promisify} from 'node:util'
@@ -35,4 +35,8 @@ function simWasm(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), simWasm()],
-})
+  test: {
+    environment: 'jsdom',
+    setupFiles: './tests/setup.ts',
+  }
+} as UserConfig)
