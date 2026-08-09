@@ -1,7 +1,3 @@
 package main
 
-func main() {
-	for {
-
-	}
-}
+func main() {}
