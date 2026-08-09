@@ -2,6 +2,7 @@
 *.exe
 *.wasm
 /bin/
+client/public/wasm_exec.js
 
 # Go test/coverage
 *.test
