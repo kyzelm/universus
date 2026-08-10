@@ -1,7 +1,7 @@
 import {Application, Container, Graphics, Text} from 'pixi.js'
 import {createNetplay, depthP99, type Netplay} from '../net/netplay'
 import type {Peer} from '../net/peer'
-import {advance, loadSim, readSnapshot, reset, rewind} from '../sim/wasm'
+import {advance, checksum, loadSim, readSnapshot, reset, rewind} from '../sim/wasm'
 import {createClock} from './clock'
 import {createInput} from './input'
 import {createSamples} from './stats'
@@ -106,7 +106,7 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     connect(peer, seat) {
       reset()
       ticks = 0
-      net = createNetplay({advance, rewind}, (data) => peer.send(data), seat)
+      net = createNetplay({advance, rewind, checksum}, (data) => peer.send(data), seat)
     },
 
     receive(data) {
@@ -142,6 +142,7 @@ function netHud(net: Netplay): string {
     `rollback ${pct(s.rollbacks)}% depth p99 ${depthP99(s.depths)}`,
     `mispredict ${pct(s.mispredicted)}%`,
     `stalls ${s.stalls}`,
-    `desync ${s.dropped}`,
+    `checked ${s.verified}`,
+    s.desyncs ? `DESYNC at frame ${s.desyncFrame}` : `desync 0`,
   ].join('  ')
 }

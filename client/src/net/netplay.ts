@@ -1,7 +1,9 @@
 import {createSamples, type Samples} from '../game/stats'
 import {
+  decodeChecksum,
   decodeInputs,
   decodePing,
+  encodeChecksum,
   encodeInputs,
   encodePing,
   packetType,
@@ -20,6 +22,13 @@ import {
  */
 export const INPUT_DELAY = 2
 export const MAX_ROLLBACK = 8
+
+/**
+ * Frames between checksum exchanges. Only frames whose inputs are all known
+ * are compared — a predicted state legitimately differs between the two ends,
+ * and comparing one would report a desync on every healthy connection.
+ */
+export const CHECKSUM_EVERY = 30
 
 /**
  * The 99th-percentile rollback depth from the histogram — the number worth
@@ -42,6 +51,8 @@ export function depthP99(depths: readonly number[]): number {
 export interface SimBridge {
   advance(p1: number, p2: number): void
   rewind(frame: number): boolean
+  /** Hash of the current state. Called once per CHECKSUM_EVERY frames. */
+  checksum(): number
 }
 
 export interface NetplayStats {
@@ -58,6 +69,11 @@ export interface NetplayStats {
   /** Corrections that arrived too late to apply — a desync, if it ever fires. */
   dropped: number
   malformed: number
+  /** Confirmed frames where both ends hashed the same state. */
+  verified: number
+  /** …and where they did not. The first such frame is where to start looking. */
+  desyncs: number
+  desyncFrame: number
   rtt: Samples
   replayMs: Samples
 }
@@ -88,6 +104,12 @@ export function createNetplay(
   /** What we actually fed the sim for the remote player at each frame. */
   const used: number[] = []
 
+  /** Our state hash at the start of each checkpoint frame. */
+  const sums = new Map<number, number>()
+  /** Theirs, held until the frame is settled on our side too. */
+  const theirSums = new Map<number, number>()
+  let sentThrough = 0
+
   let frame = 0
   /** Highest frame with remote input known contiguously from the start. */
   let confirmed = -1
@@ -101,6 +123,9 @@ export function createNetplay(
     stalls: 0,
     dropped: 0,
     malformed: 0,
+    verified: 0,
+    desyncs: 0,
+    desyncFrame: -1,
     rtt: createSamples(),
     replayMs: createSamples(),
   }
@@ -123,6 +148,48 @@ export function createNetplay(
     const mine = local[f] ?? 0
     if (seat === 0) sim.advance(mine, remoteBits)
     else sim.advance(remoteBits, mine)
+
+    // Recorded on the way past, because the hash of frame N is unreachable once
+    // the sim has moved on. A replay overwrites it with the corrected value,
+    // which is exactly what should be compared.
+    const next = f + 1
+    if (next % CHECKSUM_EVERY === 0) sums.set(next, sim.checksum() >>> 0)
+  }
+
+  /**
+   * Sends and compares checksums for frames that can no longer change. The
+   * state at frame f is settled once every input before f is known, so
+   * `confirmed + 1` is the newest frame worth hashing.
+   */
+  function settle(): void {
+    const settled = confirmed + 1
+
+    for (let f = sentThrough + CHECKSUM_EVERY; f <= settled; f += CHECKSUM_EVERY) {
+      const sum = sums.get(f)
+      if (sum === undefined) break // not simulated yet; it will go out later
+      send(encodeChecksum(f, sum))
+      sentThrough = f
+    }
+
+    for (const [f, theirs] of theirSums) {
+      if (f > settled) continue // still predicted here; judging it now is unfair
+
+      const ours = sums.get(f)
+      if (ours === undefined) {
+        // Settled but not simulated here yet — inputs can arrive faster than we
+        // step. Hold it, unless it is old enough that we never will.
+        if (f < settled - CHECKSUM_EVERY * 4) theirSums.delete(f)
+        continue
+      }
+
+      theirSums.delete(f)
+      if (ours === theirs) {
+        stats.verified++
+      } else {
+        stats.desyncs++
+        if (stats.desyncFrame < 0) stats.desyncFrame = f
+      }
+    }
   }
 
   function sendInputs(through: number): void {
@@ -179,6 +246,7 @@ export function createNetplay(
       simulate(frame, remoteAt(frame))
       frame++
       stats.frames++
+      settle()
       return true
     },
 
@@ -189,6 +257,13 @@ export function createNetplay(
           const {stamp, reply} = decodePing(data)
           if (reply) stats.rtt.push((stampNow() - stamp) / 10)
           else send(encodePing(stamp, true))
+          return
+        }
+
+        if (packetType(data) === PacketType.checksum) {
+          const {frame: f, sum} = decodeChecksum(data)
+          theirSums.set(f, sum)
+          settle()
           return
         }
 
@@ -212,6 +287,7 @@ export function createNetplay(
 
       while (known[confirmed + 1]) confirmed++
       if (earliest >= 0) rollback(earliest)
+      settle()
     },
 
     ping() {

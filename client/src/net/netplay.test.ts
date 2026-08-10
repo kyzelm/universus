@@ -1,13 +1,52 @@
 import {describe, expect, test} from 'vitest'
-import {createNetplay, depthP99, INPUT_DELAY, MAX_ROLLBACK, type SimBridge} from './netplay'
-import {decodeInputs, decodePing, encodeInputs, encodePing, REDUNDANCY, stampNow} from './packet'
+import {
+  CHECKSUM_EVERY,
+  createNetplay,
+  depthP99,
+  INPUT_DELAY,
+  MAX_ROLLBACK,
+  type SimBridge,
+} from './netplay'
+import {
+  decodeInputs,
+  decodePing,
+  encodeChecksum,
+  encodeInputs,
+  encodePing,
+  PacketType,
+  REDUNDANCY,
+  stampNow,
+} from './packet'
+
+/**
+ * Two drivers wired to each other through a delay queue — the closest thing to
+ * a real match that runs headlessly. Seat 0 feeds the sim (mine, theirs) and
+ * seat 1 feeds it (theirs, mine), so both stubs see the same argument order and
+ * must agree on every hash.
+ */
+function match(frames: number, lagFrames = 3, corruptBAt = -1) {
+  const simA = stubSim()
+  const simB = stubSim(corruptBAt)
+  const flight: {at: number; toA: boolean; data: ArrayBuffer}[] = []
+  let now = 0
+
+  const A = createNetplay(simA, (d) => flight.push({at: now + lagFrames, toA: false, data: d}), 0)
+  const B = createNetplay(simB, (d) => flight.push({at: now + lagFrames, toA: true, data: d}), 1)
+
+  for (now = 0; now < frames; now++) {
+    for (const p of flight.filter((p) => p.at === now)) (p.toA ? A : B).receive(p.data)
+    A.step(now & 0xf)
+    B.step((now * 3) & 0xf)
+  }
+  return {A, B, simA, simB}
+}
 
 /**
  * A stand-in for the sim that records what it was fed. `applied[f]` holds the
  * *last* inputs simulated for frame f, so after a replay it holds the corrected
  * ones — which is exactly the property the rollback tests care about.
  */
-function stubSim() {
+function stubSim(corruptAt = -1) {
   const applied: [number, number][] = []
   let frame = 0
   const sim: SimBridge & {applied: typeof applied; readonly frame: number} = {
@@ -16,13 +55,26 @@ function stubSim() {
       return frame
     },
     advance(p1, p2) {
-      applied[frame] = [p1, p2]
+      // corruptAt makes this end diverge from the frame given onward, which is
+      // what a real desync looks like: one bad frame poisons every hash after.
+      applied[frame] = [p1, frame === corruptAt ? p2 ^ 1 : p2]
       frame++
     },
     rewind(to) {
       if (to >= frame || frame - to > MAX_ROLLBACK) return false
       frame = to
       return true
+    },
+    // FNV-1a over the whole history, so the hash depends on every frame the
+    // way the real state hash does.
+    checksum() {
+      let h = 2166136261
+      for (let f = 0; f < frame; f++) {
+        for (const v of applied[f]) {
+          h = Math.imul(h ^ v, 16777619)
+        }
+      }
+      return h >>> 0
     },
   }
   return sim
@@ -169,6 +221,62 @@ describe('ping', () => {
     expect(net.stats.rtt.count).toBe(1)
     expect(net.stats.rtt.percentile(50)).toBeGreaterThanOrEqual(2.5)
     expect(net.stats.rtt.percentile(50)).toBeLessThan(10)
+  })
+})
+
+describe('checksum exchange', () => {
+  test('two ends running the same inputs verify clean', () => {
+    const {A, B} = match(300)
+
+    expect(A.stats.verified).toBeGreaterThan(5)
+    expect(B.stats.verified).toBeGreaterThan(5)
+    expect(A.stats.desyncs).toBe(0)
+    expect(B.stats.desyncs).toBe(0)
+    expect(A.stats.rollbacks).toBeGreaterThan(0) // and it did roll back
+  })
+
+  test('one bad frame on one end is caught at the next checkpoint', () => {
+    const {A, B} = match(300, 3, 40)
+
+    expect(A.stats.desyncs).toBeGreaterThan(0)
+    expect(B.stats.desyncs).toBeGreaterThan(0)
+    // Frame 30 hashes frames 0-29 and is still clean; 60 is the first to cover
+    // frame 40, so that is where it must surface.
+    expect(A.stats.desyncFrame).toBe(60)
+  })
+
+  test('a checksum for an unsettled frame waits, then is judged', () => {
+    const {net} = harness()
+
+    net.receive(encodeChecksum(30, 0xdeadbeef))
+    expect(net.stats.verified).toBe(0)
+    expect(net.stats.desyncs).toBe(0) // nothing to compare against yet
+
+    for (let f = 0; f < 40; f++) {
+      net.receive(encodeInputs(f, [0]))
+      net.step(0)
+    }
+
+    // Frame 30 is settled now, so the held checksum finally gets judged — and
+    // 0xdeadbeef was never going to match.
+    expect(net.stats.desyncs).toBe(1)
+    expect(net.stats.desyncFrame).toBe(30)
+  })
+
+  test('checkpoints go out only for frames that can no longer change', () => {
+    const {sent, net} = harness()
+    for (let f = 0; f < 40; f++) {
+      net.receive(encodeInputs(f, [0]))
+      net.step(0)
+    }
+
+    const sums = sent.filter((d) => new DataView(d).getUint8(0) === PacketType.checksum)
+    expect(sums.length).toBeGreaterThan(0)
+    for (const d of sums) {
+      const frame = new DataView(d).getUint32(1, true)
+      expect(frame % CHECKSUM_EVERY).toBe(0)
+      expect(frame).toBeLessThanOrEqual(net.frame)
+    }
   })
 })
 

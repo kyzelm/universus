@@ -76,6 +76,26 @@ export function decodeInputs(data: ArrayBuffer): InputsPacket {
 }
 
 /**
+ * Checksum: [uint8 type][uint32 frame][uint32 checksum], 9 bytes. The state
+ * hash at the start of `frame`, which both machines must agree on exactly.
+ */
+export function encodeChecksum(frame: number, sum: number): ArrayBuffer {
+  const buf = new ArrayBuffer(9)
+  const v = new DataView(buf)
+  v.setUint8(0, PacketType.checksum)
+  v.setUint32(1, frame >>> 0, true)
+  v.setUint32(5, sum >>> 0, true)
+  return buf
+}
+
+export function decodeChecksum(data: ArrayBuffer): {frame: number; sum: number} {
+  if (data.byteLength !== 9) throw new Error(`checksum is ${data.byteLength} bytes, want 9`)
+  const v = new DataView(data)
+  if (v.getUint8(0) !== PacketType.checksum) throw new Error(`not a checksum: type ${v.getUint8(0)}`)
+  return {frame: v.getUint32(1, true), sum: v.getUint32(5, true)}
+}
+
+/**
  * Ping: [uint8 type][uint32 stamp][uint8 reply], 6 bytes. The stamp is the
  * sender's own clock and comes back untouched, so RTT is one subtraction and
  * there is no table of outstanding pings to keep.
