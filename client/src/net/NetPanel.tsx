@@ -1,68 +1,40 @@
 import {useEffect, useRef, useState} from 'react'
-import {decodeInputs, encodeInputs, REDUNDANCY} from './packet'
-import {guest, host, type Connection, type Peer} from './peer'
+import type {Game} from '../game/game'
+import {guest, host, type Connection} from './peer'
 
 /**
- * Manual signalling and a traffic test for the M0 transport spike: connect two
- * tabs, push an inputs packet per frame, and show what arrives.
+ * Manual signalling for the M0 spike: copy the blob to the other end, paste the
+ * one that comes back. The signalling server is M3.
  *
- * The traffic is synthetic — this proves the channel, the packet format and the
- * redundancy window carry inputs at 60 Hz. Feeding real inputs into rollback is
- * the next step, and this panel is throwaway either way.
+ * Once the channel opens this hands the peer to the game and gets out of the
+ * way — the netplay numbers live in the HUD, next to the frame they describe.
  */
-export default function NetPanel() {
+export default function NetPanel({game}: {game: Game | null}) {
   const [role, setRole] = useState<'idle' | 'host' | 'guest'>('idle')
   const [localBlob, setLocalBlob] = useState('')
   const [remoteBlob, setRemoteBlob] = useState('')
   const [status, setStatus] = useState('not connected')
-  const [stats, setStats] = useState(zero)
 
   const conn = useRef<Connection | null>(null)
-  const seen = useRef(new Set<number>())
-  const live = useRef(zero)
 
   useEffect(() => () => conn.current?.close(), [])
 
-  function receive(data: ArrayBuffer) {
-    let packet
-    try {
-      packet = decodeInputs(data)
-    } catch {
-      live.current = {...live.current, malformed: live.current.malformed + 1}
-      return
-    }
-
-    const {startFrame, inputs} = packet
-    const newest = startFrame + inputs.length - 1
-    let recovered = live.current.recovered
-
-    for (let i = 0; i < inputs.length; i++) {
-      const f = startFrame + i
-      if (seen.current.has(f)) continue
-      seen.current.add(f)
-      // First learned from a redundant slot rather than as the newest input:
-      // the packet that carried it as newest never arrived.
-      if (f !== newest) recovered++
-    }
-
-    live.current = {
-      ...live.current,
-      recv: live.current.recv + 1,
-      lastFrame: Math.max(live.current.lastFrame, newest),
-      bytes: data.byteLength,
-      recovered,
-    }
-  }
-
   async function connect(as: 'host' | 'guest') {
+    if (!game) return setStatus('the sim is still loading')
+
     try {
       setStatus('gathering candidates…')
-      const c = as === 'host' ? await host(receive) : await guest(remoteBlob, receive)
+      const forward = (data: ArrayBuffer) => game.receive(data)
+      const c = as === 'host' ? await host(forward) : await guest(remoteBlob, forward)
+
       conn.current = c
       setRole(as)
       setLocalBlob(c.localBlob)
       setStatus(as === 'host' ? 'paste the answer below' : 'send the answer back')
-      pump(await c.ready)
+
+      // The host is seat 0 and drives P1; whoever joined drives P2.
+      game.connect(await c.ready, as === 'host' ? 0 : 1)
+      setStatus('connected')
     } catch (e) {
       setStatus(`failed: ${(e as Error).message}`)
     }
@@ -75,42 +47,6 @@ export default function NetPanel() {
       await conn.current?.accept?.(remoteBlob)
     } catch (e) {
       setStatus(`failed: ${(e as Error).message}`)
-    }
-  }
-
-  /**
-   * One inputs packet per frame, each carrying the last REDUNDANCY frames.
-   *
-   * Measured: a hidden tab gets 3 interval ticks where 137 are due — Chrome
-   * throttles background timers to about 1 Hz, and requestAnimationFrame stops
-   * entirely. So a player who tabs away stops sending inputs within a frame or
-   * two. M2 has to treat that as a stall like any other, not as a clean
-   * disconnect; there is no way to keep simulating in a hidden tab.
-   */
-  function pump(peer: Peer) {
-    setStatus('connected')
-    const history: number[] = []
-    let frame = 0
-
-    const send = setInterval(() => {
-      history[frame] = frame % 16 // synthetic, but a changing bitfield
-      const start = Math.max(0, frame - REDUNDANCY + 1)
-      peer.send(encodeInputs(start, history.slice(start, frame + 1)))
-      live.current = {...live.current, sent: live.current.sent + 1}
-      frame++
-    }, 1000 / 60)
-
-    const show = setInterval(() => setStats(live.current), 250)
-
-    const stop = () => {
-      clearInterval(send)
-      clearInterval(show)
-    }
-    // The panel closes the connection on unmount; stop the timers with it.
-    const close = conn.current!.close
-    conn.current!.close = () => {
-      stop()
-      close()
     }
   }
 
@@ -128,7 +64,7 @@ export default function NetPanel() {
   return (
     <section className="net">
       <p className="keys">
-        {role} · {status}
+        {role} · {status} {connected && '· WASD moves you'}
       </p>
 
       {role === 'guest' && !localBlob && (
@@ -156,16 +92,6 @@ export default function NetPanel() {
           <button onClick={() => void acceptAnswer()}>accept answer</button>
         </>
       )}
-
-      {connected && (
-        <p className="keys">
-          sent {stats.sent} · recv {stats.recv} · remote frame {stats.lastFrame} ·{' '}
-          {stats.bytes} B/packet · recovered by redundancy {stats.recovered} · malformed{' '}
-          {stats.malformed}
-        </p>
-      )}
     </section>
   )
 }
-
-const zero = {sent: 0, recv: 0, lastFrame: -1, bytes: 0, recovered: 0, malformed: 0}

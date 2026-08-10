@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest'
-import {createNetplay, INPUT_DELAY, MAX_ROLLBACK, type SimBridge} from './netplay'
+import {createNetplay, depthP99, INPUT_DELAY, MAX_ROLLBACK, type SimBridge} from './netplay'
 import {decodeInputs, decodePing, encodeInputs, encodePing, REDUNDANCY, stampNow} from './packet'
 
 /**
@@ -129,6 +129,26 @@ test('stalls rather than outrunning the rollback window', () => {
   // A stalled frame still sends. Waiting silently would leave the other end
   // with nothing to catch up on, and the stall would never end.
   expect(sent.length).toBe(20)
+})
+
+describe('depthP99', () => {
+  test('is 0 when nothing has rolled back', () => {
+    expect(depthP99([0, 0, 0])).toBe(0)
+  })
+
+  test('reports the tail, not the bulk', () => {
+    const depths = Array(9).fill(0)
+    depths[1] = 990
+    depths[8] = 10 // 1% of the frames rolled back all the way
+    expect(depthP99(depths)).toBe(8)
+  })
+
+  test('ignores a tail thinner than 1%', () => {
+    const depths = Array(9).fill(0)
+    depths[1] = 10_000
+    depths[8] = 1
+    expect(depthP99(depths)).toBe(1)
+  })
 })
 
 describe('ping', () => {

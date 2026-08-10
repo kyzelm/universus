@@ -21,6 +21,23 @@ import {
 export const INPUT_DELAY = 2
 export const MAX_ROLLBACK = 8
 
+/**
+ * The 99th-percentile rollback depth from the histogram — the number worth
+ * reporting, since the mean depth of a healthy connection is near zero and
+ * hides the frames that actually cost something.
+ */
+export function depthP99(depths: readonly number[]): number {
+  const total = depths.reduce((a, b) => a + b, 0)
+  if (total === 0) return 0
+
+  let seen = 0
+  for (let d = depths.length - 1; d >= 0; d--) {
+    seen += depths[d]
+    if (seen >= total * 0.01) return d
+  }
+  return 0
+}
+
 /** The sim, from the driver's side. Small on purpose: it is stubbed in tests. */
 export interface SimBridge {
   advance(p1: number, p2: number): void
