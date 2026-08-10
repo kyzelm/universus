@@ -7,7 +7,7 @@ import {
   IN_UP,
   packBits,
   resolveSOCD,
-} from '../src/game/input'
+} from './input'
 
 test('SOCD: left and right resolve to neutral', () => {
   expect(resolveSOCD(IN_LEFT | IN_RIGHT)).toBe(0)
@@ -64,6 +64,22 @@ test('poll reports held keys per player', () => {
 
   release(target, 'KeyD')
   expect(input.poll()).toEqual([0, IN_LEFT])
+
+  input.dispose()
+})
+
+test('a tap that starts and ends between two polls still registers', () => {
+  const target = new EventTarget()
+  const input = createInput(target)
+
+  press(target, 'KeyD')
+  release(target, 'KeyD')
+
+  // The key is already up by the time the loop looks, but the player pressed
+  // it, so it lands on this frame.
+  expect(input.poll()).toEqual([IN_RIGHT, 0])
+  // ...and on exactly one frame, not forever.
+  expect(input.poll()).toEqual([0, 0])
 
   input.dispose()
 })

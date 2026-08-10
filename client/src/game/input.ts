@@ -66,10 +66,17 @@ export interface Input {
 export function createInput(target: EventTarget = window): Input {
   const held = new Set<string>()
 
+  // Keys pressed since the last poll, whether or not they are still down. A
+  // tap that starts and ends between two polls is a real input the player
+  // made; without this latch it lands on no frame at all and vanishes. It is
+  // held for exactly one frame, which is the finest the sim can represent.
+  const tapped = new Set<string>()
+
   const down = (e: Event) => {
     const {code} = e as KeyboardEvent
     if (code in P1_KEYS || code in P2_KEYS) {
       held.add(code)
+      tapped.add(code)
       e.preventDefault() // arrows scroll the page otherwise
     }
   }
@@ -84,12 +91,17 @@ export function createInput(target: EventTarget = window): Input {
   target.addEventListener('blur', clear)
 
   return {
-    poll: () => [packBits(held, P1_KEYS), packBits(held, P2_KEYS)],
+    poll() {
+      const pressed = new Set([...held, ...tapped])
+      tapped.clear()
+      return [packBits(pressed, P1_KEYS), packBits(pressed, P2_KEYS)]
+    },
     dispose() {
       target.removeEventListener('keydown', down)
       target.removeEventListener('keyup', up)
       target.removeEventListener('blur', clear)
       held.clear()
+      tapped.clear()
     },
   }
 }
