@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs'
 import {beforeAll, expect, test} from 'vitest'
-import '../public/wasm_exec.js'
-import {advance, initSim, readSnapshot, reset} from '../src/utils/wasm'
+import '../../public/wasm_exec.js'
+import {advance, initSim, readSnapshot, reset} from './wasm'
 
 // The Go build and the TypeScript reader agree on a byte layout or they do
 // not. This runs the real module off disk and checks that they do.
