@@ -24,7 +24,7 @@ function simWasm(): Plugin {
       })
     },
     handleHotUpdate({file, server}) {
-      if (file.endsWith('utils/wasm.ts')) {
+      if (file.endsWith('sim/wasm.ts')) {
         server.hot.send({type: 'full-reload'})
         return []
       }

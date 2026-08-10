@@ -1,5 +1,5 @@
 import {Application, Container, Graphics, Text} from 'pixi.js'
-import {advance, loadSim, readSnapshot, reset} from '../utils/wasm'
+import {advance, loadSim, readSnapshot, reset} from '../sim/wasm'
 import {createClock} from './clock'
 import {createInput} from './input'
 import {createSamples} from './stats'
