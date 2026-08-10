@@ -20,3 +20,20 @@ canvas {
   font-size: 0.8rem;
   text-align: center;
 }
+
+.net {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+  max-width: 800px;
+}
+
+.net textarea {
+  width: 100%;
+  height: 4rem;
+  background: #14161a;
+  color: #6b7686;
+  border: 1px solid #2a2f38;
+  font-family: monospace;
+  font-size: 0.7rem;
+}

@@ -1,5 +1,6 @@
 import {useEffect, useRef} from 'react'
 import {startGame} from './game/game'
+import NetPanel from './net/NetPanel'
 
 export default function App() {
   const host = useRef<HTMLDivElement>(null)
@@ -22,6 +23,7 @@ export default function App() {
     <main>
       <div ref={host} />
       <p className="keys">P1 WASD · P2 arrows</p>
+      <NetPanel />
     </main>
   )
 }
