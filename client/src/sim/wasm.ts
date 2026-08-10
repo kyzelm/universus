@@ -7,9 +7,12 @@ declare class Go {
 declare global {
   let sim: {
     advance(p1: number, p2: number): void
+    rewind(frame: number): boolean
     reset(): void
+    checksum(): number
     snapshotPtr(): number
     snapshotLen(): number
+    noop(): void
     quit(): void
   }
 }
@@ -75,8 +78,22 @@ export function advance(p1: number, p2: number): void {
   sim.advance(p1, p2)
 }
 
+/**
+ * Restores the state at the start of `frame`; the caller replays with advance.
+ * False means the frame is outside the rollback window and the correction
+ * arrived too late to apply.
+ */
+export function rewind(frame: number): boolean {
+  return sim.rewind(frame)
+}
+
 export function reset(): void {
   sim.reset()
+}
+
+/** FNV-1a over the packed state. The number both machines must agree on. */
+export function checksum(): number {
+  return sim.checksum()
 }
 
 // ponytail: allocates a small object per frame. 60/s is nothing; read the

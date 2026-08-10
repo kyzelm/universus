@@ -36,12 +36,12 @@ func main() {
 		return nil
 	}))
 
-	// adjust(frame, p1, p2) corrects a mispredicted input: one call rewinds and
-	// replays every frame since, so the boundary is crossed once per rollback,
-	// not once per replayed frame. Reports false outside the rollback window.
-	api.Set("adjust", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		in := [2]uint16{uint16(args[1].Int()), uint16(args[2].Int())}
-		ok := session.Adjust(uint32(args[0].Int()), in)
+	// rewind(frame) restores the state at the start of frame; the caller then
+	// replays with advance(). The net layer drives the replay because it holds
+	// the input history and knows which predictions the arriving packet just
+	// invalidated. Reports false outside the rollback window.
+	api.Set("rewind", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		ok := session.Rewind(uint32(args[0].Int()))
 		session.State().WriteSnapshot(snap[:])
 		return ok
 	}))

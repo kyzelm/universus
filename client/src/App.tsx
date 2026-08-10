@@ -6,6 +6,10 @@ export default function App() {
   const host = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    // ?bench leaves the sim untouched so a measurement harness can drive it
+    // without the render loop advancing frames underneath it.
+    if (new URLSearchParams(location.search).has('bench')) return
+
     let dispose: (() => void) | undefined
     let cancelled = false
 

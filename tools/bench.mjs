@@ -18,6 +18,7 @@ const samples = Number(process.argv[2] ?? 200)
 // Build here rather than trusting client/public/main.wasm, which goes stale the
 // moment the sim changes and would quietly benchmark the wrong code.
 const dir = mkdtempSync(join(tmpdir(), 'universus-bench-'))
+let sim
 try {
   const wasm = join(dir, 'main.wasm')
   execFileSync('go', ['build', '-o', wasm, './sim/wasm'], {
@@ -25,12 +26,16 @@ try {
     env: {...process.env, GOOS: 'js', GOARCH: 'wasm'},
     stdio: 'inherit',
   })
-  const sim = await loadSim(wasm)
+  sim = await loadSim(wasm)
   report(sim, samples)
-  sim.quit()
 } finally {
   rmSync(dir, {recursive: true, force: true})
 }
+
+// quit() ends Go's main, but the runtime leaves a timer pending that resumes an
+// exited program and throws. Exiting in the same tick means it never fires.
+sim.quit()
+process.exit(process.exitCode ?? 0)
 
 function report(sim, samples) {
   // A single call is far below timer resolution, so each sample times a batch
@@ -77,9 +82,12 @@ function advanceOnly(sim) {
 }
 
 /**
- * One frame plus a correction at maximum depth: 9 sim steps, the worst case
- * that still has to fit in 16.6 ms. One boundary crossing per rollback, not
- * per replayed frame — the same shape the net layer will use.
+ * One frame plus a correction at maximum depth: 9 sim steps and 10 boundary
+ * crossings, the worst case that still has to fit in 16.6 ms.
+ *
+ * The replay is driven from JS, exactly as the net layer drives it — that costs
+ * a crossing per replayed frame instead of one per rollback, and this is the
+ * number that says whether that is affordable.
  */
 function advanceWithRollback(sim) {
   let frame = 0
@@ -90,8 +98,12 @@ function advanceWithRollback(sim) {
     const [a, b] = inputAt(frame)
     sim.advance(a, b)
     frame++
-    if (!sim.adjust(frame - 8, a, b)) {
-      throw new Error(`rollback to frame ${frame - 8} rejected at frame ${frame}`)
+
+    const to = frame - 8
+    if (!sim.rewind(to)) throw new Error(`rewind to frame ${to} rejected at frame ${frame}`)
+    for (let f = to; f < frame; f++) {
+      const [ra, rb] = inputAt(f)
+      sim.advance(ra, rb)
     }
   }
 }

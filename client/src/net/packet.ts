@@ -19,6 +19,12 @@ export const REDUNDANCY = 8
 
 const HEADER = 6
 
+/** The type byte, without decoding the rest. Cheap enough to call on dispatch. */
+export function packetType(data: ArrayBuffer): number {
+  if (data.byteLength < 1) throw new Error('empty packet')
+  return new DataView(data).getUint8(0)
+}
+
 export interface InputsPacket {
   startFrame: number
   inputs: Uint16Array
@@ -67,4 +73,33 @@ export function decodeInputs(data: ArrayBuffer): InputsPacket {
   for (let i = 0; i < count; i++) inputs[i] = v.getUint16(HEADER + i * 2, true)
 
   return {startFrame: v.getUint32(1, true), inputs}
+}
+
+/**
+ * Ping: [uint8 type][uint32 stamp][uint8 reply], 6 bytes. The stamp is the
+ * sender's own clock and comes back untouched, so RTT is one subtraction and
+ * there is no table of outstanding pings to keep.
+ *
+ * Tenths of a millisecond, not milliseconds: on a LAN the whole round trip can
+ * be under 1 ms, and a measurement that reports 0 is not a measurement.
+ */
+export function encodePing(stamp: number, reply: boolean): ArrayBuffer {
+  const buf = new ArrayBuffer(6)
+  const v = new DataView(buf)
+  v.setUint8(0, PacketType.ping)
+  v.setUint32(1, stamp >>> 0, true)
+  v.setUint8(5, reply ? 1 : 0)
+  return buf
+}
+
+export function decodePing(data: ArrayBuffer): {stamp: number; reply: boolean} {
+  if (data.byteLength !== 6) throw new Error(`ping is ${data.byteLength} bytes, want 6`)
+  const v = new DataView(data)
+  if (v.getUint8(0) !== PacketType.ping) throw new Error(`not a ping: type ${v.getUint8(0)}`)
+  return {stamp: v.getUint32(1, true), reply: v.getUint8(5) !== 0}
+}
+
+/** The clock both ends stamp pings with: tenths of a ms, wrapped to uint32. */
+export function stampNow(): number {
+  return Math.round(performance.now() * 10) >>> 0
 }

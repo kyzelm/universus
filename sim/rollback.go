@@ -33,20 +33,30 @@ func (s *Session) Advance(in [2]uint16) {
 	s.state.Advance(in)
 }
 
-// Adjust corrects a mispredicted input: the real input for frame turned out to
-// be in, so rewind to the start of that frame and replay forward to the frame
-// we were already on. This is all of rollback. Predicting, and deciding when to
-// call this, belong to the net layer.
+// Rewind restores the state at the start of frame. The caller then replays,
+// which is what lets it supply corrected inputs for every frame after the
+// misprediction and not just the one that was wrong — a packet carrying eight
+// frames of history can invalidate all eight.
 //
 // Reports false when frame is outside the rollback window. That is a desync the
-// caller has to handle — silently clamping here would hide it.
-func (s *Session) Adjust(frame uint32, in [2]uint16) bool {
+// caller has to handle; silently clamping here would hide it.
+func (s *Session) Rewind(frame uint32) bool {
 	now := s.state.Frame
 	if frame >= now || now-frame > MaxRollback {
 		return false
 	}
-
 	s.state = s.ring[frame%ringSize] // the rewind is one struct assignment
+	return true
+}
+
+// Adjust is the single-frame case: the real input for frame turned out to be
+// in, so rewind and replay from the inputs already recorded. The net layer uses
+// Rewind directly because it has better inputs than the recorded ones.
+func (s *Session) Adjust(frame uint32, in [2]uint16) bool {
+	now := s.state.Frame
+	if !s.Rewind(frame) {
+		return false
+	}
 	s.inputs[frame%ringSize] = in
 
 	for s.state.Frame < now {
