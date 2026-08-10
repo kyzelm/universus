@@ -117,11 +117,7 @@ func TestJumpingOverAnotherPlayerIgnoresPushbox(t *testing.T) {
 
 // The whole architecture rests on this: same start, same inputs, same bytes.
 func TestSameInputsProduceIdenticalState(t *testing.T) {
-	inputs := make([][2]uint16, 2000)
-	for f := range inputs {
-		// A fixed, varied pattern — no clock, no rand, reproducible anywhere.
-		inputs[f] = [2]uint16{uint16(f*7%13) & 0xF, uint16(f*11%17) & 0xF}
-	}
+	inputs := inputSeq(2000)
 
 	a, b := New(), New()
 	for _, in := range inputs {
