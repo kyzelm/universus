@@ -4,8 +4,7 @@
 //
 // Usage: node tools/wasm-replay.mjs <main.wasm> <log.inputs>
 import {readFileSync} from 'node:fs'
-import {createRequire} from 'node:module'
-import {execFileSync} from 'node:child_process'
+import {loadSim} from './wasm-load.mjs'
 
 const [wasmPath, logPath] = process.argv.slice(2)
 if (!wasmPath || !logPath) {
@@ -13,18 +12,7 @@ if (!wasmPath || !logPath) {
   process.exit(1)
 }
 
-// wasm_exec.js is a plain script that assigns globalThis.Go; require runs it
-// for its side effect. GOROOT owns the copy that matches this toolchain — the
-// one in client/public/ is a build artifact and can be stale.
-const goroot = process.env.GOROOT || execFileSync('go', ['env', 'GOROOT'], {encoding: 'utf8'}).trim()
-createRequire(import.meta.url)(`${goroot}/lib/wasm/wasm_exec.js`)
-
-const go = new Go()
-const {instance} = await WebAssembly.instantiate(readFileSync(wasmPath), go.importObject)
-
-// Go's main blocks on quit(), so this promise resolves at the end, not here.
-// The API is on globalThis by the time run() returns.
-void go.run(instance)
+const sim = await loadSim(wasmPath)
 
 const log = readFileSync(logPath)
 if (log.length === 0 || log.length % 4 !== 0) {

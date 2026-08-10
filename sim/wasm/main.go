@@ -36,6 +36,16 @@ func main() {
 		return nil
 	}))
 
+	// adjust(frame, p1, p2) corrects a mispredicted input: one call rewinds and
+	// replays every frame since, so the boundary is crossed once per rollback,
+	// not once per replayed frame. Reports false outside the rollback window.
+	api.Set("adjust", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		in := [2]uint16{uint16(args[1].Int()), uint16(args[2].Int())}
+		ok := session.Adjust(uint32(args[0].Int()), in)
+		session.State().WriteSnapshot(snap[:])
+		return ok
+	}))
+
 	// checksum() is what the native-vs-WASM differential compares.
 	api.Set("checksum", js.FuncOf(func(js.Value, []js.Value) any {
 		return session.Checksum()
@@ -46,6 +56,12 @@ func main() {
 	}))
 	api.Set("snapshotLen", js.FuncOf(func(js.Value, []js.Value) any {
 		return len(snap)
+	}))
+	// noop() exists only for the benchmark: it isolates the cost of crossing the
+	// JS/Go boundary from the cost of the sim, which turn out to differ by
+	// almost three orders of magnitude. Subtract it from any other number here.
+	api.Set("noop", js.FuncOf(func(js.Value, []js.Value) any {
+		return nil
 	}))
 	api.Set("quit", js.FuncOf(func(js.Value, []js.Value) any {
 		close(done)
