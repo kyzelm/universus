@@ -78,7 +78,15 @@ export default function NetPanel() {
     }
   }
 
-  /** One inputs packet per frame, each carrying the last REDUNDANCY frames. */
+  /**
+   * One inputs packet per frame, each carrying the last REDUNDANCY frames.
+   *
+   * Measured: a hidden tab gets 3 interval ticks where 137 are due — Chrome
+   * throttles background timers to about 1 Hz, and requestAnimationFrame stops
+   * entirely. So a player who tabs away stops sending inputs within a frame or
+   * two. M2 has to treat that as a stall like any other, not as a clean
+   * disconnect; there is no way to keep simulating in a hidden tab.
+   */
   function pump(peer: Peer) {
     setStatus('connected')
     const history: number[] = []

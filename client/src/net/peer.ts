@@ -102,27 +102,40 @@ function wire(ch: RTCDataChannel, onMessage: (data: ArrayBuffer) => void): Promi
 }
 
 /**
- * Waits for ICE gathering to finish so the blob carries every candidate and
- * there is nothing left to trickle — which is what makes copy-paste signalling
- * possible at all.
+ * Waits for ICE candidates to stop arriving, so the blob carries all of them
+ * and there is nothing left to trickle — which is what makes copy-paste
+ * signalling possible at all.
  *
- * Capped: where STUN is unreachable, gathering never completes, and the host
- * candidates already in hand are enough for two tabs or a LAN.
+ * Deliberately not waiting for iceGatheringState 'complete'. Measured on this
+ * machine: the host candidate lands at 1 ms and the server-reflexive one at
+ * 48 ms, and then gathering sits in 'gathering' forever — still not complete
+ * after 8 s. Waiting for the state change means every connection pays a
+ * fixed timeout.
+ *
+ * So: finish once no new candidate has arrived for quietMs. That is generous
+ * against a slow STUN server (the timer restarts on every candidate) and still
+ * connects in about a second rather than three.
  */
-function gathered(pc: RTCPeerConnection, capMs = 3000): Promise<void> {
+function gathered(pc: RTCPeerConnection, quietMs = 1000, capMs = 5000): Promise<void> {
   if (pc.iceGatheringState === 'complete') return Promise.resolve()
 
   return new Promise((resolve) => {
     const finish = () => {
-      clearTimeout(timer)
-      pc.removeEventListener('icegatheringstatechange', check)
+      clearTimeout(quiet)
+      clearTimeout(cap)
+      pc.removeEventListener('icecandidate', onCandidate)
       resolve()
     }
-    const check = () => {
-      if (pc.iceGatheringState === 'complete') finish()
+
+    const onCandidate = (e: RTCPeerConnectionIceEvent) => {
+      if (!e.candidate) return finish() // the null candidate means done
+      clearTimeout(quiet)
+      quiet = setTimeout(finish, quietMs)
     }
-    const timer = setTimeout(finish, capMs)
-    pc.addEventListener('icegatheringstatechange', check)
+
+    const cap = setTimeout(finish, capMs)
+    let quiet = setTimeout(finish, quietMs)
+    pc.addEventListener('icecandidate', onCandidate)
   })
 }
 
