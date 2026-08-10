@@ -1,32 +1,56 @@
 //go:build js && wasm
 
+// Command wasm is the sim's WASM entrypoint. It owns the game state and a
+// single snapshot buffer in linear memory; JS drives it one frame at a time
+// and reads the buffer through a DataView. No state crosses as a JS value.
 package main
 
 import (
 	"syscall/js"
 	"unsafe"
+
+	"universus/sim"
 )
 
-var snapshotBuf [64]byte
+var (
+	state = sim.New()
+	snap  [sim.SnapshotSize]byte
+)
 
 func main() {
 	done := make(chan struct{})
 
-	sim := js.Global().Get("Object").New()
-	sim.Set("add", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		return args[0].Int() + args[1].Int()
+	api := js.Global().Get("Object").New()
+
+	// advance(p1, p2) runs one frame from two input bitfields and refreshes
+	// the snapshot. One call per frame, and per rollback replay frame.
+	api.Set("advance", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		state.Advance([2]uint16{uint16(args[0].Int()), uint16(args[1].Int())})
+		state.WriteSnapshot(snap[:])
+		return nil
 	}))
-	sim.Set("snapshotPtr", js.FuncOf(func(js.Value, []js.Value) any {
-		return int(uintptr(unsafe.Pointer(&snapshotBuf[0])))
+
+	api.Set("reset", js.FuncOf(func(js.Value, []js.Value) any {
+		state = sim.New()
+		state.WriteSnapshot(snap[:])
+		return nil
 	}))
-	sim.Set("snapshotLen", js.FuncOf(func(js.Value, []js.Value) any {
-		return len(snapshotBuf)
+
+	api.Set("snapshotPtr", js.FuncOf(func(js.Value, []js.Value) any {
+		return int(uintptr(unsafe.Pointer(&snap[0])))
 	}))
-	sim.Set("quit", js.FuncOf(func(js.Value, []js.Value) any {
+	api.Set("snapshotLen", js.FuncOf(func(js.Value, []js.Value) any {
+		return len(snap)
+	}))
+	api.Set("quit", js.FuncOf(func(js.Value, []js.Value) any {
 		close(done)
 		return nil
 	}))
-	js.Global().Set("sim", sim)
+
+	js.Global().Set("sim", api)
+
+	// Frame 0 is drawable before the first advance.
+	state.WriteSnapshot(snap[:])
 
 	<-done
 }
