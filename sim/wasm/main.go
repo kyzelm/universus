@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	state = sim.New()
-	snap  [sim.SnapshotSize]byte
+	session = sim.NewSession()
+	snap    [sim.SnapshotSize]byte
 )
 
 func main() {
@@ -25,15 +25,20 @@ func main() {
 	// advance(p1, p2) runs one frame from two input bitfields and refreshes
 	// the snapshot. One call per frame, and per rollback replay frame.
 	api.Set("advance", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		state.Advance([2]uint16{uint16(args[0].Int()), uint16(args[1].Int())})
-		state.WriteSnapshot(snap[:])
+		session.Advance([2]uint16{uint16(args[0].Int()), uint16(args[1].Int())})
+		session.State().WriteSnapshot(snap[:])
 		return nil
 	}))
 
 	api.Set("reset", js.FuncOf(func(js.Value, []js.Value) any {
-		state = sim.New()
-		state.WriteSnapshot(snap[:])
+		session = sim.NewSession()
+		session.State().WriteSnapshot(snap[:])
 		return nil
+	}))
+
+	// checksum() is what the native-vs-WASM differential compares.
+	api.Set("checksum", js.FuncOf(func(js.Value, []js.Value) any {
+		return session.Checksum()
 	}))
 
 	api.Set("snapshotPtr", js.FuncOf(func(js.Value, []js.Value) any {
@@ -50,7 +55,7 @@ func main() {
 	js.Global().Set("sim", api)
 
 	// Frame 0 is drawable before the first advance.
-	state.WriteSnapshot(snap[:])
+	session.State().WriteSnapshot(snap[:])
 
 	<-done
 }
