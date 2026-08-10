@@ -1,0 +1,22 @@
+body {
+  background: #0b0d10;
+  color: #c9d1d9;
+  font-family: system-ui, sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+
+canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.keys {
+  color: #6b7686;
+  font-size: 0.8rem;
+  text-align: center;
+}
