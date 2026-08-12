@@ -33,6 +33,23 @@ const (
 type PlayerState struct {
 	X, Y   Fix
 	VX, VY Fix
+
+	// Facing is +1 (right) or -1 (left). Every motion is read relative to it —
+	// quarter-circle forward is ↓↘→ facing right and ↓↙← facing left, and the
+	// player pressed the same thing both times.
+	//
+	// ponytail: set once in New and never updated. Turning to face the opponent
+	// belongs to the state machine (step 2), which decides when a turn is
+	// allowed — you do not pivot mid-move. Correct for the starting positions
+	// until then.
+	Facing int32
+
+	// Inputs is the input history ring: Inputs[f%InputHistory] is the bitfield
+	// that advanced frame f, widened to uint32 to keep GameState padding-free.
+	//
+	// In the state, not beside it, because motion recognition reads it: history
+	// outside GameState means a rollback replays a fireball as a crouch.
+	Inputs [InputHistory]uint32
 }
 
 // GameState is all gameplay state. Flat, fixed-size, comparable: no pointers,
@@ -54,11 +71,12 @@ type GameState struct {
 	Players [2]PlayerState
 }
 
-// New returns the starting state: two players apart, on the ground, RNG seeded.
+// New returns the starting state: two players apart, on the ground, facing each
+// other, RNG seeded.
 func New() GameState {
 	return GameState{RNG: seed, Players: [2]PlayerState{
-		{X: Fix(-60) << FracBits},
-		{X: Fix(60) << FracBits},
+		{X: Fix(-60) << FracBits, Facing: 1},
+		{X: Fix(60) << FracBits, Facing: -1},
 	}}
 }
 
@@ -86,7 +104,12 @@ func New() GameState {
 //	8. timers, round state (M2)
 //	9. increment frame     done; the checksum is taken by the caller
 func (s *GameState) Advance(in [2]uint16) {
-	// 1. Resolve inputs.
+	// 1. Resolve inputs. Record history first: motion recognition and the input
+	// buffer both read the ring, and both must see this frame.
+	for i := range s.Players {
+		s.Players[i].Inputs[s.Frame%InputHistory] = uint32(in[i])
+	}
+
 	for i := range s.Players {
 		p := &s.Players[i]
 		p.VX = 0
