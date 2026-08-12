@@ -26,6 +26,19 @@ for log in $logs; do
 		echo "determinism gate FAILED: $log — native vs WASM diverged"
 		echo "first divergence (< native, > wasm):"
 		head -4 "$tmp/diff.txt"
+
+		# A checksum says two states differ; it cannot say how. Dump both at
+		# the first divergent frame and diff the fields. This is the whole
+		# point of building --desync-hunt before it is needed: the answer is
+		# already on screen instead of being a night's work away.
+		frame=$(awk '/^< /{print $2; exit}' "$tmp/diff.txt")
+		if [ -n "$frame" ]; then
+			echo
+			echo "state at frame $frame (< native, > wasm):"
+			go run ./tools/replay dump "$log" "$frame" >"$tmp/native-state.txt" 2>/dev/null || true
+			node tools/wasm-replay.mjs "$tmp/main.wasm" "$log" "$frame" >"$tmp/wasm-state.txt" 2>/dev/null || true
+			diff "$tmp/native-state.txt" "$tmp/wasm-state.txt" || true
+		fi
 		exit 1
 	fi
 done

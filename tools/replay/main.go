@@ -30,7 +30,8 @@ import (
 
 const usage = `usage:
   replay gen <frames> <file>   write a deterministic input log
-  replay run <file>            print "<frame> <checksum>" for every frame`
+  replay run <file>            print "<frame> <checksum>" for every frame
+  replay dump <file> <frame>   print every state field at a frame, for diffing`
 
 func main() {
 	// Both entrypoints load the same embedded roster before touching the sim.
@@ -66,6 +67,25 @@ func cli(args []string) error {
 			return fmt.Errorf("frame count %q must be a positive integer", args[1])
 		}
 		return writeLog(args[2], gen(frames))
+
+	case len(args) == 3 && args[0] == "dump":
+		frame, err := strconv.Atoi(args[2])
+		if err != nil || frame < 0 {
+			return fmt.Errorf("frame %q must be a non-negative integer", args[2])
+		}
+		in, err := readLog(args[1])
+		if err != nil {
+			return err
+		}
+		if frame > len(in) {
+			return fmt.Errorf("frame %d is past the end of a %d-frame log", frame, len(in))
+		}
+		s := sim.NewSession()
+		for _, i := range in[:frame] {
+			s.Advance(i)
+		}
+		_, err = os.Stdout.WriteString(s.State().Dump())
+		return err
 
 	case len(args) == 2 && args[0] == "run":
 		in, err := readLog(args[1])

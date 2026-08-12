@@ -70,6 +70,13 @@ func main() {
 		return v
 	}))
 
+	// dump() is what it compares when the checksums already disagree: the
+	// whole state, one field per line, so the gate can report *which* field
+	// diverged. A hash cannot answer that by construction.
+	api.Set("dump", js.FuncOf(func(js.Value, []js.Value) any {
+		return session.State().Dump()
+	}))
+
 	// checksum() is what the native-vs-WASM differential compares.
 	api.Set("checksum", js.FuncOf(func(js.Value, []js.Value) any {
 		return session.Checksum()
