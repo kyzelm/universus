@@ -35,7 +35,7 @@ type PlayerState struct {
 
 	// Facing is +1 (right) or -1 (left). Every motion is read relative to it —
 	// quarter-circle forward is ↓↘→ facing right and ↓↙← facing left, and the
-	// player pressed the same thing both times.
+	// player pressed the same thing both times. Maintained by updateFacing.
 	Facing int32
 
 	// Char indexes the loaded roster.
@@ -169,9 +169,10 @@ func (s *GameState) Advance(in [2]uint16) {
 		}
 	}
 
-	// 4. Pushboxes and stage bounds.
+	// 4. Pushboxes and stage bounds, then turn to face the opponent.
 	s.separate()
 	s.clampToStage()
+	s.updateFacing()
 
 	// 5. Projectiles — M2.
 
@@ -301,6 +302,38 @@ func (s *GameState) clampToStage() {
 		}
 		if d := (box.X + box.W) - StageHalfWidth; d > 0 {
 			p.X -= d
+		}
+	}
+}
+
+// updateFacing turns each player toward the other.
+//
+// Facing is not cosmetic. Everything facing-relative inverts with it: walk
+// directions, motion recognition, which way boxes mirror, and — the one that
+// bites — which direction is "away" and therefore blocks. A player who has been
+// crossed up and still faces the old way cannot block at all.
+//
+// Only actionable grounded states turn. You do not pivot in the middle of an
+// attack, in hitstun, during a dash, or in the air: keeping your facing through
+// the whole jump is exactly what makes a crossup a crossup.
+//
+// Run after positions are final and before hit detection, so an attacker whose
+// opponent just jumped over them still has boxes on the side they committed to,
+// and the defender's hurtbox is already on the correct side.
+func (s *GameState) updateFacing() {
+	for i := range s.Players {
+		p := &s.Players[i]
+		if !Actionable(p.State) {
+			continue
+		}
+		switch other := s.Players[1-i].X; {
+		case other > p.X:
+			p.Facing = 1
+		case other < p.X:
+			p.Facing = -1
+			// Exactly level: keep the current facing. Picking a side here would
+			// flip both players back and forth on a shared pixel, and it would
+			// have to pick the same one on both machines for no benefit.
 		}
 	}
 }

@@ -334,3 +334,139 @@ func TestBoxesAtPersistsBetweenKeyframes(t *testing.T) {
 		t.Error("the startup keyframe did not take over")
 	}
 }
+
+// Facing is not cosmetic: it decides which way is forward, which way motions
+// read, which way boxes mirror, and which direction blocks. A player who has
+// been crossed up and still faces the old way cannot block at all.
+func TestPlayersTurnToFaceEachOther(t *testing.T) {
+	s := New()
+	s.Players[0].X = FromInt(40)
+	s.Players[1].X = FromInt(-40)
+
+	s.Advance([2]uint16{0, 0})
+
+	if s.Players[0].Facing != -1 {
+		t.Errorf("player 0 is on the right but faces %d", s.Players[0].Facing)
+	}
+	if s.Players[1].Facing != 1 {
+		t.Errorf("player 1 is on the left but faces %d", s.Players[1].Facing)
+	}
+}
+
+// Keeping your facing through the whole jump is what makes a crossup a crossup:
+// turning mid-air would flip the attacker's boxes as they passed overhead.
+func TestFacingHoldsThroughAJumpAndTurnsOnLanding(t *testing.T) {
+	s := New()
+	s.Players[0].X = FromInt(-10)
+	s.Players[1].X = FromInt(10)
+
+	hold(&s, int(char().PreJumpFrames), InUp|InRight)
+	crossed := false
+	for range 80 {
+		s.Advance([2]uint16{InRight, 0})
+		if Airborne(s.Players[0].State) {
+			if s.Players[0].X > s.Players[1].X {
+				crossed = true
+				if s.Players[0].Facing != 1 {
+					t.Fatal("player 0 turned around in mid-air")
+				}
+			}
+		} else if crossed {
+			break
+		}
+	}
+
+	if !crossed {
+		t.Skip("the jump did not clear the opponent; nothing to assert")
+	}
+	if s.Players[0].Facing != -1 {
+		t.Errorf("player 0 landed on the far side still facing %d", s.Players[0].Facing)
+	}
+}
+
+// A player mid-attack does not pivot: the move commits to the side it started on.
+func TestAttackerDoesNotTurnMidMove(t *testing.T) {
+	s := facing(30)
+	s.Advance([2]uint16{InLP, 0})
+	if s.Players[0].State != StateAttack {
+		t.Fatal("setup: no attack")
+	}
+
+	// Teleport the opponent behind the attacker mid-move.
+	s.Players[1].X = s.Players[0].X - FromInt(60)
+	want := s.Players[0].Facing
+	s.Advance([2]uint16{0, 0})
+
+	if s.Players[0].Facing != want {
+		t.Errorf("the attacker pivoted mid-move: %d -> %d", want, s.Players[0].Facing)
+	}
+}
+
+// The bug this pair exists to catch: after a side swap, "hold away" must still
+// be away. Blocking is read from facing, so a stale facing means the defender
+// eats everything while holding what looks like block.
+func TestBlockingWorksAfterASideSwap(t *testing.T) {
+	s := New()
+	// Swap them: player 1 is now on the left, so its "away" is right-to-left.
+	s.Players[0].X = FromInt(15)
+	s.Players[1].X = FromInt(-15)
+	s.Advance([2]uint16{0, 0}) // one frame to turn
+
+	full := s.Players[1].Health
+	// Player 1 now faces right, so holding LEFT is holding away.
+	blocked := false
+	s.Advance([2]uint16{InLP, InLeft})
+	for range 40 {
+		s.Advance([2]uint16{0, InLeft})
+		if s.Players[1].State == StateBlockstun {
+			blocked = true
+			break
+		}
+		if s.Players[1].State == StateHitstun {
+			t.Fatal("holding away after a side swap took a hit: facing is stale")
+		}
+	}
+	if !blocked {
+		t.Fatal("the attack never connected after the swap")
+	}
+	if s.Players[1].Health != full {
+		t.Errorf("blocking cost %d health", full-s.Players[1].Health)
+	}
+}
+
+// Crouch-blocking: down-back blocks both lows and mids, down alone blocks
+// nothing. This is the combination that is easy to get wrong by treating
+// "crouching" and "holding back" as separate states.
+func TestCrouchBlockingCoversLowsAndMids(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		move    int32
+		attack  uint16
+		defend  uint16
+		blocked bool
+	}{
+		{"down-back vs mid", 0, InLP, InRight | InDown, true},
+		{"down-back vs low", 1, InDown | InLK, InRight | InDown, true},
+		{"down alone vs mid", 0, InLP, InDown, false},
+		{"standing back vs low", 1, InDown | InLK, InRight, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := facing(30)
+			full := s.Players[1].Health
+			mv := &char().Moves[tc.move]
+
+			s.Advance([2]uint16{tc.attack, tc.defend})
+			for range mv.Total() + mv.Hitstop + 4 {
+				s.Advance([2]uint16{0, tc.defend})
+			}
+
+			hurt := s.Players[1].Health < full
+			if tc.blocked && hurt {
+				t.Errorf("should have blocked, took %d", full-s.Players[1].Health)
+			}
+			if !tc.blocked && !hurt {
+				t.Error("should have been hit, took nothing")
+			}
+		})
+	}
+}
