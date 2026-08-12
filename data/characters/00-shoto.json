@@ -1,0 +1,61 @@
+{
+  "id": 0,
+  "name": "Shoto",
+  "_comment": "M1 placeholder. Two normals, rectangles, numbers chosen to be legible rather than balanced. Filenames are sorted and the order is the roster index, hence the numeric prefix.",
+
+  "health": 10000,
+
+  "walkForward": 1.5,
+  "walkBack": 1.2,
+
+  "dashDistance": 40,
+  "dashFrames": 16,
+  "backdashFrames": 22,
+
+  "jumpVelocity": 8.0,
+  "jumpForwardVX": 2.5,
+  "gravity": -0.375,
+  "preJumpFrames": 4,
+
+  "pushbox": [-12, 0, 24, 48],
+  "standHurt": [-12, 0, 24, 48],
+  "crouchHurt": [-12, 0, 24, 32],
+  "airHurt": [-12, 4, 24, 40],
+
+  "moves": [
+    {
+      "id": "5LP",
+      "input": { "stance": "stand", "button": "LP" },
+      "startup": 4,
+      "active": 3,
+      "recovery": 6,
+      "damage": 300,
+      "hitstun": 14,
+      "blockstun": 11,
+      "hitstop": 6,
+      "attackLevel": "mid",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 4, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 30, 22, 12]] },
+        { "frame": 7, "hurt": [[-12, 0, 24, 48]] }
+      ]
+    },
+    {
+      "id": "2LK",
+      "input": { "stance": "crouch", "button": "LK" },
+      "startup": 5,
+      "active": 2,
+      "recovery": 9,
+      "damage": 250,
+      "hitstun": 12,
+      "blockstun": 9,
+      "hitstop": 5,
+      "attackLevel": "low",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
+        { "frame": 5, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 2, 24, 10]] },
+        { "frame": 7, "hurt": [[-12, 0, 24, 32]] }
+      ]
+    }
+  ]
+}

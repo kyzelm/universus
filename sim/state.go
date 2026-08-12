@@ -16,20 +16,19 @@ const (
 	InHK    uint16 = 1 << 10
 )
 
-// ponytail: M0 hardcodes these. M1 moves them to character JSON and go:embeds
-// it, per the no-hardcoded-gameplay-values invariant — this spike is throwaway.
+// Stage geometry. Not character data — it belongs to the stage, and there is
+// one stage.
 const (
-	Gravity      = Fix(-24576) // -0.375 units/frame^2 -> ~43 frame jump
-	WalkSpeed    = Fix(98304)  // 1.5 units/frame
-	JumpVelocity = Fix(524288) // 8.0 units/frame
+	GroundY        = Fix(0)
+	StageHalfWidth = Fix(200) << FracBits // ~400 units wide
 
-	GroundY         = Fix(0)
-	StageHalfWidth  = Fix(200) << FracBits // stage is ~400 units wide
-	PlayerHalfWidth = Fix(12) << FracBits
-	PlayerHeight    = Fix(48) << FracBits
+	// Half the view width in game units. The camera keeps this much visible on
+	// each side of its centre and never shows past a wall.
+	CameraHalfWidth = Fix(200) << FracBits
 )
 
-// PlayerState is a position and a velocity. Y is the feet; up is positive.
+// PlayerState is one fighter. Every field is 4 bytes — see the note on
+// GameState.
 type PlayerState struct {
 	X, Y   Fix
 	VX, VY Fix
@@ -37,12 +36,31 @@ type PlayerState struct {
 	// Facing is +1 (right) or -1 (left). Every motion is read relative to it —
 	// quarter-circle forward is ↓↘→ facing right and ↓↙← facing left, and the
 	// player pressed the same thing both times.
-	//
-	// ponytail: set once in New and never updated. Turning to face the opponent
-	// belongs to the state machine (step 2), which decides when a turn is
-	// allowed — you do not pivot mid-move. Correct for the starting positions
-	// until then.
 	Facing int32
+
+	// Char indexes the loaded roster.
+	Char int32
+
+	Health int32
+
+	// State and StateFrame are the state machine. StateFrame counts from 0 on
+	// the frame the state was entered.
+	State      int32
+	StateFrame int32
+
+	// MoveIndex is the active move while State is StateAttack, else -1.
+	MoveIndex int32
+
+	// HasHit marks a move that has already connected, so one active window
+	// cannot hit twice. Cleared when the move starts.
+	HasHit int32
+
+	// Stun is the remaining hitstun or blockstun.
+	Stun int32
+
+	// JumpVX is the horizontal velocity committed at pre-jump. There is no air
+	// control, so the whole arc follows from this and gravity.
+	JumpVX Fix
 
 	// Inputs is the input history ring: Inputs[f%InputHistory] is the bitfield
 	// that advanced frame f, widened to uint32 to keep GameState padding-free.
@@ -67,17 +85,36 @@ type GameState struct {
 	Frame uint32
 	// RNG is the whole generator — see rand.go. It rolls back because it is a
 	// field, and for no other reason.
-	RNG     uint32
+	RNG uint32
+
+	// Hitstop freezes both fighters for a few frames on a connect. It is not
+	// cosmetic: it changes when the next action can happen, so it is in the
+	// sim and it is in the state.
+	Hitstop int32
+
+	// CamX is the camera centre. **In the state, because corner position is
+	// gameplay** — a desynced camera is a desynced corner, and the corner is
+	// where a large part of the game happens.
+	CamX Fix
+
 	Players [2]PlayerState
 }
 
-// New returns the starting state: two players apart, on the ground, facing each
-// other, RNG seeded.
-func New() GameState {
-	return GameState{RNG: seed, Players: [2]PlayerState{
-		{X: Fix(-60) << FracBits, Facing: 1},
-		{X: Fix(60) << FracBits, Facing: -1},
+// New returns the starting state with both players on character 0.
+func New() GameState { return NewMatch(0, 0) }
+
+// NewMatch starts a match between two roster entries: players apart, on the
+// ground, facing each other, at full health.
+func NewMatch(c0, c1 int32) GameState {
+	s := GameState{RNG: seed, Players: [2]PlayerState{
+		{X: Fix(-60) << FracBits, Facing: 1, Char: c0, Health: CharacterAt(c0).Health},
+		{X: Fix(60) << FracBits, Facing: -1, Char: c1, Health: CharacterAt(c1).Health},
 	}}
+	for i := range s.Players {
+		s.Players[i].MoveIndex = -1
+	}
+	s.updateCamera()
+	return s
 }
 
 // Advance runs one frame.
@@ -87,108 +124,204 @@ func New() GameState {
 // documented, and it is never reordered casually: two machines that run these
 // steps in different orders produce different states from identical inputs,
 // which is a desync with no other symptom.
-//
-// Every step keeps its numbered slot even while empty, so filling one in is an
-// edit inside a slot rather than a decision about where it goes.
-//
-//	1. resolve inputs      SOCD is already resolved client-side; buffer and
-//	                       motion recognition land here (M1)
-//	2. state machines      per-player action frames (M1)
-//	3. movement, gravity   done
-//	4. pushboxes, bounds   done
-//	5. projectiles         (M2)
-//	6. hit detection       P1 hitboxes vs P2 hurtboxes FIRST, then the reverse.
-//	                       The fixed order is what makes a trade resolve
-//	                       identically on both machines (M1)
-//	7. hit resolution      damage, scaling, hitstun, meter (M1/M2)
-//	8. timers, round state (M2)
-//	9. increment frame     done; the checksum is taken by the caller
 func (s *GameState) Advance(in [2]uint16) {
-	// 1. Resolve inputs. Record history first: motion recognition and the input
-	// buffer both read the ring, and both must see this frame.
+	// 1. Resolve inputs. Record history first: motion recognition, the dash
+	// double-tap and the input buffer all read the ring, and all must see this
+	// frame.
 	for i := range s.Players {
 		s.Players[i].Inputs[s.Frame%InputHistory] = uint32(in[i])
 	}
 
-	for i := range s.Players {
-		p := &s.Players[i]
-		p.VX = 0
-		if in[i]&InLeft != 0 {
-			p.VX -= WalkSpeed
-		}
-		if in[i]&InRight != 0 {
-			p.VX += WalkSpeed
-		}
-		if in[i]&InUp != 0 && p.Y == GroundY {
-			p.VY = JumpVelocity
-		}
+	// Hitstop freezes the whole match: no input, no movement, no new hits.
+	// Only the counter runs, and the frame still advances so the checksum and
+	// the network keep moving.
+	if s.Hitstop > 0 {
+		s.Hitstop--
+		s.Frame++
+		return
 	}
 
-	// 2. Advance state machines — M1.
+	for i := range s.Players {
+		s.resolveInputs(i, in[i])
+	}
+
+	// 2. Advance state machines.
+	for i := range s.Players {
+		s.advanceState(i)
+	}
 
 	// 3. Movement and gravity. Semi-implicit Euler: velocity first, then
 	// position, so a landing is detected on the frame it happens.
 	for i := range s.Players {
 		p := &s.Players[i]
-		p.VY += Gravity
+		if Airborne(p.State) {
+			p.VY += CharacterAt(p.Char).Gravity
+		}
 		p.X += p.VX
 		p.Y += p.VY
+
 		if p.Y <= GroundY {
 			p.Y = GroundY
 			p.VY = 0
+			if Airborne(p.State) {
+				p.enter(StateIdle)
+			}
 		}
 	}
 
 	// 4. Pushboxes and stage bounds.
 	s.separate()
-	for i := range s.Players {
-		p := &s.Players[i]
-		if p.X < -StageHalfWidth+PlayerHalfWidth {
-			p.X = -StageHalfWidth + PlayerHalfWidth
-		}
-		if p.X > StageHalfWidth-PlayerHalfWidth {
-			p.X = StageHalfWidth - PlayerHalfWidth
-		}
-	}
+	s.clampToStage()
 
 	// 5. Projectiles — M2.
 
-	// 6. Hit detection — M1. P1's hitboxes vs P2's hurtboxes first, then the
-	// reverse. The order is not an implementation detail; see the doc comment.
+	// 6. Hit detection, then 7. hit resolution. **Player 1's hitboxes against
+	// player 2's hurtboxes first, then the reverse.** Both are collected before
+	// either is applied, so a trade resolves identically on both machines
+	// rather than depending on which player the loop reached first.
+	//
+	// The moves are captured alongside the hits, and for the same reason:
+	// resolving player 0's hit puts player 1 in hitstun, which ends player 1's
+	// attack — so by the time the second resolution ran, the move that was
+	// about to land no longer existed and the trade silently became a
+	// one-sided hit. Character data is immutable, so these pointers stay valid.
+	mv0, mv1 := s.Players[0].move(), s.Players[1].move()
+	hit0 := s.connects(0, 1)
+	hit1 := s.connects(1, 0)
+	if hit0 {
+		s.resolveHit(0, 1, mv0, in[1])
+	}
+	if hit1 {
+		s.resolveHit(1, 0, mv1, in[0])
+	}
 
-	// 7. Hit resolution: damage, scaling, hitstun, meter — M1/M2.
-
-	// 8. Timers, resources, round state — M2.
+	// 8. Timers, resources, round state — round flow is M2. The camera is here
+	// because it is derived from positions, which are final by now.
+	s.updateCamera()
 
 	// 9. Increment frame. The caller takes the checksum; the sim does not
 	// store it, because a stored checksum would be state covering itself.
 	s.Frame++
 }
 
-// separate pushes overlapping pushboxes apart, half the overlap each.
-// ponytail: runs before the wall clamp, so a player pinned in a corner can be
-// pushed back into the wall and stay overlapped for a frame. M1 resolves
-// against the wall properly; for M0 the rectangles just need to not merge.
-func (s *GameState) separate() {
-	a, b := &s.Players[0], &s.Players[1]
+// connects reports whether attacker's hitboxes overlap defender's hurtboxes.
+//
+// Detection is separated from resolution so that both directions are tested
+// against the same positions. Resolving as we go would let player 0's hit push
+// player 1 out of range before player 1's hit is tested, and the trade would
+// stop being a trade.
+func (s *GameState) connects(attacker, defender int) bool {
+	var hits, hurts [MaxBoxes]Box
+	nh := s.Hitboxes(attacker, &hits)
+	if nh == 0 {
+		return false
+	}
+	nd := s.Hurtboxes(defender, &hurts)
 
-	// dx >= 0 when b is to the right of a. At dx == 0 the tie breaks the same
-	// way on every machine, which is the only property that matters here.
-	dx := b.X - a.X
-	overlap := PlayerHalfWidth*2 - dx.Abs()
+	for a := int32(0); a < nh; a++ {
+		for d := int32(0); d < nd; d++ {
+			if hits[a].Overlaps(hurts[d]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// resolveHit applies one connect. mv is the attacker's move as captured before
+// any resolution ran; defenderIn is the defender's input this frame, which is
+// what decides whether they were holding back.
+func (s *GameState) resolveHit(attacker, defender int, mv *Move, defenderIn uint16) {
+	ap := &s.Players[attacker]
+	dp := &s.Players[defender]
+
+	if mv == nil {
+		return
+	}
+	ap.HasHit = 1
+
+	if s.blocking(defender, defenderIn, mv.Level) {
+		dp.enter(StateBlockstun)
+		dp.Stun = mv.Blockstun
+		// ponytail: no chip damage. It only exists during Burnout, and Burnout
+		// is the Drive system, which is M2.
+	} else {
+		dp.enter(StateHitstun)
+		dp.Stun = mv.Hitstun
+		dp.Health -= mv.Damage
+		if dp.Health < 0 {
+			dp.Health = 0
+		}
+		// ponytail: no damage scaling, no juggles, no counter hits. Combo
+		// scaling is M2 and needs a combo counter to scale against.
+	}
+
+	// Hitstop is one value for the match, not one per player: both fighters
+	// freeze together, which is the whole effect. A trade takes the larger.
+	if mv.Hitstop > s.Hitstop {
+		s.Hitstop = mv.Hitstop
+	}
+}
+
+// separate pushes overlapping pushboxes apart, half the overlap each, then the
+// stage clamp runs after. A player pinned against a wall would otherwise be
+// pushed through it.
+func (s *GameState) separate() {
+	a, b := s.Pushbox(0), s.Pushbox(1)
+
+	// Vertical miss: one player is cleanly above the other, so they pass.
+	if a.Y >= b.Y+b.H || b.Y >= a.Y+a.H {
+		return
+	}
+
+	overlap := min(a.X+a.W, b.X+b.W) - max(a.X, b.X)
 	if overlap <= 0 {
 		return
 	}
-	if a.Y >= b.Y+PlayerHeight || b.Y >= a.Y+PlayerHeight {
-		return
-	}
 
+	// The tie at identical positions breaks by player index, which is the only
+	// property that matters: it breaks the same way on every machine.
 	push := overlap / 2
-	if dx >= 0 {
-		a.X -= push
-		b.X += push
+	if s.Players[0].X <= s.Players[1].X {
+		s.Players[0].X -= push
+		s.Players[1].X += push
 	} else {
-		a.X += push
-		b.X -= push
+		s.Players[0].X += push
+		s.Players[1].X -= push
 	}
+}
+
+// clampToStage keeps both pushboxes inside the walls.
+func (s *GameState) clampToStage() {
+	for i := range s.Players {
+		p := &s.Players[i]
+		box := s.Pushbox(i)
+		if d := -StageHalfWidth - box.X; d > 0 {
+			p.X += d
+		}
+		if d := (box.X + box.W) - StageHalfWidth; d > 0 {
+			p.X -= d
+		}
+	}
+}
+
+// updateCamera centres the camera between the players and keeps it inside the
+// stage. Derived from positions and stored, so it is identical on both machines
+// and rolls back with everything else.
+func (s *GameState) updateCamera() {
+	mid := (s.Players[0].X + s.Players[1].X) / 2
+
+	// Never show past a wall: the corner has to look like a corner.
+	if lo := -StageHalfWidth + CameraHalfWidth; mid < lo {
+		mid = lo
+	}
+	if hi := StageHalfWidth - CameraHalfWidth; mid > hi {
+		mid = hi
+	}
+	// A stage narrower than the view pins the camera at the centre rather than
+	// letting the two clamps fight.
+	if CameraHalfWidth >= StageHalfWidth {
+		mid = 0
+	}
+	s.CamX = mid
 }

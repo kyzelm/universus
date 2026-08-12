@@ -83,89 +83,19 @@ func TestIdleIsStable(t *testing.T) {
 	s := New()
 	start := s
 	run(&s, 600, [2]uint16{})
+	// Position, not the whole struct: StateFrame counting up while idle is the
+	// state clock working, not drift.
 	for i, p := range s.Players {
-		if p != start.Players[i] {
-			t.Errorf("player %d drifted while idle: %+v -> %+v", i, start.Players[i], p)
+		q := start.Players[i]
+		if p.X != q.X || p.Y != q.Y || p.VX != 0 || p.VY != 0 || p.Health != q.Health {
+			t.Errorf("player %d drifted while idle: %+v -> %+v", i, q, p)
+		}
+		if p.State != StateIdle {
+			t.Errorf("player %d is in state %d after 600 neutral frames", i, p.State)
 		}
 	}
 	if s.Frame != 600 {
 		t.Errorf("Frame = %d, want 600", s.Frame)
-	}
-}
-
-func TestGravityNeverSinksBelowGround(t *testing.T) {
-	s := New()
-	for f := range 300 {
-		s.Advance([2]uint16{InUp, InUp}) // hold up: jump, land, jump again
-		for i, p := range s.Players {
-			if p.Y < GroundY {
-				t.Fatalf("frame %d: player %d fell through the floor: Y = %d", f, i, p.Y)
-			}
-		}
-	}
-}
-
-func TestJumpRisesAndLands(t *testing.T) {
-	s := New()
-	s.Advance([2]uint16{InUp, 0})
-
-	airborne, peak := 1, s.Players[0].Y
-	for s.Players[0].Y > GroundY {
-		s.Advance([2]uint16{}) // input released — the arc is committed
-		airborne++
-		if s.Players[0].Y > peak {
-			peak = s.Players[0].Y
-		}
-	}
-
-	// ~42 frames at -0.375/frame^2 from 8.0/frame. A constants change that
-	// blows past this range is a balance decision, not an accident.
-	if airborne < 38 || airborne > 46 {
-		t.Errorf("jump lasted %d frames, want 38..46", airborne)
-	}
-	if peak.ToInt() < 80 {
-		t.Errorf("jump peaked at %d units, want >= 80", peak.ToInt())
-	}
-	if s.Players[0].VY != 0 {
-		t.Errorf("VY = %d after landing, want 0", s.Players[0].VY)
-	}
-}
-
-func TestWallsClamp(t *testing.T) {
-	s := New()
-	run(&s, 1000, [2]uint16{InLeft, InRight})
-
-	wantLeft := -StageHalfWidth + PlayerHalfWidth
-	wantRight := StageHalfWidth - PlayerHalfWidth
-	if s.Players[0].X != wantLeft {
-		t.Errorf("player 0 X = %d, want %d", s.Players[0].X, wantLeft)
-	}
-	if s.Players[1].X != wantRight {
-		t.Errorf("player 1 X = %d, want %d", s.Players[1].X, wantRight)
-	}
-}
-
-func TestPlayersDoNotMerge(t *testing.T) {
-	s := New()
-	for f := range 500 {
-		s.Advance([2]uint16{InRight, InLeft}) // walk into each other and keep pushing
-		gap := (s.Players[1].X - s.Players[0].X).Abs()
-		if gap < PlayerHalfWidth*2-One {
-			t.Fatalf("frame %d: pushboxes merged, gap = %d units", f, gap.ToInt())
-		}
-	}
-}
-
-func TestJumpingOverAnotherPlayerIgnoresPushbox(t *testing.T) {
-	s := New()
-	s.Players[0].X = 0
-	s.Players[1].X = 0
-	s.Players[1].Y = PlayerHeight + One // clear overhead
-	before := s.Players[0].X
-
-	s.Advance([2]uint16{})
-	if s.Players[0].X != before {
-		t.Errorf("player 0 was pushed by a player stacked above it: %d -> %d", before, s.Players[0].X)
 	}
 }
 
@@ -182,5 +112,229 @@ func TestSameInputsProduceIdenticalState(t *testing.T) {
 	}
 	if a != b {
 		t.Fatalf("identical inputs diverged:\n a = %+v\n b = %+v", a, b)
+	}
+}
+
+// hold advances n frames with the same input for player 0 and neutral for 1.
+func hold(s *GameState, n int, in uint16) {
+	for range n {
+		s.Advance([2]uint16{in, 0})
+	}
+}
+
+func TestWalkUsesCharacterSpeed(t *testing.T) {
+	s := New()
+	start := s.Players[0].X
+
+	hold(&s, 10, InRight) // player 0 faces right, so this is forward
+	if got, want := s.Players[0].X-start, char().WalkForward*10; got != want {
+		t.Errorf("walked %d in 10 frames, want %d", got, want)
+	}
+
+	s = New()
+	start = s.Players[0].X
+	hold(&s, 10, InLeft)
+	if got, want := start-s.Players[0].X, char().WalkBack*10; got != want {
+		t.Errorf("walked back %d in 10 frames, want %d", got, want)
+	}
+}
+
+// Pre-jump frames are grounded. This is what makes throws beat jump attempts,
+// so it is a rule and not an animation detail.
+func TestPreJumpIsGrounded(t *testing.T) {
+	s := New()
+	c := char()
+
+	for f := int32(0); f < c.PreJumpFrames; f++ {
+		s.Advance([2]uint16{InUp, 0})
+		if s.Players[0].State != StatePreJump {
+			t.Fatalf("frame %d: state = %d, want pre-jump", f, s.Players[0].State)
+		}
+		if s.Players[0].Y != GroundY {
+			t.Fatalf("frame %d: left the ground during pre-jump", f)
+		}
+	}
+	s.Advance([2]uint16{0, 0})
+	if s.Players[0].State != StateAir {
+		t.Errorf("state after pre-jump = %d, want air", s.Players[0].State)
+	}
+}
+
+func TestJumpRisesAndLands(t *testing.T) {
+	s := New()
+	hold(&s, int(char().PreJumpFrames), InUp)
+
+	airborne, peak := 0, Fix(0)
+	for range 200 {
+		s.Advance([2]uint16{}) // released: the arc is committed
+		if !Airborne(s.Players[0].State) {
+			break
+		}
+		airborne++
+		if s.Players[0].Y > peak {
+			peak = s.Players[0].Y
+		}
+	}
+
+	// Derived from the constants rather than pinned: a jump lasts about
+	// 2*v/|g| frames, and asserting the relationship survives tuning.
+	want := 2 * int(char().JumpVelocity/(-char().Gravity))
+	if airborne < want-3 || airborne > want+3 {
+		t.Errorf("jump lasted %d frames, want ~%d", airborne, want)
+	}
+	if peak.ToInt() < 60 {
+		t.Errorf("jump peaked at %d units, want >= 60", peak.ToInt())
+	}
+	if s.Players[0].Y != GroundY || s.Players[0].VY != 0 {
+		t.Errorf("landed at Y=%d VY=%d, want 0 and 0", s.Players[0].Y, s.Players[0].VY)
+	}
+	if s.Players[0].State != StateIdle {
+		t.Errorf("state after landing = %d, want idle", s.Players[0].State)
+	}
+}
+
+// No air control: the arc is committed at pre-jump and cannot be steered.
+func TestJumpHasNoAirControl(t *testing.T) {
+	s := New()
+	hold(&s, int(char().PreJumpFrames)+1, InUp) // neutral jump, now airborne
+
+	x := s.Players[0].X
+	for range 10 {
+		s.Advance([2]uint16{InRight, 0}) // push forward mid-air
+	}
+	if s.Players[0].X != x {
+		t.Errorf("a neutral jump drifted %d units under forward input", s.Players[0].X-x)
+	}
+}
+
+func TestGravityNeverSinksBelowGround(t *testing.T) {
+	s := New()
+	for f := range 300 {
+		s.Advance([2]uint16{InUp, InUp})
+		for i, p := range s.Players {
+			if p.Y < GroundY {
+				t.Fatalf("frame %d: player %d fell through the floor: Y = %d", f, i, p.Y)
+			}
+		}
+	}
+}
+
+func TestDashCoversItsDistanceAndCommits(t *testing.T) {
+	s := New()
+	c := char()
+
+	// Two taps of forward with a gap: tap, release, tap.
+	s.Advance([2]uint16{InRight, 0})
+	s.Advance([2]uint16{0, 0})
+	start := s.Players[0].X
+	s.Advance([2]uint16{InRight, 0})
+
+	if s.Players[0].State != StateDash {
+		t.Fatalf("a double tap forward did not dash: state = %d", s.Players[0].State)
+	}
+
+	// Committed: input during the dash cannot change it, including the
+	// opposite direction.
+	for f := int32(1); f < c.DashFrames; f++ {
+		s.Advance([2]uint16{InLeft, 0})
+		if s.Players[0].State != StateDash {
+			t.Fatalf("frame %d: dash was cancelled by input, state = %d", f, s.Players[0].State)
+		}
+	}
+
+	s.Advance([2]uint16{0, 0})
+	if s.Players[0].State != StateIdle {
+		t.Errorf("state after the dash = %d, want idle", s.Players[0].State)
+	}
+
+	// Distance is per-frame velocity times frames, so integer division of the
+	// distance may leave a remainder — within a unit is the bar.
+	moved := s.Players[0].X - start
+	if (moved - c.DashDistance).Abs() > One {
+		t.Errorf("dash covered %d, want %d", moved, c.DashDistance)
+	}
+}
+
+func TestBackdashGoesBackwards(t *testing.T) {
+	s := New()
+	s.Advance([2]uint16{InLeft, 0})
+	s.Advance([2]uint16{0, 0})
+	start := s.Players[0].X
+	s.Advance([2]uint16{InLeft, 0})
+
+	if s.Players[0].State != StateBackdash {
+		t.Fatalf("a double tap back did not backdash: state = %d", s.Players[0].State)
+	}
+	hold(&s, int(char().BackdashFrames), 0)
+	if s.Players[0].X >= start {
+		t.Errorf("backdash ended at %d, started at %d", s.Players[0].X, start)
+	}
+}
+
+// A single tap is a walk. Without this the dash test passes for a recogniser
+// that dashes on any forward input at all.
+func TestSingleTapDoesNotDash(t *testing.T) {
+	s := New()
+	s.Advance([2]uint16{InRight, 0})
+	if s.Players[0].State != StateWalkF {
+		t.Errorf("one tap forward gave state %d, want walk forward", s.Players[0].State)
+	}
+}
+
+func TestWallsClamp(t *testing.T) {
+	s := New()
+	run(&s, 1000, [2]uint16{InLeft, InRight})
+
+	for i := range s.Players {
+		box := s.Pushbox(i)
+		if box.X < -StageHalfWidth || box.X+box.W > StageHalfWidth {
+			t.Errorf("player %d pushbox %+v is outside the stage", i, box)
+		}
+	}
+	// And they actually reached the walls rather than stopping early.
+	if (s.Pushbox(0).X + StageHalfWidth).Abs() > One {
+		t.Errorf("player 0 did not reach the left wall: %+v", s.Pushbox(0))
+	}
+}
+
+func TestPlayersDoNotMerge(t *testing.T) {
+	s := New()
+	for f := range 500 {
+		s.Advance([2]uint16{InRight, InLeft}) // walk into each other and keep pushing
+		a, b := s.Pushbox(0), s.Pushbox(1)
+		if a.Overlaps(b) {
+			t.Fatalf("frame %d: pushboxes overlap: %+v and %+v", f, a, b)
+		}
+	}
+}
+
+func TestJumpingOverAnotherPlayerIgnoresPushbox(t *testing.T) {
+	s := New()
+	s.Players[0].X = 0
+	s.Players[1].X = 0
+	s.Players[1].Y = char().StandHurt.H + One // clear overhead
+	before := s.Players[0].X
+
+	s.Advance([2]uint16{})
+	if s.Players[0].X != before {
+		t.Errorf("player 0 was pushed by a player stacked above it: %d -> %d", before, s.Players[0].X)
+	}
+}
+
+// The camera is gameplay: a desynced camera is a desynced corner.
+func TestCameraFollowsAndStopsAtTheWalls(t *testing.T) {
+	s := New()
+	if s.CamX != 0 {
+		t.Errorf("camera starts at %d, want centred", s.CamX)
+	}
+
+	s.Players[0].X = StageHalfWidth
+	s.Players[1].X = StageHalfWidth
+	s.updateCamera()
+	if want := StageHalfWidth - CameraHalfWidth; s.CamX != want && CameraHalfWidth < StageHalfWidth {
+		t.Errorf("camera at the right wall = %d, want %d", s.CamX, want)
+	}
+	if s.CamX+CameraHalfWidth > StageHalfWidth {
+		t.Errorf("camera shows past the right wall: %d", s.CamX)
 	}
 }

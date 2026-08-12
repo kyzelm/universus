@@ -24,6 +24,7 @@ import (
 	"os"
 	"strconv"
 
+	"universus/data"
 	"universus/sim"
 )
 
@@ -32,10 +33,29 @@ const usage = `usage:
   replay run <file>            print "<frame> <checksum>" for every frame`
 
 func main() {
+	// Both entrypoints load the same embedded roster before touching the sim.
+	// The determinism gate compares this binary against the WASM one, so if
+	// they disagreed about character data every checksum would differ and the
+	// gate would report a divergence with no cause anywhere in the sim.
+	if err := loadRoster(); err != nil {
+		fmt.Fprintln(os.Stderr, "replay:", err)
+		os.Exit(1)
+	}
 	if err := cli(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "replay:", err)
 		os.Exit(1)
 	}
+}
+
+func loadRoster() error {
+	cs, err := data.Load()
+	if err != nil {
+		return err
+	}
+	if !sim.LoadCharacters(cs) {
+		return fmt.Errorf("sim refused the roster (%d characters)", len(cs))
+	}
+	return nil
 }
 
 func cli(args []string) error {

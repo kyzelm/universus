@@ -3,10 +3,26 @@ package sim
 import "testing"
 
 // A fixed, varied input pattern — no clock, no rand, reproducible anywhere.
+//
+// Attack buttons are in here as well as directions. A directions-only sequence
+// never enters an attack, a hitstun or a hitstop, so it would exercise the
+// rollback machinery over about a third of the state and report success.
 func inputSeq(n int) [][2]uint16 {
+	buttons := [...]uint16{InLP, InMP, InHP, InLK, InMK, InHK}
 	in := make([][2]uint16, n)
+
 	for f := range in {
-		in[f] = [2]uint16{uint16(f*7%13) & 0xF, uint16(f*11%17) & 0xF}
+		p0 := uint16(f*7%13) & 0xF
+		p1 := uint16(f*11%17) & 0xF
+		// Often enough to collide and be interrupted, rarely enough that the
+		// players are not permanently mid-move.
+		if f%5 == 0 {
+			p0 |= buttons[f/5%len(buttons)]
+		}
+		if f%7 == 0 {
+			p1 |= buttons[f/7%len(buttons)]
+		}
+		in[f] = [2]uint16{p0, p1}
 	}
 	return in
 }

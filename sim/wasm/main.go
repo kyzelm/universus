@@ -9,6 +9,7 @@ import (
 	"syscall/js"
 	"unsafe"
 
+	"universus/data"
 	"universus/sim"
 )
 
@@ -18,6 +19,18 @@ var (
 )
 
 func main() {
+	// The roster loads before the first state exists. Character data is part of
+	// the simulation's identity: this binary and the native one must agree on
+	// it or every checksum differs.
+	cs, err := data.Load()
+	if err != nil {
+		panic("character data failed to load: " + err.Error())
+	}
+	if !sim.LoadCharacters(cs) {
+		panic("sim refused the embedded roster")
+	}
+	session = sim.NewSession()
+
 	done := make(chan struct{})
 
 	api := js.Global().Get("Object").New()
