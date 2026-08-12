@@ -1,0 +1,68 @@
+# The determinism gate, in CI. Minutes, not hours — a gate nobody waits for is
+# a gate nobody runs.
+#
+# Order matters and mirrors CLAUDE.md: the cheap static checks fail first, then
+# the unit tests, then the differential that is the point of the whole project.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - run: go vet ./...
+
+      # The invariant with teeth: the sim is 16.16 fixed-point, so a float
+      # anywhere under sim/ is a determinism bug that has not fired yet.
+      - name: Float ban
+        run: |
+          if grep -rnE '\b(float32|float64)\b|"math"' ./sim/; then
+            echo "::error::floats in sim/ — the sim is fixed-point only"
+            exit 1
+          fi
+
+      # Includes the rollback correctness test: 100 frames, then the same
+      # inputs with forced rollbacks of depth 1–8, checksums must match.
+      - run: go test ./...
+
+      # Builds the WASM sim itself and diffs per-frame checksums against native
+      # over the whole testdata/ corpus.
+      - name: Determinism gate
+        run: tools/determinism.sh
+
+      # Shared runners are noisy, but the M0 bars have ~20x headroom — this
+      # fails on a regression, not on a slow neighbour.
+      - name: Performance regression
+        run: node tools/bench.mjs
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: client
+
+      - run: pnpm lint
+        working-directory: client
+
+      - run: pnpm exec vitest run
+        working-directory: client
+
+      - run: pnpm build
+        working-directory: client
