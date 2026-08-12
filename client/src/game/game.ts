@@ -44,6 +44,12 @@ const PING_EVERY = 30
 
 export interface Game {
   /**
+   * The inputs fed to the sim so far, in the replay log format: little-endian
+   * uint16 pairs, player 1 then player 2, one pair per frame, no header. The
+   * same bytes tools/replay reads.
+   */
+  inputLog(): Blob
+  /**
    * Switch from local play to netplay over a connected peer. Seat 0 drives P1,
    * seat 1 drives P2; both ends reset to frame 0, and from then on each side
    * simulates frame N from (its own input at N, the other side's input at N).
@@ -101,6 +107,14 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   let net: Netplay | null = null
   let ticks = 0
 
+  // Every playtest is a free regression log, and the corpus is worth more than
+  // any single test in here — but only if it is actually recorded. Growth is
+  // ~864 KB an hour, which is not worth a ring buffer.
+  //
+  // Local play only: under netplay the driver decides what the sim is fed,
+  // including on replays, so the honest log lives there rather than here.
+  const recorded: number[] = []
+
   app.ticker.add((ticker) => {
     for (let i = clock.tick(ticker.deltaMS); i > 0; i--) {
       const [p1, p2] = input.poll()
@@ -113,6 +127,7 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
         if (++ticks % PING_EVERY === 0) net.ping()
       } else {
         advance(p1, p2)
+        recorded.push(p1, p2)
       }
       stepCost.push(performance.now() - t0)
     }
@@ -135,6 +150,15 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   })
 
   return {
+    inputLog() {
+      const buf = new ArrayBuffer(recorded.length * 2)
+      const v = new DataView(buf)
+      // Explicit little-endian rather than a Uint16Array, which would use the
+      // platform's byte order and silently produce a different file elsewhere.
+      for (let i = 0; i < recorded.length; i++) v.setUint16(i * 2, recorded[i], true)
+      return new Blob([buf], {type: 'application/octet-stream'})
+    },
+
     connect(peer, seat) {
       reset()
       ticks = 0
