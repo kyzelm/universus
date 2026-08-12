@@ -356,11 +356,17 @@ func TestDashRecognition(t *testing.T) {
 	}{
 		{"forward, gap, forward", []uint8{F, N, F}, StateDash},
 		{"back, gap, back", []uint8{B, N, B}, StateBackdash},
-		{"forward, down, forward", []uint8{F, D, F}, StateDash},
+		// Only a clean tap-neutral-tap dashes. A diagonal or a crouch in the
+		// middle is the player doing something else, and dashing there is a
+		// dash nobody asked for.
+		{"forward, down, forward", []uint8{F, D, F}, StateWalkF},
+		{"back, down, back", []uint8{B, D, B}, StateWalkB},
+		{"forward, down-forward, forward", []uint8{F, 3, F}, StateWalkF},
+		{"down-forward twice is not a dash", []uint8{3, N, 3}, StateCrouch},
 
 		// Up in the middle is a jump, not a gap: pre-jump is not actionable, so
 		// the third input is correctly ignored. Listed because it looks like it
-		// belongs with the case above and does not.
+		// belongs with the cases above and does not.
 		{"back, up, back", []uint8{B, U, B}, StatePreJump},
 
 		{"back, forward, back", []uint8{B, F, B}, StateWalkB},

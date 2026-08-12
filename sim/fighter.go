@@ -88,11 +88,11 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 
 	// Dashes: two taps of the same direction inside the dash window. Read off
 	// the input history, so it rolls back with everything else.
-	if p.doubleTapped(now, 1) {
+	if p.doubleTapped(now, DirFwd) {
 		p.enter(StateDash)
 		return
 	}
-	if p.doubleTapped(now, -1) {
+	if p.doubleTapped(now, DirBack) {
 		p.enter(StateBackdash)
 		return
 	}
@@ -129,50 +129,42 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 // dashWindow is how close two taps must be to dash. A feel value.
 const dashWindow = 10
 
-// horizontal reduces a numpad direction to its forward/back component: +1
-// forward, -1 back, 0 neither. Dashes care only about this, so a diagonal
-// counts as the direction it leans and holding up or down is a gap.
-func horizontal(d uint8) int {
-	switch d {
-	case DirFwd, DirDownFwd, DirUpFwd:
-		return 1
-	case DirBack, DirDownBack, DirUpBack:
-		return -1
-	}
-	return 0
-}
-
-// doubleTapped reports two presses of a direction inside dashWindow with a
-// release between them. want is +1 for forward, -1 for back.
+// doubleTapped reports two clean presses of dir inside dashWindow.
 //
 // Reading history rather than storing a tap counter keeps the answer a function
 // of state, which is what makes it survive a rollback.
 //
-// The opposite direction **aborts** rather than counting as the release. Any
-// gap-is-a-release rule turns back, forward, back into a backdash — the player
-// walked one way, walked the other, and got a dash they did not ask for. That
-// middle input is a different intent, not a pause between two halves of the
-// same one.
-func (p *PlayerState) doubleTapped(now uint32, want int) bool {
+// **Strict: the taps must be the pure direction and the gap must be neutral.**
+// Anything else in the window ends the sequence — the opposite direction, a
+// diagonal, up, down. A looser rule reads intent that was never there: treating
+// any non-matching input as the gap makes back, forward, back a backdash, and
+// allowing a diagonal in the gap makes back, down, back one too. Both fire
+// while the player is doing something else entirely, and a dash you did not ask
+// for in a fighting game is worse than one you have to ask for twice.
+//
+// The cost is that a sloppy input does not dash. On a keyboard, where pure
+// directions are what the hardware produces anyway, that is the right trade.
+func (p *PlayerState) doubleTapped(now uint32, dir uint8) bool {
 	taps, released := 0, false
 
 	for back := uint32(0); back < dashWindow && back <= now; back++ {
-		h := horizontal(direction(p.at(now, back), p.Facing))
-		switch {
-		case h == -want:
-			return false
-
-		case h == want && (back == 0 || released):
-			taps++
-			released = false
-			if taps == 2 {
-				return true
+		switch d := direction(p.at(now, back), p.Facing); d {
+		case dir:
+			// Only a fresh press counts. Holding the direction down across
+			// several frames is one tap, not one per frame.
+			if back == 0 || released {
+				taps++
+				released = false
+				if taps == 2 {
+					return true
+				}
 			}
 
-		case h != want:
-			// Neutral, up or down: the direction was let go, so the next one
-			// found further back is a separate tap.
+		case DirNeutral:
 			released = true
+
+		default:
+			return false
 		}
 	}
 	return false
