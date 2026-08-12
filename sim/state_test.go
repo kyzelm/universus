@@ -338,3 +338,60 @@ func TestCameraFollowsAndStopsAtTheWalls(t *testing.T) {
 		t.Errorf("camera shows past the right wall: %d", s.CamX)
 	}
 }
+
+// Dash recognition, including the sequences that must NOT dash.
+//
+// The reported bug: back, forward, back came out as a backdash. Any rule that
+// treats the gap as "not the dash direction" does that — the player walked one
+// way, walked the other, and got a dash they never asked for. The opposite
+// direction is a different intent, not a pause inside one input.
+func TestDashRecognition(t *testing.T) {
+	// Numpad, from player 0's point of view (it starts facing right).
+	const N, F, B, D, U = 5, 6, 4, 2, 8
+
+	for _, tc := range []struct {
+		name string
+		dirs []uint8
+		want int32
+	}{
+		{"forward, gap, forward", []uint8{F, N, F}, StateDash},
+		{"back, gap, back", []uint8{B, N, B}, StateBackdash},
+		{"forward, down, forward", []uint8{F, D, F}, StateDash},
+
+		// Up in the middle is a jump, not a gap: pre-jump is not actionable, so
+		// the third input is correctly ignored. Listed because it looks like it
+		// belongs with the case above and does not.
+		{"back, up, back", []uint8{B, U, B}, StatePreJump},
+
+		{"back, forward, back", []uint8{B, F, B}, StateWalkB},
+		{"forward, back, forward", []uint8{F, B, F}, StateWalkF},
+		{"back, forward, gap, back", []uint8{B, F, N, B}, StateWalkB},
+
+		{"held forward is a walk", []uint8{F, F, F, F}, StateWalkF},
+		{"held back is a walk", []uint8{B, B, B, B}, StateWalkB},
+		{"one tap is a walk", []uint8{N, F}, StateWalkF},
+
+		// Outside the window the first tap no longer counts.
+		{"two taps too far apart", []uint8{F, N, N, N, N, N, N, N, N, N, N, N, F}, StateWalkF},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := New()
+			feed(&s, tc.dirs...)
+			if got := s.Players[0].State; got != tc.want {
+				t.Errorf("%v gave state %d, want %d", tc.dirs, got, tc.want)
+			}
+		})
+	}
+}
+
+// Facing is what makes a dash forward or back, so the same physical input must
+// dash the other way for the other player.
+func TestDashIsFacingRelative(t *testing.T) {
+	s := New() // player 1 starts facing left
+	for _, d := range []uint8{4, 5, 4} {
+		s.Advance([2]uint16{0, pad[d]}) // physically left, which is p1's forward
+	}
+	if got := s.Players[1].State; got != StateDash {
+		t.Errorf("left-left for a left-facing player gave state %d, want dash", got)
+	}
+}
