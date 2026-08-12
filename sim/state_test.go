@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"reflect"
 	"testing"
 	"unsafe"
 )
@@ -9,13 +10,66 @@ import (
 // the checksum is a hash over a byte range. This fails the moment someone adds
 // a slice, a map or a pointer — which is exactly when it should fail.
 func TestGameStateIsFlatAndFixedSize(t *testing.T) {
-	const want = 4 + 2*4*4 // Frame + two players of four Fix
-	if got := unsafe.Sizeof(GameState{}); got != want {
-		t.Errorf("sizeof(GameState) = %d, want %d — did a field get added or padded?", got, want)
-	}
 	// Comparable at all: a slice/map/func field would make this line not compile.
 	if New() == (GameState{}) {
 		t.Error("New() returned the zero value; players should start apart")
+	}
+	if got := unsafe.Sizeof(GameState{}); got > 2048 {
+		t.Errorf("sizeof(GameState) = %d, over the 2 KB target", got)
+	}
+	if got := unsafe.Alignof(GameState{}); got != 4 {
+		t.Errorf("alignof(GameState) = %d, want 4 — an 8-byte field forces padding", got)
+	}
+}
+
+// Checksum hashes the struct's own memory, so a single byte of implicit padding
+// is a byte of uninitialised memory in the hash — two machines agree on every
+// field and still disagree on the checksum, which presents as a desync with no
+// cause visible anywhere in the gameplay code.
+//
+// Walking the layout by reflection rather than pinning a hand-computed size:
+// the point is that *adding a field* cannot introduce padding unnoticed, and a
+// magic constant only tells you the size changed, not whether it is sound.
+func TestGameStateHasNoImplicitPadding(t *testing.T) {
+	assertPacked(t, reflect.TypeOf(GameState{}), "GameState")
+}
+
+func assertPacked(t *testing.T, typ reflect.Type, path string) {
+	t.Helper()
+
+	switch typ.Kind() {
+	case reflect.Struct:
+		var end uintptr
+		for i := range typ.NumField() {
+			f := typ.Field(i)
+			if f.Offset != end {
+				t.Errorf("%s.%s is at offset %d, want %d: %d padding byte(s) before it",
+					path, f.Name, f.Offset, end, f.Offset-end)
+			}
+			assertPacked(t, f.Type, path+"."+f.Name)
+			end += f.Type.Size()
+		}
+		if end != typ.Size() {
+			t.Errorf("%s is %d bytes but its fields total %d: %d trailing padding byte(s)",
+				path, typ.Size(), end, typ.Size()-end)
+		}
+
+	// Elements of a padding-free type are contiguous, so the element type is
+	// the whole question for an array.
+	case reflect.Array:
+		assertPacked(t, typ.Elem(), path+"[]")
+
+	case reflect.Int32, reflect.Uint32:
+		// The width the whole scheme depends on.
+
+	case reflect.Float32, reflect.Float64:
+		// CI greps for the type names; this catches one reached through an
+		// alias, where the grep would see a harmless-looking identifier.
+		t.Errorf("%s is %s — the sim is fixed-point only", path, typ.Kind())
+
+	default:
+		t.Errorf("%s is %s: every field must be a 4-byte integer type, "+
+			"or the struct picks up padding and Checksum stops being sound", path, typ.Kind())
 	}
 }
 

@@ -39,23 +39,52 @@ type PlayerState struct {
 // no slices, no maps. Every field is 4-byte, so the struct has no implicit
 // padding and no uninitialised bytes to leak into a checksum.
 //
-// If it is not in here, it does not roll back, and it is a bug.
+// **Every field must stay 4 bytes wide and 4-byte aligned.** That is what keeps
+// the struct padding-free, which is what makes hashing its raw memory sound —
+// see Checksum. A narrower field costs less space than the padding it forces,
+// and TestGameStateHasNoImplicitPadding fails the moment one is added.
+//
+// If it is not in here, it does not roll back, and it is a bug. Camera, RNG,
+// input history, AI state, timers and round transitions all belong here.
 type GameState struct {
-	Frame   uint32
+	Frame uint32
+	// RNG is the whole generator — see rand.go. It rolls back because it is a
+	// field, and for no other reason.
+	RNG     uint32
 	Players [2]PlayerState
 }
 
-// New returns the starting state: two players apart, on the ground.
+// New returns the starting state: two players apart, on the ground, RNG seeded.
 func New() GameState {
-	return GameState{Players: [2]PlayerState{
+	return GameState{RNG: seed, Players: [2]PlayerState{
 		{X: Fix(-60) << FracBits},
 		{X: Fix(60) << FracBits},
 	}}
 }
 
-// Advance runs one frame. The order is part of the spec — documented in
-// 02 Architecture/Deterministic Simulation.md, never reordered casually.
-// M0 implements steps 1, 3, 4 and 9; the rest have nothing to do yet.
+// Advance runs one frame.
+//
+// The nine steps below are the update order, and the order is itself part of
+// the spec — 02 Architecture/Deterministic Simulation.md. It is fixed, it is
+// documented, and it is never reordered casually: two machines that run these
+// steps in different orders produce different states from identical inputs,
+// which is a desync with no other symptom.
+//
+// Every step keeps its numbered slot even while empty, so filling one in is an
+// edit inside a slot rather than a decision about where it goes.
+//
+//	1. resolve inputs      SOCD is already resolved client-side; buffer and
+//	                       motion recognition land here (M1)
+//	2. state machines      per-player action frames (M1)
+//	3. movement, gravity   done
+//	4. pushboxes, bounds   done
+//	5. projectiles         (M2)
+//	6. hit detection       P1 hitboxes vs P2 hurtboxes FIRST, then the reverse.
+//	                       The fixed order is what makes a trade resolve
+//	                       identically on both machines (M1)
+//	7. hit resolution      damage, scaling, hitstun, meter (M1/M2)
+//	8. timers, round state (M2)
+//	9. increment frame     done; the checksum is taken by the caller
 func (s *GameState) Advance(in [2]uint16) {
 	// 1. Resolve inputs.
 	for i := range s.Players {
@@ -99,9 +128,17 @@ func (s *GameState) Advance(in [2]uint16) {
 		}
 	}
 
-	// 5-8. Projectiles, hit detection, hit resolution, timers — M1/M2.
+	// 5. Projectiles — M2.
 
-	// 9. Increment frame. Checksum lands here in step 3 of the plan.
+	// 6. Hit detection — M1. P1's hitboxes vs P2's hurtboxes first, then the
+	// reverse. The order is not an implementation detail; see the doc comment.
+
+	// 7. Hit resolution: damage, scaling, hitstun, meter — M1/M2.
+
+	// 8. Timers, resources, round state — M2.
+
+	// 9. Increment frame. The caller takes the checksum; the sim does not
+	// store it, because a stored checksum would be state covering itself.
 	s.Frame++
 }
 
