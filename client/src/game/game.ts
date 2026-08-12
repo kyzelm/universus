@@ -1,7 +1,18 @@
 import {Application, Container, Graphics, Text} from 'pixi.js'
 import {createNetplay, depthP99, type Netplay} from '../net/netplay'
 import type {Peer} from '../net/peer'
-import {advance, checksum, loadSim, readSnapshot, reset, rewind} from '../sim/wasm'
+import {
+  advance,
+  dataVersion,
+  type Box,
+  checksum,
+  loadSim,
+  type PlayerSnapshot,
+  readSnapshot,
+  reset,
+  rewind,
+  STATE_NAMES,
+} from '../sim/wasm'
 import {createClock} from './clock'
 import {createInput} from './input'
 import {createSamples} from './stats'
@@ -13,12 +24,20 @@ const VIEW_H = 450
 const SCALE = 2
 const GROUND_PX = 380
 
-// Mirrors the pushbox constants in sim/state.go. M1 reads these from character
-// JSON along with everything else.
-const PLAYER_W = 24 * SCALE
-const PLAYER_H = 48 * SCALE
-
 const HUD_EVERY = 30
+
+/**
+ * Debug box colours, the convention every fighting game debug view uses:
+ * blue pushbox, green hurtbox, red hitbox.
+ *
+ * This is the tool that debugs every system built on top of boxes, which is why
+ * it exists before there is anything to look at. It draws the boxes the sim
+ * actually collides, carried in the snapshot — boxes recomputed here would
+ * agree with themselves and disagree with the game.
+ */
+const PUSH_COLOR = 0x4a8ce0
+const HURT_COLOR = 0x4ae08c
+const HIT_COLOR = 0xe0574a
 
 /** Frames between pings. Two a second is plenty to build an RTT distribution. */
 const PING_EVERY = 30
@@ -49,23 +68,30 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   await app.init({width: VIEW_W, height: VIEW_H, background: 0x14161a, antialias: false})
   parent.appendChild(app.canvas)
 
+  // The world scrolls under a fixed camera; the stage layer does not.
   const world = new Container()
   app.stage.addChild(world)
 
-  world.addChild(new Graphics().rect(0, GROUND_PX, VIEW_W, VIEW_H - GROUND_PX).fill(0x2a2f38))
+  world.addChild(new Graphics().rect(-2000, GROUND_PX, 4000, VIEW_H - GROUND_PX).fill(0x2a2f38))
 
-  // Feet-centred, so the sprite origin is the sim position.
-  const players = [0xe0574a, 0x4a8ce0].map((color) => {
-    const g = new Graphics().rect(-PLAYER_W / 2, -PLAYER_H, PLAYER_W, PLAYER_H).fill(color)
-    world.addChild(g)
-    return g
-  })
+  // Wall markers, so the corner is visible as a place rather than a surprise.
+  for (const side of [-1, 1]) {
+    world.addChild(
+      new Graphics().rect(side * 200 * SCALE - 2, 0, 4, GROUND_PX).fill(0x3a4150),
+    )
+  }
+
+  const boxes = new Graphics()
+  world.addChild(boxes)
+
+  const bars = [new Graphics(), new Graphics()]
+  bars.forEach((b) => app.stage.addChild(b))
 
   const hud = new Text({
     text: '',
     style: {fill: 0x8a94a6, fontFamily: 'monospace', fontSize: 12},
   })
-  hud.position.set(8, 8)
+  hud.position.set(8, 30)
   app.stage.addChild(hud)
 
   const input = createInput()
@@ -92,21 +118,28 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     }
 
     const snap = readSnapshot()
-    for (let i = 0; i < players.length; i++) {
-      const p = snap.players[i]
-      players[i].position.set(VIEW_W / 2 + p.x * SCALE, GROUND_PX - p.y * SCALE)
-    }
+
+    // The camera is sim state, not a view decision — corner position is
+    // gameplay, so both machines must agree on where the corner is.
+    world.position.x = VIEW_W / 2 - snap.camX * SCALE
+
+    boxes.clear()
+    for (const p of snap.players) drawBoxes(boxes, p)
+    for (let i = 0; i < bars.length; i++) drawHealth(bars[i], snap.players[i], i)
 
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.
-    if (snap.frame % HUD_EVERY === 0) hud.text = net ? netHud(net) : localHud(snap.frame, stepCost)
+    if (snap.frame % HUD_EVERY === 0) {
+      hud.text = net ? netHud(net) : localHud(snap, stepCost)
+    }
   })
 
   return {
     connect(peer, seat) {
       reset()
       ticks = 0
-      net = createNetplay({advance, rewind, checksum}, (data) => peer.send(data), seat)
+      net = createNetplay({advance, rewind, checksum, dataVersion}, (data) => peer.send(data), seat)
+      net.hello()
     },
 
     receive(data) {
@@ -122,9 +155,53 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   }
 }
 
-function localHud(frame: number, stepCost: ReturnType<typeof createSamples>): string {
+/** Sim coordinates are feet-origin, y up; the canvas is y down. */
+function toScreen(b: Box): [number, number, number, number] {
+  return [b.x * SCALE, GROUND_PX - (b.y + b.h) * SCALE, b.w * SCALE, b.h * SCALE]
+}
+
+function drawBoxes(g: Graphics, p: PlayerSnapshot): void {
+  g.rect(...toScreen(p.pushbox)).stroke({color: PUSH_COLOR, width: 1})
+  for (const b of p.hurtboxes) {
+    g.rect(...toScreen(b)).fill({color: HURT_COLOR, alpha: 0.2}).stroke({color: HURT_COLOR, width: 1})
+  }
+  for (const b of p.hitboxes) {
+    g.rect(...toScreen(b)).fill({color: HIT_COLOR, alpha: 0.3}).stroke({color: HIT_COLOR, width: 1})
+  }
+}
+
+const BAR_W = 340
+const MAX_HEALTH = 10000
+
+function drawHealth(g: Graphics, p: PlayerSnapshot, seat: number): void {
+  const x = seat === 0 ? 10 : VIEW_W - 10 - BAR_W
+  const frac = Math.max(0, Math.min(1, p.health / MAX_HEALTH))
+  const w = BAR_W * frac
+
+  g.clear()
+  g.rect(x, 8, BAR_W, 14).fill(0x2a2f38)
+  // Drains from the centre outward, so both bars empty toward the middle.
+  g.rect(seat === 0 ? x + BAR_W - w : x, 8, w, 14).fill(0xd8c15a)
+}
+
+function localHud(
+  snap: ReturnType<typeof readSnapshot>,
+  stepCost: ReturnType<typeof createSamples>,
+): string {
   const ms = (p: number) => stepCost.percentile(p).toFixed(3)
-  return `frame ${frame}  sim step p50 ${ms(50)}ms  p99 ${ms(99)}ms  max ${ms(100)}ms`
+  const who = (i: number) => {
+    const p = snap.players[i]
+    return `p${i} ${STATE_NAMES[p.state] ?? p.state}:${p.stateFrame} hp ${p.health}`
+  }
+  return [
+    `frame ${snap.frame}`,
+    snap.hitstop ? `HITSTOP ${snap.hitstop}` : '',
+    who(0),
+    who(1),
+    `sim p50 ${ms(50)}ms p99 ${ms(99)}ms`,
+  ]
+    .filter(Boolean)
+    .join('  ')
 }
 
 /**
@@ -133,6 +210,9 @@ function localHud(frame: number, stepCost: ReturnType<typeof createSamples>): st
  */
 function netHud(net: Netplay): string {
   const s = net.stats
+  if (s.dataMismatch) {
+    return 'REFUSED: the peer has different character data. Rebuild both ends from the same commit.'
+  }
   const pct = (n: number) => ((n / Math.max(1, s.frames)) * 100).toFixed(1)
   const rtt = (p: number) => (s.rtt.count ? s.rtt.percentile(p).toFixed(1) : '—')
 

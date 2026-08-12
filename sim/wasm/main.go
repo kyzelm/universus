@@ -59,6 +59,17 @@ func main() {
 		return ok
 	}))
 
+	// dataVersion() is the hash of the embedded character files. Both ends
+	// compare it before the first frame: different frame data is a desync that
+	// no amount of checksum exchange can diagnose after the fact.
+	api.Set("dataVersion", js.FuncOf(func(js.Value, []js.Value) any {
+		v, err := data.Version()
+		if err != nil {
+			return 0
+		}
+		return v
+	}))
+
 	// checksum() is what the native-vs-WASM differential compares.
 	api.Set("checksum", js.FuncOf(func(js.Value, []js.Value) any {
 		return session.Checksum()

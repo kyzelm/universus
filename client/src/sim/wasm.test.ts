@@ -15,15 +15,62 @@ beforeAll(async () => {
 const UP = 1 << 0
 const LEFT = 1 << 2
 const RIGHT = 1 << 3
+const LP = 1 << 4
+
+/** Pre-jump frames, from the shipped character data. */
+const PRE_JUMP = 4
 
 test('frame 0 is readable before the first advance', () => {
   reset()
   const s = readSnapshot()
   expect(s.frame).toBe(0)
-  expect(s.players).toEqual([
-    {x: -60, y: 0},
-    {x: 60, y: 0},
+  expect(s.camX).toBe(0)
+  expect(s.players.map((p) => [p.x, p.y, p.facing])).toEqual([
+    [-60, 0, 1],
+    [60, 0, -1],
   ])
+  // Health comes from the embedded character file; a zero here means the
+  // roster did not load inside the WASM binary.
+  expect(s.players[0].health).toBeGreaterThan(0)
+})
+
+// The overlay is only worth having if it shows the boxes the sim collides.
+test('boxes cross the boundary and follow the frame data', () => {
+  reset()
+  let s = readSnapshot()
+  expect(s.players[0].hurtboxes.length).toBe(1)
+  expect(s.players[0].hitboxes).toEqual([])
+  expect(s.players[0].pushbox.w).toBeGreaterThan(0)
+
+  // The jab is 4 startup, 3 active: a hitbox appears and then goes away.
+  advance(LP, 0)
+  let sawHitbox = false
+  for (let i = 0; i < 13; i++) {
+    advance(0, 0)
+    s = readSnapshot()
+    if (s.players[0].hitboxes.length > 0) sawHitbox = true
+  }
+  expect(sawHitbox).toBe(true)
+  expect(readSnapshot().players[0].hitboxes).toEqual([])
+})
+
+test('a connecting hit costs health and freezes both fighters', () => {
+  reset()
+  const full = readSnapshot().players[1].health
+
+  // They start 120 units apart and the jab reaches 34, so walk in first —
+  // the pushboxes stop them at touching distance.
+  for (let i = 0; i < 60; i++) advance(RIGHT, LEFT)
+
+  let sawHitstop = false
+  for (let i = 0; i < 40; i++) {
+    advance(LP, 0)
+    if (readSnapshot().hitstop > 0) sawHitstop = true
+  }
+
+  const s = readSnapshot()
+  expect(s.players[1].health).toBeLessThan(full)
+  expect(sawHitstop).toBe(true)
 })
 
 test('the frame counter tracks advance calls', () => {
@@ -42,10 +89,16 @@ test('walking moves the players at the sim walk speed', () => {
 
 test('jumping leaves the ground and comes back', () => {
   reset()
-  advance(UP, 0)
+  // Pre-jump is grounded — that is what makes throws beat jump attempts.
+  for (let i = 0; i < PRE_JUMP; i++) {
+    advance(UP, 0)
+    expect(readSnapshot().players[0].y).toBe(0)
+  }
+
+  advance(0, 0)
   expect(readSnapshot().players[0].y).toBeGreaterThan(0)
 
-  for (let i = 0; i < 60; i++) advance(0, 0)
+  for (let i = 0; i < 80; i++) advance(0, 0)
   const s = readSnapshot()
   expect(s.players[0].y).toBe(0)
   expect(s.players[1].y).toBe(0)

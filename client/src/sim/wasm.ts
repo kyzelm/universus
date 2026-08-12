@@ -10,6 +10,7 @@ declare global {
     rewind(frame: number): boolean
     reset(): void
     checksum(): number
+    dataVersion(): number
     snapshotPtr(): number
     snapshotLen(): number
     noop(): void
@@ -20,9 +21,56 @@ declare global {
 /** 16.16 fixed-point scale. The view divides by it; the sim never does. */
 const ONE = 65536
 
+/**
+ * Snapshot layout — the contract with sim/snapshot.go, which cannot check it
+ * from its side. These offsets and that file change together.
+ */
+const MAX_BOXES = 4
+const BOX = 4 * 4
+const HIT_OFF = 48 + MAX_BOXES * BOX
+const PLAYER_SIZE = 7 * 4 + BOX + 2 * (4 + MAX_BOXES * BOX)
+const HEADER = 3 * 4
+
+/** Mirrors the state constants in sim/fighter.go, for the debug readout. */
+export const STATE_NAMES = [
+  'idle',
+  'walkF',
+  'walkB',
+  'crouch',
+  'dash',
+  'backdash',
+  'prejump',
+  'air',
+  'attack',
+  'hitstun',
+  'blockstun',
+]
+
+export interface Box {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface PlayerSnapshot {
+  x: number
+  y: number
+  facing: number
+  moveIndex: number
+  state: number
+  stateFrame: number
+  health: number
+  pushbox: Box
+  hurtboxes: Box[]
+  hitboxes: Box[]
+}
+
 export interface Snapshot {
   frame: number
-  players: {x: number; y: number}[]
+  camX: number
+  hitstop: number
+  players: PlayerSnapshot[]
 }
 
 let mem: WebAssembly.Memory
@@ -96,15 +144,55 @@ export function checksum(): number {
   return sim.checksum()
 }
 
-// ponytail: allocates a small object per frame. 60/s is nothing; read the
+/**
+ * Hash of the embedded character data. Compared at handshake: two clients with
+ * different frame data desync on the first exchange and there is no way to work
+ * out why from the checksums alone.
+ */
+export function dataVersion(): number {
+  return sim.dataVersion()
+}
+
+function readBox(v: DataView, o: number): Box {
+  return {
+    x: v.getInt32(o, true) / ONE,
+    y: v.getInt32(o + 4, true) / ONE,
+    w: v.getInt32(o + 8, true) / ONE,
+    h: v.getInt32(o + 12, true) / ONE,
+  }
+}
+
+function readBoxList(v: DataView, countOffset: number): Box[] {
+  const n = v.getUint32(countOffset, true)
+  const out: Box[] = []
+  for (let i = 0; i < n && i < MAX_BOXES; i++) {
+    out.push(readBox(v, countOffset + 4 + i * BOX))
+  }
+  return out
+}
+
+// ponytail: allocates a small object graph per frame. 60/s is nothing; read the
 // DataView directly if a profile ever says otherwise.
 export function readSnapshot(): Snapshot {
   const v = snapshot()
   return {
     frame: v.getUint32(0, true),
-    players: [0, 1].map((i) => ({
-      x: v.getInt32(4 + i * 8, true) / ONE,
-      y: v.getInt32(8 + i * 8, true) / ONE,
-    })),
+    camX: v.getInt32(4, true) / ONE,
+    hitstop: v.getInt32(8, true),
+    players: [0, 1].map((i) => {
+      const o = HEADER + i * PLAYER_SIZE
+      return {
+        x: v.getInt32(o, true) / ONE,
+        y: v.getInt32(o + 4, true) / ONE,
+        facing: v.getInt32(o + 8, true),
+        moveIndex: v.getInt32(o + 12, true),
+        state: v.getInt32(o + 16, true),
+        stateFrame: v.getInt32(o + 20, true),
+        health: v.getInt32(o + 24, true),
+        pushbox: readBox(v, o + 28),
+        hurtboxes: readBoxList(v, o + 44),
+        hitboxes: readBoxList(v, o + HIT_OFF),
+      }
+    }),
   }
 }

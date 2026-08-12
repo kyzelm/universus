@@ -123,3 +123,26 @@ export function decodePing(data: ArrayBuffer): {stamp: number; reply: boolean} {
 export function stampNow(): number {
   return Math.round(performance.now() * 10) >>> 0
 }
+
+/**
+ * The handshake: [uint8 type][uint32 dataVersion].
+ *
+ * Character data is part of the simulation's identity — two clients running
+ * different frame data produce different states from identical inputs, and
+ * nothing downstream can tell that apart from a bug. Comparing a hash before
+ * the first frame turns hours of desync hunting into one refused connection.
+ */
+export function encodeControl(dataVersion: number): ArrayBuffer {
+  const buf = new ArrayBuffer(5)
+  const v = new DataView(buf)
+  v.setUint8(0, PacketType.control)
+  v.setUint32(1, dataVersion, true)
+  return buf
+}
+
+export function decodeControl(data: ArrayBuffer): {dataVersion: number} {
+  if (data.byteLength < 5) {
+    throw new Error(`control packet is ${data.byteLength} bytes, want 5`)
+  }
+  return {dataVersion: new DataView(data).getUint32(1, true)}
+}

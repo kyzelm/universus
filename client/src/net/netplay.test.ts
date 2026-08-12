@@ -8,13 +8,15 @@ import {
   type SimBridge,
 } from './netplay'
 import {
+  PacketType,
+  REDUNDANCY,
   decodeInputs,
   decodePing,
   encodeChecksum,
+  encodeControl,
   encodeInputs,
   encodePing,
-  PacketType,
-  REDUNDANCY,
+  packetType,
   stampNow,
 } from './packet'
 
@@ -46,11 +48,12 @@ function match(frames: number, lagFrames = 3, corruptBAt = -1) {
  * *last* inputs simulated for frame f, so after a replay it holds the corrected
  * ones — which is exactly the property the rollback tests care about.
  */
-function stubSim(corruptAt = -1) {
+function stubSim(corruptAt = -1, version = 0xda7a) {
   const applied: [number, number][] = []
   let frame = 0
   const sim: SimBridge & {applied: typeof applied; readonly frame: number} = {
     applied,
+    dataVersion: () => version,
     get frame() {
       return frame
     },
@@ -311,4 +314,34 @@ test('converges on the true remote inputs under lagged delivery', () => {
   }
   expect(net.stats.dropped).toBe(0) // the stall guard means this must never fire
   expect(net.stats.rollbacks).toBeGreaterThan(0) // and it did exercise rollback
+})
+
+// Character data is part of the simulation's identity. Two clients with
+// different frame data produce different states from identical inputs, and no
+// amount of checksum exchange can say why after the fact — so it is compared
+// once, before the first frame, and a mismatch refuses the match.
+test('a peer with different character data is refused, not played', () => {
+  const mine = stubSim(-1, 0xaaaa)
+  const sent: ArrayBuffer[] = []
+  const net = createNetplay(mine, (d) => sent.push(d), 0)
+
+  net.hello()
+  expect(sent.length).toBe(1)
+  expect(packetType(sent[0])).toBe(PacketType.control)
+
+  net.receive(encodeControl(0xbbbb))
+  expect(net.stats.dataMismatch).toBe(true)
+
+  // And nothing is simulated against it.
+  expect(net.step(0)).toBe(false)
+  expect(mine.applied.length).toBe(0)
+})
+
+test('a peer with matching character data plays normally', () => {
+  const mine = stubSim(-1, 0xaaaa)
+  const net = createNetplay(mine, () => {}, 0)
+
+  net.receive(encodeControl(0xaaaa))
+  expect(net.stats.dataMismatch).toBe(false)
+  expect(net.step(0)).toBe(true)
 })

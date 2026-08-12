@@ -7,6 +7,8 @@ import {
   encodeInputs,
   encodePing,
   packetType,
+  decodeControl,
+  encodeControl,
   PacketType,
   REDUNDANCY,
   stampNow,
@@ -53,6 +55,8 @@ export interface SimBridge {
   rewind(frame: number): boolean
   /** Hash of the current state. Called once per CHECKSUM_EVERY frames. */
   checksum(): number
+  /** Hash of the character data. Exchanged once, before the first frame. */
+  dataVersion(): number
 }
 
 export interface NetplayStats {
@@ -69,6 +73,12 @@ export interface NetplayStats {
   /** Corrections that arrived too late to apply — a desync, if it ever fires. */
   dropped: number
   malformed: number
+  /**
+   * Set when the peer's character data does not match ours. Every frame after
+   * that would diverge, so the match is refused rather than played.
+   */
+  dataMismatch: boolean
+
   /** Confirmed frames where both ends hashed the same state. */
   verified: number
   /** …and where they did not. The first such frame is where to start looking. */
@@ -81,6 +91,8 @@ export interface NetplayStats {
 export interface Netplay {
   /** Simulates one frame. False means it stalled and no frame was simulated. */
   step(localBits: number): boolean
+  /** Announces our character data hash. Sent once, on connect. */
+  hello(): void
   receive(data: ArrayBuffer): void
   ping(): void
   readonly frame: number
@@ -115,6 +127,7 @@ export function createNetplay(
   let confirmed = -1
 
   const stats: NetplayStats = {
+    dataMismatch: false,
     frames: 0,
     rollbacks: 0,
     depths: Array(MAX_ROLLBACK + 1).fill(0),
@@ -242,6 +255,11 @@ export function createNetplay(
         return false
       }
 
+      // Nothing is worth simulating against a peer with different frame data:
+      // every frame would diverge and the checksums would report it without
+      // ever saying why.
+      if (stats.dataMismatch) return false
+
       if (!known[frame]) stats.predicted++
       simulate(frame, remoteAt(frame))
       frame++
@@ -257,6 +275,12 @@ export function createNetplay(
           const {stamp, reply} = decodePing(data)
           if (reply) stats.rtt.push((stampNow() - stamp) / 10)
           else send(encodePing(stamp, true))
+          return
+        }
+
+        if (packetType(data) === PacketType.control) {
+          const {dataVersion} = decodeControl(data)
+          if (dataVersion !== sim.dataVersion()) stats.dataMismatch = true
           return
         }
 
@@ -292,6 +316,10 @@ export function createNetplay(
 
     ping() {
       send(encodePing(stampNow(), false))
+    },
+
+    hello() {
+      send(encodeControl(sim.dataVersion()))
     },
   }
 }
