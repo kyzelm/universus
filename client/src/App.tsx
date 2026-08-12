@@ -46,7 +46,8 @@ export default function App() {
     <main>
       <div ref={host} />
       <p className="keys">
-        P1 WASD + UIO/JKL · P2 arrows + numpad{' '}
+        P1 WASD · P2 arrows. Two moves exist so far: <b>LP standing</b> (U / Num7) and{' '}
+        <b>LK crouching</b> (S+J / ↓+Num4). Other buttons are bound but have no data yet.{' '}
         <button type="button" onClick={() => game && saveLog(game)} disabled={!game}>
           save input log
         </button>
