@@ -58,6 +58,16 @@ type PlayerState struct {
 	// Stun is the remaining hitstun or blockstun.
 	Stun int32
 
+	// Eaten is the newest frame whose button presses have already been spent,
+	// or -1. The input buffer keeps a press live for a few frames looking for a
+	// state that can act on it (see moveFor); without a record of which presses
+	// were already spent, the same tap keeps matching for the rest of the
+	// window and one press produces a move on every actionable frame.
+	//
+	// In the state, not beside it, for the usual reason: a buffer that does not
+	// roll back replays the wrong move.
+	Eaten int32
+
 	// JumpVX is the horizontal velocity committed at pre-jump. There is no air
 	// control, so the whole arc follows from this and gravity.
 	JumpVX Fix
@@ -112,6 +122,7 @@ func NewMatch(c0, c1 int32) GameState {
 	}}
 	for i := range s.Players {
 		s.Players[i].MoveIndex = -1
+		s.Players[i].Eaten = -1
 	}
 	s.updateCamera()
 	return s

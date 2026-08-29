@@ -401,3 +401,79 @@ func TestDashIsFacingRelative(t *testing.T) {
 		t.Errorf("left-left for a left-facing player gave state %d, want dash", got)
 	}
 }
+
+// The input buffer is only worth having if the state machine consumes it: a
+// press three frames before the recovery ends must come out, not be dropped for
+// being early. This is the test that fails if moveFor goes back to reading only
+// the current frame.
+func TestPressBuffersThroughRecovery(t *testing.T) {
+	s := New()
+	mv := &char().Moves[0]
+
+	s.Advance([2]uint16{InLP, 0}) // the move that is in the way
+	for s.Players[0].StateFrame < mv.Total()-3 {
+		s.Advance([2]uint16{0, 0})
+	}
+
+	// Pressed while still in recovery — too early to be accepted, well inside
+	// the buffer window.
+	s.Advance([2]uint16{InLP, 0})
+	if p := s.Players[0]; p.StateFrame == 0 {
+		t.Fatal("the press was accepted during recovery; it should have been buffered, not acted on")
+	}
+
+	for range InputBuffer {
+		s.Advance([2]uint16{0, 0})
+		if p := s.Players[0]; p.State == StateAttack && p.StateFrame == 1 {
+			return
+		}
+	}
+	t.Errorf("the buffered press never came out: state %d", s.Players[0].State)
+}
+
+// One press, one move. The press stays in the history for the whole buffer
+// window, so without Eaten the same tap starts a new move on every actionable
+// frame it can still see.
+func TestOnePressFiresOneMove(t *testing.T) {
+	s := New()
+	s.Advance([2]uint16{InLP, 0})
+	if s.Players[0].State != StateAttack {
+		t.Fatal("the press did not start a move")
+	}
+
+	// Cut the move short so the player is actionable while its own press is
+	// still inside the buffer window — the only way to reach the case without
+	// waiting out a move longer than the buffer.
+	s.Players[0].enter(StateIdle)
+	s.Advance([2]uint16{0, 0})
+
+	if s.Players[0].State == StateAttack {
+		t.Error("a single press started a second move")
+	}
+
+	// And it is Eaten doing the work, not the state machine being lucky.
+	s.Players[0].Eaten = -1
+	s.Advance([2]uint16{0, 0})
+	if s.Players[0].State != StateAttack {
+		t.Error("with the press un-eaten the move does not come out: the test proves nothing")
+	}
+}
+
+// The buffer is state, so it rolls back with everything else. A press eaten on
+// a frame that gets rewound is live again.
+func TestEatenRollsBack(t *testing.T) {
+	sess := NewSession()
+
+	sess.Advance([2]uint16{0, 0})
+	sess.Advance([2]uint16{InLP, 0})
+	if sess.State().Players[0].Eaten < 0 {
+		t.Fatal("starting a move did not spend the press")
+	}
+
+	if !sess.Rewind(1) {
+		t.Fatal("rewind refused")
+	}
+	if got := sess.State().Players[0].Eaten; got != -1 {
+		t.Errorf("Eaten = %d after a rewind, want -1: the buffer did not roll back", got)
+	}
+}

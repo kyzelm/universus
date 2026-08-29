@@ -182,24 +182,36 @@ func (s *GameState) PressedAt(player int, button uint16, now uint32) bool {
 	return p.at(now, 0)&button != 0 && p.at(now, 1)&button == 0
 }
 
+// pressFrame is the newest frame within the buffer window on which button was
+// freshly pressed, or -1.
+//
+// The frame and not just a yes/no, because the state machine has to know *which*
+// press it is spending: moveFor picks the newest live press and enterMove marks
+// everything up to that frame spent (PlayerState.Eaten). A bool cannot express
+// either half.
+//
+// int32 rather than uint32: "no press" needs a value outside the frame numbers,
+// and every field it is compared against is int32 for the state's layout rule.
+func (p *PlayerState) pressFrame(now uint32, button uint16) int32 {
+	for back := uint32(0); back < InputBuffer && back <= now; back++ {
+		if p.at(now, back)&button != 0 && p.at(now, back+1)&button == 0 {
+			return int32(now - back)
+		}
+	}
+	return -1
+}
+
 // Buffered reports a press edge within the last InputBuffer frames, which is
 // what makes cancels and links feel responsive instead of punishing: the press
 // stays live briefly, looking for a state that can act on it.
 //
-// ponytail: a query, not stored state, and nothing consumes it yet. A real
-// buffer is cleared when a move eats it, or one press fires twice; that
-// belongs with the state machine that does the eating.
+// The query ignores whether the press was already spent — it answers "was this
+// pressed recently", which is what a debug overlay and a test want. The state
+// machine's own consumption runs through moveFor.
 func (s *GameState) Buffered(player int, button uint16) bool {
 	return s.BufferedAt(player, button, s.latest())
 }
 
 func (s *GameState) BufferedAt(player int, button uint16, now uint32) bool {
-	p := &s.Players[player]
-
-	for back := uint32(0); back < InputBuffer && back <= now; back++ {
-		if p.at(now, back)&button != 0 && p.at(now, back+1)&button == 0 {
-			return true
-		}
-	}
-	return false
+	return s.Players[player].pressFrame(now, button) >= 0
 }

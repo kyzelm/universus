@@ -55,11 +55,19 @@ func (p *PlayerState) stay(state int32) {
 	}
 }
 
-// enterMove starts an attack.
-func (p *PlayerState) enterMove(index int32) {
+// enterMove starts an attack on frame now, and spends every press up to and
+// including that frame: the press that started this move must not start
+// another one while it is still inside the buffer window.
+//
+// ponytail: one frame marker, not a per-button flag. Eating a simultaneous
+// press of a different button is the coarse part, and it is the right coarse
+// part — the newest press is the one the player meant, and a second live press
+// under the first would come out as a move the player never asked for.
+func (p *PlayerState) enterMove(index int32, now uint32) {
 	p.enter(StateAttack)
 	p.MoveIndex = index
 	p.HasHit = 0
+	p.Eaten = int32(now)
 }
 
 // resolveInputs is step 1: turn this frame's bitfield into a state transition.
@@ -81,8 +89,8 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 
 	// Attacks first: a button beats a direction on the same frame, which is
 	// what lets a crouching attack come out of a walk without a spare frame.
-	if m := s.moveFor(i, in, crouching, now); m >= 0 {
-		p.enterMove(m)
+	if m := s.moveFor(i, crouching, now); m >= 0 {
+		p.enterMove(m, now)
 		return
 	}
 
@@ -170,11 +178,24 @@ func (p *PlayerState) doubleTapped(now uint32, dir uint8) bool {
 	return false
 }
 
-// moveFor finds the move a freshly pressed button selects, or -1.
+// moveFor finds the move a recent button press selects, or -1.
 //
-// Scanning the move list in index order — the same order on every machine. The
-// first match wins, so a character's move list is authored most-specific first.
-func (s *GameState) moveFor(i int, in uint16, crouching bool, now uint32) int32 {
+// **This is where the input buffer is consumed.** A press does not have to land
+// on a frame the player happens to be actionable: it stays live for InputBuffer
+// frames looking for a state that can act on it, so a jab pressed during
+// hitstop, hitstun or the tail of another move comes out on the first frame it
+// legally can instead of being dropped for being three frames early. Buffering
+// is most of what "responsive" means in this genre, and every one of those
+// frames is a frame the player was already committed to.
+//
+// The newest live press wins — the player's latest intention, not their oldest.
+// Presses at or before p.Eaten are spent and cannot win, which is what makes
+// one press one move; starting bestFrame at p.Eaten is the whole filter.
+//
+// Scanning the move list in index order — the same order on every machine — and
+// strictly newer beats equal, so a tie between two moves on the same frame goes
+// to the lower index. A character's move list is authored most-specific first.
+func (s *GameState) moveFor(i int, crouching bool, now uint32) int32 {
 	p := &s.Players[i]
 	c := CharacterAt(p.Char)
 
@@ -183,18 +204,21 @@ func (s *GameState) moveFor(i int, in uint16, crouching bool, now uint32) int32 
 		stance = StanceCrouch
 	}
 
+	// The stance is this frame's, not the buffered frame's: the move that comes
+	// out is the one for what the player is holding when it comes out. Holding
+	// down through a buffered jab gives the crouching attack, which is what a
+	// player who is still holding down is asking for.
+	best, bestFrame := int32(-1), p.Eaten
 	for m := int32(0); m < c.NumMoves; m++ {
 		mv := &c.Moves[m]
 		if mv.Stance != stance {
 			continue
 		}
-		// The press edge, not the held bit: a held button must not re-fire its
-		// move on every actionable frame.
-		if in&mv.Button != 0 && p.at(now, 1)&mv.Button == 0 {
-			return m
+		if f := p.pressFrame(now, mv.Button); f > bestFrame {
+			best, bestFrame = m, f
 		}
 	}
-	return -1
+	return best
 }
 
 // advanceState is step 2: run the current state's clock and decide what the
