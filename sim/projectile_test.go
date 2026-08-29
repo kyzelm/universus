@@ -275,3 +275,60 @@ func TestProjectilesRollBack(t *testing.T) {
 		t.Errorf("after the rewind: %+v, want %+v", got, at)
 	}
 }
+
+// Point blank, a projectile is born inside the defender and resolves on its
+// spawn frame — it is never alive at the end of a frame, and the view never
+// draws it. That is correct, and it is also the case a playtest found.
+//
+// What it pins down is the frame after: the hit's hitstop parks the state
+// machine on the spawn frame for several frames, and the move must not fire a
+// second projectile on each of them. Nothing enforces that but the order of
+// Advance, which returns during hitstop before advanceProjectiles can run —
+// so this test is what will notice if that order ever changes.
+func TestHitstopOnTheSpawnFrameCannotRespawn(t *testing.T) {
+	s := New()
+	s.Players[1].X = FromInt(-30) // inside where the fireball appears
+
+	feed(&s, 2, 3)
+	s.Advance([2]uint16{pad[6] | InLP, 0})
+	if s.Players[0].MoveIndex != 2 {
+		t.Fatalf("the fireball did not come out: move %d", s.Players[0].MoveIndex)
+	}
+
+	mv := &char().Moves[2]
+	full := s.Players[1].Health
+
+	for range 30 {
+		s.Advance([2]uint16{0, 0})
+		if s.Players[1].Health != full {
+			break
+		}
+	}
+
+	if got := full - s.Players[1].Health; got != mv.Damage {
+		t.Fatalf("dealt %d damage, want one hit of %d", got, mv.Damage)
+	}
+	if s.Hitstop == 0 {
+		t.Fatal("no hitstop, so this is not the case being tested")
+	}
+	if s.Players[0].StateFrame != mv.Startup {
+		t.Fatalf("state frame %d, want it parked on the spawn frame %d",
+			s.Players[0].StateFrame, mv.Startup)
+	}
+	if live(&s) != 0 {
+		t.Fatal("the fireball survived a hit it landed on its own spawn frame")
+	}
+
+	// Through the hitstop and out the far side of the move: one input, one
+	// projectile, one hit.
+	after := s.Players[1].Health
+	for range mv.Total() + 30 {
+		s.Advance([2]uint16{0, 0})
+		if n := live(&s); n != 0 {
+			t.Fatalf("frame %d: %d projectile(s) appeared from the same input", s.Frame, n)
+		}
+	}
+	if s.Players[1].Health != after {
+		t.Errorf("health moved again: %d then %d", after, s.Players[1].Health)
+	}
+}
