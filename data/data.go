@@ -193,7 +193,7 @@ var levels = map[string]int32{
 }
 
 var stances = map[string]int32{
-	"stand": sim.StanceStand, "crouch": sim.StanceCrouch,
+	"stand": sim.StanceStand, "crouch": sim.StanceCrouch, "air": sim.StanceAir,
 }
 
 // Motions a move can require. Absent means a normal, which is why the empty

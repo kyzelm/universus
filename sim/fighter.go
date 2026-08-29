@@ -75,13 +75,19 @@ func (p *PlayerState) enterMove(index int32, now uint32) {
 	p.HasHit = 0
 	p.Eaten = int32(now)
 
-	// The move owns the character's velocity from here. Two things follow: a
-	// walk does not carry into the attack that came out of it, and a move with
-	// a launch sets its own and keeps it, so gravity turns it into an arc
-	// without the move having to describe one.
+	// A grounded move owns the character's velocity from here. Two things
+	// follow: a walk does not carry into the attack that came out of it, and a
+	// move with a launch sets its own and keeps it, so gravity turns it into an
+	// arc without the move having to describe one.
+	//
+	// An air move does not take the velocity over unless it asks to. The jump
+	// it came out of continues underneath it, which is what makes an air normal
+	// something you do during a jump rather than something that stops one.
 	mv := &CharacterAt(p.Char).Moves[index]
-	p.VX = mv.LaunchVX.Mul(FromInt(int(p.Facing)))
-	p.VY = mv.LaunchVY
+	if !p.Airborne() || mv.Launches() {
+		p.VX = mv.LaunchVX.Mul(FromInt(int(p.Facing)))
+		p.VY = mv.LaunchVY
+	}
 }
 
 // resolveInputs is step 1: turn this frame's bitfield into a state transition.
@@ -94,16 +100,27 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 	now := s.Frame
 
 	// Stun and commitment states tick down elsewhere; they accept no input.
-	if !Actionable(p.State) {
+	// StateAir is the exception, and only for buttons: an air normal is the one
+	// thing a jump accepts. There is no air walking, no double jump and no air
+	// dash, so the direction half below is unreachable from up there.
+	if !Actionable(p.State) && p.State != StateAir {
 		return
 	}
 
 	dir := direction(in, p.Facing)
 	crouching := dir == DirDown || dir == DirDownBack || dir == DirDownFwd
 
+	stance := int32(StanceStand)
+	switch {
+	case p.State == StateAir:
+		stance = StanceAir
+	case crouching:
+		stance = StanceCrouch
+	}
+
 	// Attacks first: a button beats a direction on the same frame, which is
 	// what lets a crouching attack come out of a walk without a spare frame.
-	if m := s.moveFor(i, crouching, now); m >= 0 {
+	if m := s.moveFor(i, stance, now); m >= 0 {
 		p.enterMove(m, now)
 		return
 	}
@@ -116,6 +133,10 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 	}
 	if p.doubleTapped(now, DirBack) {
 		p.enter(StateBackdash)
+		return
+	}
+
+	if p.State == StateAir {
 		return
 	}
 
@@ -209,14 +230,9 @@ func (p *PlayerState) doubleTapped(now uint32, dir uint8) bool {
 // Scanning the move list in index order — the same order on every machine — and
 // strictly newer beats equal, so a tie between two moves on the same frame goes
 // to the lower index. A character's move list is authored most-specific first.
-func (s *GameState) moveFor(i int, crouching bool, now uint32) int32 {
+func (s *GameState) moveFor(i int, stance int32, now uint32) int32 {
 	p := &s.Players[i]
 	c := CharacterAt(p.Char)
-
-	stance := int32(StanceStand)
-	if crouching {
-		stance = StanceCrouch
-	}
 
 	// Candidates are ranked press frame first, special over normal second, and
 	// the whole comparison is one integer: two ranks per frame, the odd one
@@ -232,10 +248,17 @@ func (s *GameState) moveFor(i int, crouching bool, now uint32) int32 {
 		mv := &c.Moves[m]
 		special := mv.Motion != MotionNone
 
-		// Stance gates normals only. A special is identified by its motion, and
-		// requiring the stance as well would make the exact frame the button
-		// lands decide the move: press punch one frame early, while ↘ is still
-		// held, and a fireball becomes a crouching kick.
+		// Ground and air never mix, specials included: a fireball motion is
+		// still on the stick when the character leaves the ground, and without
+		// this a jump would throw one.
+		if (mv.Stance == StanceAir) != (stance == StanceAir) {
+			continue
+		}
+
+		// Beyond that, stance gates normals only. A special is identified by
+		// its motion, and requiring the stance as well would make the exact
+		// frame the button lands decide the move: press punch one frame early,
+		// while ↘ is still held, and a fireball becomes a crouching kick.
 		//
 		// The stance for a normal is this frame's, not the buffered frame's:
 		// holding down through a buffered jab gives the crouching attack, which

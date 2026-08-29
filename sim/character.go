@@ -34,6 +34,7 @@ const (
 const (
 	StanceStand = iota
 	StanceCrouch
+	StanceAir
 )
 
 // Box is an axis-aligned rectangle in character-local space: origin at the
@@ -138,6 +139,10 @@ type Move struct {
 	// through its move index.
 	Proj ProjectileSpec
 }
+
+// Launches reports whether the move sets its own velocity. A move that does
+// not is content to be carried by whatever the character was already doing.
+func (m *Move) Launches() bool { return m.LaunchVX != 0 || m.LaunchVY != 0 }
 
 // Total is the move's full duration in frames.
 func (m *Move) Total() int32 { return m.Startup + m.Active + m.Recovery }

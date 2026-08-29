@@ -191,7 +191,14 @@ func (s *GameState) Advance(in [2]uint16) {
 				// ground every frame and must keep the velocity its data gave
 				// it.
 				p.VX = 0
-				if p.State == StateAir {
+
+				// Landing ends a jump, and it ends an air normal with it: an
+				// air move's recovery is the fall, and it has no business
+				// continuing on the ground. A move that *launched* from the
+				// ground — an uppercut — keeps its recovery, because those
+				// frames are the punish window that makes it a risk.
+				mv := p.move()
+				if p.State == StateAir || (mv != nil && mv.Stance == StanceAir) {
 					p.enter(StateIdle)
 				}
 			}

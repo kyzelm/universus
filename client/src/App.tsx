@@ -46,10 +46,10 @@ export default function App() {
     <main>
       <div ref={host} />
       <p className="keys">
-        P1 WASD · P2 arrows. Moves so far: <b>LP standing</b> (U / Num7),{' '}
-        <b>LK crouching</b> (S+J / ↓+Num4), the <b>fireball</b> (↓ ↘ → + punch) and the{' '}
-        <b>uppercut</b> (→ ↓ ↘ + punch), each in three strengths. Kicks past LK are bound
-        but have no data yet.{' '}
+        P1 WASD · P2 arrows. Punches <b>U I O</b> / <b>Num7 8 9</b>, kicks <b>J K L</b> /{' '}
+        <b>Num4 5 6</b> — all six work standing, crouching and in the air. Specials:{' '}
+        <b>fireball</b> ↓ ↘ → + punch and <b>uppercut</b> → ↓ ↘ + punch, three strengths
+        each.{' '}
         <button type="button" onClick={() => game && saveLog(game)} disabled={!game}>
           save input log
         </button>

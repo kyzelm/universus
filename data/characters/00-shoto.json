@@ -339,6 +339,58 @@
         { "frame": 9, "hurt": [[-12, 0, 34, 32]], "hit": [[12, 2, 38, 10]] },
         { "frame": 12, "hurt": [[-12, 0, 24, 32]] }
       ]
+    },
+    {
+      "_comment": "Jumping normals. An overhead by nature — an airborne attack has to be blocked standing — and their recovery is the fall: landing ends the move.",
+      "id": "jLP",
+      "input": { "stance": "air", "button": "LP" },
+      "startup": 5,
+      "active": 4,
+      "recovery": 8,
+      "damage": 300,
+      "hitstun": 14,
+      "blockstun": 11,
+      "hitstop": 6,
+      "attackLevel": "overhead",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 4, 24, 40]] },
+        { "frame": 5, "hurt": [[-12, 4, 28, 40]], "hit": [[10, 20, 24, 16]] },
+        { "frame": 9, "hurt": [[-12, 4, 24, 40]] }
+      ]
+    },
+    {
+      "id": "jHP",
+      "input": { "stance": "air", "button": "HP" },
+      "startup": 8,
+      "active": 5,
+      "recovery": 12,
+      "damage": 700,
+      "hitstun": 18,
+      "blockstun": 14,
+      "hitstop": 10,
+      "attackLevel": "overhead",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 4, 24, 40]] },
+        { "frame": 8, "hurt": [[-12, 4, 28, 40]], "hit": [[10, 16, 30, 22]] },
+        { "frame": 13, "hurt": [[-12, 4, 24, 40]] }
+      ]
+    },
+    {
+      "id": "jHK",
+      "input": { "stance": "air", "button": "HK" },
+      "startup": 9,
+      "active": 6,
+      "recovery": 14,
+      "damage": 800,
+      "hitstun": 18,
+      "blockstun": 14,
+      "hitstop": 10,
+      "attackLevel": "overhead",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 4, 24, 40]] },
+        { "frame": 9, "hurt": [[-12, 4, 28, 40]], "hit": [[8, 4, 28, 26]] },
+        { "frame": 15, "hurt": [[-12, 4, 24, 40]] }
+      ]
     }
   ]
 }

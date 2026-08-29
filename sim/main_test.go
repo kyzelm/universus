@@ -40,7 +40,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 6,
+		NumMoves: 7,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -135,6 +135,19 @@ func testCharacter() Character {
 	}
 	c.Moves[5].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
 	c.Moves[5].Keys[0].Hurt[0] = c.StandHurt
+
+	// An air normal. No launch: it rides the jump it came out of.
+	c.Moves[6] = Move{
+		Startup: 3, Active: 4, Recovery: 8,
+		Damage: 200, Hitstun: 16, Blockstun: 12, Hitstop: 8,
+		Level: LevelHigh, Stance: StanceAir, Button: InLP,
+		NumKeys: 2,
+	}
+	c.Moves[6].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[6].Keys[0].Hurt[0] = c.AirHurt
+	c.Moves[6].Keys[1] = Keyframe{Frame: 3, NumHurt: 1, NumHit: 1}
+	c.Moves[6].Keys[1].Hurt[0] = c.AirHurt
+	c.Moves[6].Keys[1].Hit[0] = Box{X: FromInt(10), Y: FromInt(16), W: FromInt(26), H: FromInt(20)}
 
 	return c
 }

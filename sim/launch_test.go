@@ -103,11 +103,12 @@ func TestAMoveEndingInTheAirFallsOutIntoAJump(t *testing.T) {
 		t.Fatalf("state %d after the move ended in the air, want StateAir", p.State)
 	}
 
-	// A pressed button in mid-air must do nothing, which is the whole point of
-	// not being idle up there.
-	s.Advance([2]uint16{InLP, 0})
-	if s.Players[0].State == StateAttack {
-		t.Error("attacked in mid-air")
+	// Being in StateAir rather than idle is what keeps the ground options off:
+	// no second jump, no walking, no dash. Buttons are a different matter —
+	// air normals are exactly what a jump is for, and they have their own test.
+	s.Advance([2]uint16{pad[8], 0})
+	if got := s.Players[0].State; got != StateAir {
+		t.Errorf("holding up in mid-air put the player in state %d, want a second jump to be impossible", got)
 	}
 
 	for range 60 {
