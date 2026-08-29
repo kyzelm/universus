@@ -40,7 +40,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 2,
+		NumMoves: 3,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -72,6 +72,20 @@ func testCharacter() Character {
 	c.Moves[1].Keys[1] = Keyframe{Frame: 5, NumHurt: 1, NumHit: 1}
 	c.Moves[1].Keys[1].Hurt[0] = c.CrouchHurt
 	c.Moves[1].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(2), W: FromInt(28), H: FromInt(10)}
+
+	// A special on the same button as the jab, which is the case that matters:
+	// QCF+LP and LP are told apart by the motion and nothing else.
+	c.Moves[2] = Move{
+		Startup: 6, Active: 3, Recovery: 10,
+		Damage: 200, Hitstun: 20, Blockstun: 14, Hitstop: 8,
+		Level: LevelMid, Stance: StanceStand, Button: InLP, Motion: MotionQCF,
+		NumKeys: 2,
+	}
+	c.Moves[2].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[2].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[2].Keys[1] = Keyframe{Frame: 6, NumHurt: 1, NumHit: 1}
+	c.Moves[2].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[2].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(20), W: FromInt(40), H: FromInt(16)}
 
 	return c
 }

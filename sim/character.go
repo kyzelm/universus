@@ -97,6 +97,12 @@ type Move struct {
 	Stance int32
 	Button uint16
 
+	// Motion is the directional sequence the move requires, or MotionNone for a
+	// normal. A move with one is a special: it ignores Stance (see moveFor),
+	// because the motion already identifies it and the stance the button
+	// happens to land on is not part of what the player asked for.
+	Motion Motion
+
 	NumKeys int32
 	Keys    [MaxKeyframes]Keyframe
 }

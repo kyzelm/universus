@@ -143,6 +143,7 @@ type jsonMove struct {
 	Input struct {
 		Stance string `json:"stance"`
 		Button string `json:"button"`
+		Motion string `json:"motion"`
 	} `json:"input"`
 
 	Startup  int `json:"startup"`
@@ -179,6 +180,13 @@ var levels = map[string]int32{
 
 var stances = map[string]int32{
 	"stand": sim.StanceStand, "crouch": sim.StanceCrouch,
+}
+
+// Motions a move can require. Absent means a normal, which is why the empty
+// string is a key and not an error: most moves have no motion, and making them
+// all write "none" would be noise in every entry.
+var inputMotions = map[string]sim.Motion{
+	"": sim.MotionNone, "qcf": sim.MotionQCF, "qcb": sim.MotionQCB, "dp": sim.MotionDP,
 }
 
 // ---- conversion and validation --------------------------------------------
@@ -312,6 +320,9 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 	}
 	if m.Level, ok = levels[jm.AttackLevel]; !ok {
 		return m, fmt.Errorf("unknown attackLevel %q", jm.AttackLevel)
+	}
+	if m.Motion, ok = inputMotions[jm.Input.Motion]; !ok {
+		return m, fmt.Errorf("unknown motion %q", jm.Input.Motion)
 	}
 
 	if len(jm.Boxes) == 0 {

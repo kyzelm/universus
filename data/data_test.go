@@ -33,6 +33,18 @@ func TestEmbeddedRosterLoads(t *testing.T) {
 			}
 		}
 	}
+
+	// The strength variants are the data-driven claim in miniature: three moves
+	// that differ only in numbers, sharing one motion and one code path.
+	strengths := map[uint16]bool{}
+	for m := int32(0); m < cs[0].NumMoves; m++ {
+		if mv := &cs[0].Moves[m]; mv.Motion == sim.MotionQCF {
+			strengths[mv.Button] = true
+		}
+	}
+	if len(strengths) != 3 {
+		t.Errorf("the fireball has %d strength variants, want 3", len(strengths))
+	}
 }
 
 // The handshake compares this. If it were not stable across calls, every match
@@ -123,6 +135,7 @@ func TestValidationRejectsBadData(t *testing.T) {
 		{"negative recovery", func(c *jsonCharacter) { c.Moves[0].Recovery = -1 }},
 		{"unknown button", func(c *jsonCharacter) { c.Moves[0].Input.Button = "LOL" }},
 		{"unknown stance", func(c *jsonCharacter) { c.Moves[0].Input.Stance = "hover" }},
+		{"unknown motion", func(c *jsonCharacter) { c.Moves[0].Input.Motion = "360" }},
 		{"unknown level", func(c *jsonCharacter) { c.Moves[0].AttackLevel = "sideways" }},
 		{"zero-size box", func(c *jsonCharacter) { c.Pushbox = []json.Number{"0", "0", "0", "48"} }},
 		{"box with too few values", func(c *jsonCharacter) { c.StandHurt = []json.Number{"0", "0"} }},

@@ -204,18 +204,50 @@ func (s *GameState) moveFor(i int, crouching bool, now uint32) int32 {
 		stance = StanceCrouch
 	}
 
-	// The stance is this frame's, not the buffered frame's: the move that comes
-	// out is the one for what the player is holding when it comes out. Holding
-	// down through a buffered jab gives the crouching attack, which is what a
-	// player who is still holding down is asking for.
-	best, bestFrame := int32(-1), p.Eaten
+	// Candidates are ranked press frame first, special over normal second, and
+	// the whole comparison is one integer: two ranks per frame, the odd one
+	// taken by the special. A newer press therefore always outranks an older
+	// one whatever it was, which is the ordering in words and cheaper to read
+	// than the three-way condition it replaces.
+	//
+	// Starting the bar at p.Eaten*2+1 is what spends a press: nothing at or
+	// before that frame can outrank it, special or not.
+	best, bestRank := int32(-1), p.Eaten*2+1
+
 	for m := int32(0); m < c.NumMoves; m++ {
 		mv := &c.Moves[m]
-		if mv.Stance != stance {
+		special := mv.Motion != MotionNone
+
+		// Stance gates normals only. A special is identified by its motion, and
+		// requiring the stance as well would make the exact frame the button
+		// lands decide the move: press punch one frame early, while ↘ is still
+		// held, and a fireball becomes a crouching kick.
+		//
+		// The stance for a normal is this frame's, not the buffered frame's:
+		// holding down through a buffered jab gives the crouching attack, which
+		// is what a player still holding down is asking for.
+		if !special && mv.Stance != stance {
 			continue
 		}
-		if f := p.pressFrame(now, mv.Button); f > bestFrame {
-			best, bestFrame = m, f
+
+		f := p.pressFrame(now, mv.Button)
+		if f < 0 {
+			continue
+		}
+		// The motion is checked at the frame of the *press*, not at the frame
+		// the move finally comes out. A buffered special is one the player
+		// completed several frames ago; asking whether the motion is still
+		// recognised now would drop exactly the inputs the buffer exists for.
+		if special && s.MotionAt(i, uint32(f)) != mv.Motion {
+			continue
+		}
+
+		rank := f * 2
+		if special {
+			rank++
+		}
+		if rank > bestRank {
+			best, bestRank = m, rank
 		}
 	}
 	return best

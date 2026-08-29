@@ -1,7 +1,7 @@
 {
   "id": 0,
   "name": "Shoto",
-  "_comment": "M1 placeholder. Two normals, rectangles, numbers chosen to be legible rather than balanced. Filenames are sorted and the order is the roster index, hence the numeric prefix.",
+  "_comment": "M1/M2 placeholder. Two normals, one special in three strengths, rectangles, numbers chosen to be legible rather than balanced. Filenames are sorted and the order is the roster index, hence the numeric prefix.",
 
   "health": 10000,
 
@@ -23,6 +23,58 @@
   "airHurt": [-12, 4, 24, 40],
 
   "moves": [
+    {
+      "_comment": "Fireball, light. QCF+P per the roster plan, three strength variants that are the same entry with different numbers — the data-driven claim, cheaply. Placeholder: it is a hitbox out in front, not a projectile, because projectiles are their own sim step and are not built yet. When they are, reach below becomes projectile speed and the strengths differ in travel, not range.",
+      "id": "236LP",
+      "input": { "stance": "stand", "button": "LP", "motion": "qcf" },
+      "startup": 13,
+      "active": 3,
+      "recovery": 26,
+      "damage": 600,
+      "hitstun": 18,
+      "blockstun": 13,
+      "hitstop": 8,
+      "attackLevel": "mid",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 13, "hurt": [[-12, 0, 30, 48]], "hit": [[14, 20, 40, 16]] },
+        { "frame": 16, "hurt": [[-12, 0, 24, 48]] }
+      ]
+    },
+    {
+      "id": "236MP",
+      "input": { "stance": "stand", "button": "MP", "motion": "qcf" },
+      "startup": 13,
+      "active": 3,
+      "recovery": 26,
+      "damage": 600,
+      "hitstun": 18,
+      "blockstun": 13,
+      "hitstop": 8,
+      "attackLevel": "mid",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 13, "hurt": [[-12, 0, 30, 48]], "hit": [[14, 20, 56, 16]] },
+        { "frame": 16, "hurt": [[-12, 0, 24, 48]] }
+      ]
+    },
+    {
+      "id": "236HP",
+      "input": { "stance": "stand", "button": "HP", "motion": "qcf" },
+      "startup": 13,
+      "active": 3,
+      "recovery": 26,
+      "damage": 600,
+      "hitstun": 18,
+      "blockstun": 13,
+      "hitstop": 8,
+      "attackLevel": "mid",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 13, "hurt": [[-12, 0, 30, 48]], "hit": [[14, 20, 72, 16]] },
+        { "frame": 16, "hurt": [[-12, 0, 24, 48]] }
+      ]
+    },
     {
       "id": "5LP",
       "input": { "stance": "stand", "button": "LP" },

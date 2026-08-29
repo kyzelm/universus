@@ -477,3 +477,76 @@ func TestEatenRollsBack(t *testing.T) {
 		t.Errorf("Eaten = %d after a rewind, want -1: the buffer did not roll back", got)
 	}
 }
+
+// A special and the normal on the same button are told apart by the motion and
+// nothing else. Without the gate, QCF+LP is a jab and the character has no
+// specials; without the ranking, LP after a quarter-circle is a jab and the
+// player's fireball is eaten by their own light punch.
+func TestMotionSelectsTheSpecial(t *testing.T) {
+	const jab, special = int32(0), int32(2)
+
+	bare := New()
+	bare.Advance([2]uint16{InLP, 0})
+	if got := bare.Players[0].MoveIndex; got != jab {
+		t.Errorf("LP with no motion gave move %d, want the jab %d", got, jab)
+	}
+
+	qcf := New()
+	feed(&qcf, 2, 3)
+	qcf.Advance([2]uint16{pad[6] | InLP, 0})
+	if got := qcf.Players[0].MoveIndex; got != special {
+		t.Errorf("QCF+LP gave move %d, want the special %d", got, special)
+	}
+}
+
+// The motion identifies the move, so the stance the button happens to land on
+// does not. Pressing punch one frame early, while ↘ is still held, must not
+// turn a fireball into whatever the crouching move on that button is.
+func TestSpecialIgnoresStance(t *testing.T) {
+	s := New()
+	feed(&s, 2, 3, 6)
+	s.Advance([2]uint16{pad[3] | InLP, 0}) // still crouching when the button lands
+
+	if got := s.Players[0].MoveIndex; got != 2 {
+		t.Errorf("QCF+LP pressed on ↘ gave move %d, want the special", got)
+	}
+	if s.Players[0].State != StateAttack {
+		t.Errorf("state %d, want an attack", s.Players[0].State)
+	}
+}
+
+// Specials go through the buffer like everything else: the motion is judged at
+// the frame of the press, not at the frame the move finally comes out.
+func TestSpecialBuffersThroughRecovery(t *testing.T) {
+	s := New()
+	mv := &char().Moves[0]
+
+	s.Advance([2]uint16{InLP, 0}) // a jab in the way
+	for s.Players[0].StateFrame < mv.Total()-3 {
+		s.Advance([2]uint16{0, 0})
+	}
+
+	feed(&s, 2, 3)
+	s.Advance([2]uint16{pad[6] | InLP, 0}) // buffered: still in recovery
+
+	for range InputBuffer {
+		s.Advance([2]uint16{0, 0})
+		if p := s.Players[0]; p.State == StateAttack && p.StateFrame == 1 {
+			if p.MoveIndex != 2 {
+				t.Fatalf("the buffered press came out as move %d, want the special", p.MoveIndex)
+			}
+			return
+		}
+	}
+	t.Error("the buffered special never came out")
+}
+
+// A motion with no button is not a move. The player walks a quarter-circle
+// constantly; only the press makes it an input.
+func TestMotionAloneDoesNothing(t *testing.T) {
+	s := New()
+	feed(&s, 2, 3, 6, 6, 6)
+	if s.Players[0].State == StateAttack {
+		t.Error("a bare quarter-circle started a move")
+	}
+}
