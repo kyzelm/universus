@@ -122,6 +122,14 @@ type Move struct {
 	// happens to land on is not part of what the player asked for.
 	Motion Motion
 
+	// LaunchVX and LaunchVY are the velocity the move gives the character on
+	// its first frame, forward-relative. An uppercut sets a vertical one and
+	// gravity supplies the arc; an advancing normal sets a horizontal one.
+	//
+	// ponytail: one impulse per move, not per keyframe. A move that needs to
+	// change velocity partway is a keyframe field away, and none does yet.
+	LaunchVX, LaunchVY Fix
+
 	NumKeys int32
 	Keys    [MaxKeyframes]Keyframe
 

@@ -157,6 +157,10 @@ type jsonMove struct {
 
 	AttackLevel string `json:"attackLevel"`
 
+	// Velocity the move gives the character on its first frame, [vx, vy],
+	// forward-relative. Absent for the moves that do not move anyone.
+	Launch []json.Number `json:"launch"`
+
 	Boxes []jsonKeyframe `json:"boxes"`
 
 	// Absent for the moves that do not fire one, which is most of them.
@@ -360,6 +364,21 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 		m.Keys[i] = k
 	}
 	m.NumKeys = int32(len(jm.Boxes))
+
+	if len(jm.Launch) != 0 {
+		if len(jm.Launch) != 2 {
+			return m, fmt.Errorf("launch wants [vx, vy], got %d values", len(jm.Launch))
+		}
+		vx, err := parseFix(jm.Launch[0])
+		if err != nil {
+			return m, fmt.Errorf("launch vx: %w", err)
+		}
+		vy, err := parseFix(jm.Launch[1])
+		if err != nil {
+			return m, fmt.Errorf("launch vy: %w", err)
+		}
+		m.LaunchVX, m.LaunchVY = vx, vy
+	}
 
 	if jm.Projectile != nil {
 		p, err := jm.Projectile.convert()

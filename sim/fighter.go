@@ -23,8 +23,14 @@ const (
 	StateBlockstun
 )
 
-// Airborne reports whether a state is off the ground.
-func Airborne(state int32) bool { return state == StateAir }
+// Airborne reports whether the player is off the ground.
+//
+// State alone stopped being enough the moment a move could carry the character
+// upward: a rising uppercut is airborne without being in StateAir, and gravity,
+// the landing check and the air hurtbox all have to agree about that. StateAir
+// stays in the test because a jump's first frame is still at ground level and
+// must keep behaving exactly as it did.
+func (p *PlayerState) Airborne() bool { return p.State == StateAir || p.Y > GroundY }
 
 // Actionable reports whether a state accepts a new action this frame. Dash and
 // backdash commit; attacks, stun and pre-jump run to completion.
@@ -68,6 +74,14 @@ func (p *PlayerState) enterMove(index int32, now uint32) {
 	p.MoveIndex = index
 	p.HasHit = 0
 	p.Eaten = int32(now)
+
+	// The move owns the character's velocity from here. Two things follow: a
+	// walk does not carry into the attack that came out of it, and a move with
+	// a launch sets its own and keeps it, so gravity turns it into an arc
+	// without the move having to describe one.
+	mv := &CharacterAt(p.Char).Moves[index]
+	p.VX = mv.LaunchVX.Mul(FromInt(int(p.Facing)))
+	p.VY = mv.LaunchVY
 }
 
 // resolveInputs is step 1: turn this frame's bitfield into a state transition.
@@ -259,7 +273,12 @@ func (s *GameState) advanceState(i int) {
 	p := &s.Players[i]
 	c := CharacterAt(p.Char)
 
-	p.VX = 0
+	// Every state below sets its velocity from scratch each frame — except an
+	// attack, which was handed its velocity when it started and keeps it. That
+	// is what makes a launch an arc rather than a single frame of movement.
+	if p.State != StateAttack {
+		p.VX = 0
+	}
 
 	switch p.State {
 	case StateWalkF:
@@ -300,6 +319,17 @@ func (s *GameState) advanceState(i int) {
 	case StateAttack:
 		mv := p.move()
 		if mv == nil || p.StateFrame >= mv.Total() {
+			// A move that runs out while the character is still off the ground
+			// hands over to StateAir, not to idle: an idle player is actionable,
+			// and actionable in mid-air is a different game.
+			//
+			// ponytail: no landing recovery. Real uppercuts have some; it is a
+			// state with a duration, and it belongs with reversals in M2.
+			if p.Y > GroundY {
+				p.JumpVX = p.VX // StateAir drives VX from this
+				p.enter(StateAir)
+				return
+			}
 			p.enter(StateIdle)
 			return
 		}
@@ -346,7 +376,7 @@ func (s *GameState) Hurtboxes(i int, out *[MaxBoxes]Box) int32 {
 
 	var local Box
 	switch {
-	case Airborne(p.State):
+	case p.Airborne():
 		local = c.AirHurt
 	case p.State == StateCrouch:
 		local = c.CrouchHurt
@@ -394,7 +424,7 @@ func (s *GameState) Pushbox(i int) Box {
 // covers; airborne players cannot block at all.
 func (s *GameState) blocking(i int, in uint16, level int32) bool {
 	p := &s.Players[i]
-	if Airborne(p.State) || p.State == StatePreJump {
+	if p.Airborne() || p.State == StatePreJump {
 		return false
 	}
 	if !Actionable(p.State) && p.State != StateBlockstun {

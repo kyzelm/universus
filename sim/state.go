@@ -170,7 +170,12 @@ func (s *GameState) Advance(in [2]uint16) {
 	// position, so a landing is detected on the frame it happens.
 	for i := range s.Players {
 		p := &s.Players[i]
-		if Airborne(p.State) {
+
+		// Whether the player was in the air is decided before the position
+		// moves, and both the gravity and the landing below read that one
+		// answer. Asking again afterwards would ask about a different frame.
+		air := p.Airborne()
+		if air {
 			p.VY += CharacterAt(p.Char).Gravity
 		}
 		p.X += p.VX
@@ -179,8 +184,16 @@ func (s *GameState) Advance(in [2]uint16) {
 		if p.Y <= GroundY {
 			p.Y = GroundY
 			p.VY = 0
-			if Airborne(p.State) {
-				p.enter(StateIdle)
+			if air {
+				// Landing kills horizontal momentum, so a move that came down
+				// does not slide through its recovery. Only for something that
+				// was actually airborne: a grounded advancing move is on the
+				// ground every frame and must keep the velocity its data gave
+				// it.
+				p.VX = 0
+				if p.State == StateAir {
+					p.enter(StateIdle)
+				}
 			}
 		}
 	}

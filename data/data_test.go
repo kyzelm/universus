@@ -136,6 +136,10 @@ func TestValidationRejectsBadData(t *testing.T) {
 		{"unknown button", func(c *jsonCharacter) { c.Moves[0].Input.Button = "LOL" }},
 		{"unknown stance", func(c *jsonCharacter) { c.Moves[0].Input.Stance = "hover" }},
 		{"unknown motion", func(c *jsonCharacter) { c.Moves[0].Input.Motion = "360" }},
+		{"launch with one value", func(c *jsonCharacter) { c.Moves[0].Launch = []json.Number{"2"} }},
+		{"launch that is not a number", func(c *jsonCharacter) {
+			c.Moves[0].Launch = []json.Number{"2", "up"}
+		}},
 		{"unknown level", func(c *jsonCharacter) { c.Moves[0].AttackLevel = "sideways" }},
 		{"zero-size box", func(c *jsonCharacter) { c.Pushbox = []json.Number{"0", "0", "0", "48"} }},
 		{"box with too few values", func(c *jsonCharacter) { c.StandHurt = []json.Number{"0", "0"} }},

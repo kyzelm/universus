@@ -1,7 +1,7 @@
 {
   "id": 0,
   "name": "Shoto",
-  "_comment": "M1/M2 placeholder. Two normals, one special in three strengths, rectangles, numbers chosen to be legible rather than balanced. Filenames are sorted and the order is the roster index, hence the numeric prefix.",
+  "_comment": "M1/M2 placeholder. Two normals, two specials in three strengths each, rectangles, numbers chosen to be legible rather than balanced. Filenames are sorted and the order is the roster index, hence the numeric prefix.",
 
   "health": 10000,
 
@@ -77,6 +77,61 @@
         { "frame": 16, "hurt": [[-12, 0, 24, 48]] }
       ],
       "projectile": { "speed": 4.5, "life": 90, "spawn": [22, 20], "box": [0, 0, 20, 14] }
+    },
+    {
+      "_comment": "Uppercut, DP+P. Rises on a launch velocity and gravity brings it down — the arc is not authored, it falls out of the same integration the jump uses. Airtime is 44/49/55 frames for the three strengths, and each move is six frames longer than that, so the last frames are spent on the ground as landing recovery. No invincibility yet: that needs a per-move invulnerable window in the frame data, and the reversal it exists for is still ahead.",
+      "id": "623LP",
+      "input": { "stance": "stand", "button": "LP", "motion": "dp" },
+      "startup": 3,
+      "active": 12,
+      "recovery": 35,
+      "damage": 700,
+      "hitstun": 20,
+      "blockstun": 14,
+      "hitstop": 10,
+      "attackLevel": "mid",
+      "launch": [2.0, 8.0],
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 3, "hurt": [[-12, 4, 24, 40]], "hit": [[4, 28, 26, 36]] },
+        { "frame": 15, "hurt": [[-12, 4, 24, 40]] }
+      ]
+    },
+    {
+      "id": "623MP",
+      "input": { "stance": "stand", "button": "MP", "motion": "dp" },
+      "startup": 4,
+      "active": 12,
+      "recovery": 39,
+      "damage": 800,
+      "hitstun": 20,
+      "blockstun": 14,
+      "hitstop": 10,
+      "attackLevel": "mid",
+      "launch": [2.0, 9.0],
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 4, "hurt": [[-12, 4, 24, 40]], "hit": [[4, 28, 26, 40]] },
+        { "frame": 16, "hurt": [[-12, 4, 24, 40]] }
+      ]
+    },
+    {
+      "id": "623HP",
+      "input": { "stance": "stand", "button": "HP", "motion": "dp" },
+      "startup": 5,
+      "active": 14,
+      "recovery": 42,
+      "damage": 900,
+      "hitstun": 20,
+      "blockstun": 14,
+      "hitstop": 10,
+      "attackLevel": "mid",
+      "launch": [2.0, 10.0],
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 5, "hurt": [[-12, 4, 24, 40]], "hit": [[4, 28, 26, 44]] },
+        { "frame": 19, "hurt": [[-12, 4, 24, 40]] }
+      ]
     },
     {
       "id": "5LP",

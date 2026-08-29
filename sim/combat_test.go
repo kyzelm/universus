@@ -364,7 +364,7 @@ func TestFacingHoldsThroughAJumpAndTurnsOnLanding(t *testing.T) {
 	crossed := false
 	for range 80 {
 		s.Advance([2]uint16{InRight, 0})
-		if Airborne(s.Players[0].State) {
+		if s.Players[0].Airborne() {
 			if s.Players[0].X > s.Players[1].X {
 				crossed = true
 				if s.Players[0].Facing != 1 {

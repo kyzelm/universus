@@ -167,7 +167,7 @@ func TestJumpRisesAndLands(t *testing.T) {
 	airborne, peak := 0, Fix(0)
 	for range 200 {
 		s.Advance([2]uint16{}) // released: the arc is committed
-		if !Airborne(s.Players[0].State) {
+		if !s.Players[0].Airborne() {
 			break
 		}
 		airborne++

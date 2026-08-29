@@ -40,7 +40,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 3,
+		NumMoves: 6,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -96,6 +96,45 @@ func testCharacter() Character {
 		SpawnY: FromInt(20),
 		Box:    Box{X: 0, Y: 0, W: FromInt(20), H: FromInt(14)},
 	}
+
+	// A launcher: rises on its own velocity, gravity brings it back. Airborne
+	// for ~32 frames at 8.0 up and 0.5 down, and the move is longer than that,
+	// so it lands with recovery to spare.
+	c.Moves[3] = Move{
+		Startup: 3, Active: 8, Recovery: 25,
+		Damage: 300, Hitstun: 20, Blockstun: 14, Hitstop: 10,
+		Level: LevelMid, Stance: StanceStand, Button: InHP,
+		LaunchVX: FromInt(2), LaunchVY: FromInt(8),
+		NumKeys: 2,
+	}
+	c.Moves[3].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[3].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[3].Keys[1] = Keyframe{Frame: 3, NumHurt: 1, NumHit: 1}
+	c.Moves[3].Keys[1].Hurt[0] = c.AirHurt
+	c.Moves[3].Keys[1].Hit[0] = Box{X: FromInt(4), Y: FromInt(28), W: FromInt(26), H: FromInt(30)}
+
+	// The same, but far too short to land in: it exists to exercise a move that
+	// runs out while the character is still in the air.
+	c.Moves[4] = Move{
+		Startup: 2, Active: 2, Recovery: 2,
+		Damage: 100, Hitstun: 12, Blockstun: 9, Hitstop: 5,
+		Level: LevelMid, Stance: StanceStand, Button: InHK,
+		LaunchVY: FromInt(8),
+		NumKeys:  1,
+	}
+	c.Moves[4].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[4].Keys[0].Hurt[0] = c.AirHurt
+
+	// An advancing normal: horizontal only, never leaves the ground.
+	c.Moves[5] = Move{
+		Startup: 4, Active: 3, Recovery: 8,
+		Damage: 150, Hitstun: 14, Blockstun: 11, Hitstop: 6,
+		Level: LevelMid, Stance: StanceStand, Button: InMK,
+		LaunchVX: FromInt(3),
+		NumKeys:  1,
+	}
+	c.Moves[5].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[5].Keys[0].Hurt[0] = c.StandHurt
 
 	return c
 }
