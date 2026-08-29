@@ -82,6 +82,25 @@ type Keyframe struct {
 	Hit     [MaxBoxes]Box
 }
 
+// ProjectileSpec is the projectile a move fires, if it fires one. Static data,
+// like the rest of the character: the thing in flight is state, its numbers are
+// not.
+type ProjectileSpec struct {
+	// Speed is forward units per frame; Life is how many frames it lives if it
+	// hits nothing. Together they are the range.
+	Speed Fix
+	Life  int32
+
+	// Spawn is where it appears, relative to the owner's origin and mirrored by
+	// their facing. Box is its hitbox, relative to the projectile itself.
+	SpawnX, SpawnY Fix
+	Box            Box
+}
+
+// Exists reports whether the move fires a projectile at all. Life is the marker
+// because a projectile with no life is not one.
+func (p *ProjectileSpec) Exists() bool { return p.Life > 0 }
+
 // Move is an attack: three integers and box data, per the design note.
 type Move struct {
 	Startup  int32
@@ -105,6 +124,11 @@ type Move struct {
 
 	NumKeys int32
 	Keys    [MaxKeyframes]Keyframe
+
+	// Proj is the projectile this move fires, if any. A fireball's damage and
+	// stun stay here, on the move — the projectile in flight reads them back
+	// through its move index.
+	Proj ProjectileSpec
 }
 
 // Total is the move's full duration in frames.

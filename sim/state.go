@@ -108,6 +108,11 @@ type GameState struct {
 	CamX Fix
 
 	Players [2]PlayerState
+
+	// Projectiles is the pool. In the state for the same reason as everything
+	// else in here: it rolls back, or a fireball that was rewound keeps flying
+	// on one machine only.
+	Projectiles [MaxProjectiles]Projectile
 }
 
 // New returns the starting state with both players on character 0.
@@ -185,7 +190,10 @@ func (s *GameState) Advance(in [2]uint16) {
 	s.clampToStage()
 	s.updateFacing()
 
-	// 5. Projectiles — M2.
+	// 5. Projectiles: they move before hit detection reads their boxes, and
+	// after the players have been separated and clamped, so a fireball is
+	// tested against final positions like everything else.
+	s.advanceProjectiles()
 
 	// 6. Hit detection, then 7. hit resolution. **Player 1's hitboxes against
 	// player 2's hurtboxes first, then the reverse.** Both are collected before
@@ -206,6 +214,11 @@ func (s *GameState) Advance(in [2]uint16) {
 	if hit1 {
 		s.resolveHit(1, 0, mv1, in[0])
 	}
+
+	// Projectiles resolve after both players, so a fireball and the punch that
+	// beat it to the same frame trade in a fixed order rather than in whichever
+	// order the loop happened to reach them.
+	s.resolveProjectiles(in)
 
 	// 8. Timers, resources, round state — round flow is M2. The camera is here
 	// because it is derived from positions, which are final by now.
@@ -245,12 +258,21 @@ func (s *GameState) connects(attacker, defender int) bool {
 // what decides whether they were holding back.
 func (s *GameState) resolveHit(attacker, defender int, mv *Move, defenderIn uint16) {
 	ap := &s.Players[attacker]
-	dp := &s.Players[defender]
 
 	if mv == nil {
 		return
 	}
 	ap.HasHit = 1
+	s.applyHit(defender, mv, defenderIn)
+}
+
+// applyHit is the half of a connect that lands on the defender: block or hit,
+// stun, damage, hitstop. Split out because a projectile connects without any
+// attacker to mark — the fireball's owner may have recovered and walked away
+// frames ago, and marking their current move as having hit would disable a
+// hitbox they are holding out right now.
+func (s *GameState) applyHit(defender int, mv *Move, defenderIn uint16) {
+	dp := &s.Players[defender]
 
 	if s.blocking(defender, defenderIn, mv.Level) {
 		dp.enter(StateBlockstun)

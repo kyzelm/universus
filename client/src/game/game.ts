@@ -140,6 +140,9 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
 
     boxes.clear()
     for (const p of snap.players) drawBoxes(boxes, p)
+    // A projectile is a hitbox with no character attached, so it is drawn as
+    // one: the overlay's job is to show what can hit you.
+    for (const b of snap.projectiles) drawHitbox(boxes, b)
     for (let i = 0; i < bars.length; i++) drawHealth(bars[i], snap.players[i], i)
 
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
@@ -189,9 +192,11 @@ function drawBoxes(g: Graphics, p: PlayerSnapshot): void {
   for (const b of p.hurtboxes) {
     g.rect(...toScreen(b)).fill({color: HURT_COLOR, alpha: 0.2}).stroke({color: HURT_COLOR, width: 1})
   }
-  for (const b of p.hitboxes) {
-    g.rect(...toScreen(b)).fill({color: HIT_COLOR, alpha: 0.3}).stroke({color: HIT_COLOR, width: 1})
-  }
+  for (const b of p.hitboxes) drawHitbox(g, b)
+}
+
+function drawHitbox(g: Graphics, b: Box): void {
+  g.rect(...toScreen(b)).fill({color: HIT_COLOR, alpha: 0.3}).stroke({color: HIT_COLOR, width: 1})
 }
 
 const BAR_W = 340

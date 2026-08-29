@@ -158,6 +158,16 @@ type jsonMove struct {
 	AttackLevel string `json:"attackLevel"`
 
 	Boxes []jsonKeyframe `json:"boxes"`
+
+	// Absent for the moves that do not fire one, which is most of them.
+	Projectile *jsonProjectile `json:"projectile"`
+}
+
+type jsonProjectile struct {
+	Speed json.Number   `json:"speed"`
+	Life  int           `json:"life"`
+	Spawn []json.Number `json:"spawn"`
+	Box   []json.Number `json:"box"`
 }
 
 type jsonKeyframe struct {
@@ -351,6 +361,14 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 	}
 	m.NumKeys = int32(len(jm.Boxes))
 
+	if jm.Projectile != nil {
+		p, err := jm.Projectile.convert()
+		if err != nil {
+			return m, fmt.Errorf("projectile: %w", err)
+		}
+		m.Proj = p
+	}
+
 	// A hitbox outside the active window can never connect, which means the
 	// frame data and the boxes disagree and one of them is a typo.
 	for i := int32(0); i < m.NumKeys; i++ {
@@ -365,6 +383,39 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 	}
 
 	return m, nil
+}
+
+func (jp *jsonProjectile) convert() (sim.ProjectileSpec, error) {
+	var p sim.ProjectileSpec
+	var err error
+
+	if p.Speed, err = parseFix(jp.Speed); err != nil {
+		return p, fmt.Errorf("speed: %w", err)
+	}
+	if p.Speed <= 0 {
+		return p, fmt.Errorf("speed must be positive, got %s", jp.Speed)
+	}
+	// Life is what marks a move as firing a projectile at all, so zero here is
+	// not "a very short fireball", it is a move that silently does nothing.
+	if jp.Life <= 0 {
+		return p, fmt.Errorf("life must be positive, got %d", jp.Life)
+	}
+	p.Life = int32(jp.Life)
+
+	if len(jp.Spawn) != 2 {
+		return p, fmt.Errorf("spawn wants [x, y], got %d values", len(jp.Spawn))
+	}
+	if p.SpawnX, err = parseFix(jp.Spawn[0]); err != nil {
+		return p, fmt.Errorf("spawn x: %w", err)
+	}
+	if p.SpawnY, err = parseFix(jp.Spawn[1]); err != nil {
+		return p, fmt.Errorf("spawn y: %w", err)
+	}
+
+	if p.Box, err = parseBox(jp.Box); err != nil {
+		return p, fmt.Errorf("box: %w", err)
+	}
+	return p, nil
 }
 
 func (jk *jsonKeyframe) convert() (sim.Keyframe, error) {

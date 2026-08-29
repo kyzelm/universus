@@ -83,9 +83,19 @@ func testCharacter() Character {
 	}
 	c.Moves[2].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
 	c.Moves[2].Keys[0].Hurt[0] = c.StandHurt
-	c.Moves[2].Keys[1] = Keyframe{Frame: 6, NumHurt: 1, NumHit: 1}
+	c.Moves[2].Keys[1] = Keyframe{Frame: 6, NumHurt: 1}
 	c.Moves[2].Keys[1].Hurt[0] = c.StandHurt
-	c.Moves[2].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(20), W: FromInt(40), H: FromInt(16)}
+
+	// Everything that hits is the projectile; the move itself has no hitbox,
+	// like the shipped fireball. Round numbers again: 4 units a frame for 60
+	// frames is 240, more than the stage is wide.
+	c.Moves[2].Proj = ProjectileSpec{
+		Speed:  FromInt(4),
+		Life:   60,
+		SpawnX: FromInt(20),
+		SpawnY: FromInt(20),
+		Box:    Box{X: 0, Y: 0, W: FromInt(20), H: FromInt(14)},
+	}
 
 	return c
 }

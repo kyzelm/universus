@@ -13,6 +13,7 @@ beforeAll(async () => {
 
 // Input bits, mirroring sim/state.go.
 const UP = 1 << 0
+const DOWN = 1 << 1
 const LEFT = 1 << 2
 const RIGHT = 1 << 3
 const LP = 1 << 4
@@ -119,4 +120,25 @@ test('the same inputs produce the same snapshot bytes', () => {
     return JSON.stringify(readSnapshot())
   }
   expect(play()).toBe(play())
+})
+
+// A fireball is the first thing in the game that outlives the move that made
+// it, and the first state the view draws that is not a player. Both sides of
+// the boundary have to agree that it exists.
+test('a fireball crosses the boundary and travels', () => {
+  reset()
+  expect(readSnapshot().projectiles).toEqual([])
+
+  // QCF + LP, then wait out the startup.
+  advance(DOWN, 0)
+  advance(DOWN | RIGHT, 0)
+  advance(RIGHT | LP, 0)
+  for (let i = 0; i < 20 && readSnapshot().projectiles.length === 0; i++) advance(0, 0)
+
+  const [ball] = readSnapshot().projectiles
+  expect(ball).toBeDefined()
+  expect(ball.w).toBeGreaterThan(0)
+
+  advance(0, 0)
+  expect(readSnapshot().projectiles[0].x).toBeGreaterThan(ball.x)
 })

@@ -26,10 +26,12 @@ const ONE = 65536
  * from its side. These offsets and that file change together.
  */
 const MAX_BOXES = 4
+const MAX_PROJECTILES = 4
 const BOX = 4 * 4
 const HIT_OFF = 48 + MAX_BOXES * BOX
 const PLAYER_SIZE = 7 * 4 + BOX + 2 * (4 + MAX_BOXES * BOX)
 const HEADER = 3 * 4
+const PROJ_OFF = HEADER + 2 * PLAYER_SIZE
 
 /** Mirrors the state constants in sim/fighter.go, for the debug readout. */
 export const STATE_NAMES = [
@@ -71,6 +73,11 @@ export interface Snapshot {
   camX: number
   hitstop: number
   players: PlayerSnapshot[]
+  /**
+   * Live projectiles, packed from the front — the sim's slot numbers do not
+   * cross, because nothing over here needs to name one.
+   */
+  projectiles: Box[]
 }
 
 let mem: WebAssembly.Memory
@@ -162,10 +169,10 @@ function readBox(v: DataView, o: number): Box {
   }
 }
 
-function readBoxList(v: DataView, countOffset: number): Box[] {
+function readBoxList(v: DataView, countOffset: number, cap = MAX_BOXES): Box[] {
   const n = v.getUint32(countOffset, true)
   const out: Box[] = []
-  for (let i = 0; i < n && i < MAX_BOXES; i++) {
+  for (let i = 0; i < n && i < cap; i++) {
     out.push(readBox(v, countOffset + 4 + i * BOX))
   }
   return out
@@ -194,5 +201,6 @@ export function readSnapshot(): Snapshot {
         hitboxes: readBoxList(v, o + HIT_OFF),
       }
     }),
+    projectiles: readBoxList(v, PROJ_OFF, MAX_PROJECTILES),
   }
 }

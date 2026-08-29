@@ -24,7 +24,7 @@
 
   "moves": [
     {
-      "_comment": "Fireball, light. QCF+P per the roster plan, three strength variants that are the same entry with different numbers — the data-driven claim, cheaply. Placeholder: it is a hitbox out in front, not a projectile, because projectiles are their own sim step and are not built yet. When they are, reach below becomes projectile speed and the strengths differ in travel, not range.",
+      "_comment": "Fireball. QCF+P per the roster plan, three strength variants that are the same entry with different numbers — the data-driven claim, cheaply. The strengths differ in travel speed, light slowest, per the roster plan: a slow fireball is a wall to walk behind, a fast one is a poke. The move itself has no hitbox; everything that hits is the projectile.",
       "id": "236LP",
       "input": { "stance": "stand", "button": "LP", "motion": "qcf" },
       "startup": 13,
@@ -37,9 +37,10 @@
       "attackLevel": "mid",
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
-        { "frame": 13, "hurt": [[-12, 0, 30, 48]], "hit": [[14, 20, 40, 16]] },
+        { "frame": 13, "hurt": [[-12, 0, 30, 48]] },
         { "frame": 16, "hurt": [[-12, 0, 24, 48]] }
-      ]
+      ],
+      "projectile": { "speed": 2.5, "life": 120, "spawn": [22, 20], "box": [0, 0, 20, 14] }
     },
     {
       "id": "236MP",
@@ -54,9 +55,10 @@
       "attackLevel": "mid",
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
-        { "frame": 13, "hurt": [[-12, 0, 30, 48]], "hit": [[14, 20, 56, 16]] },
+        { "frame": 13, "hurt": [[-12, 0, 30, 48]] },
         { "frame": 16, "hurt": [[-12, 0, 24, 48]] }
-      ]
+      ],
+      "projectile": { "speed": 3.5, "life": 100, "spawn": [22, 20], "box": [0, 0, 20, 14] }
     },
     {
       "id": "236HP",
@@ -71,9 +73,10 @@
       "attackLevel": "mid",
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
-        { "frame": 13, "hurt": [[-12, 0, 30, 48]], "hit": [[14, 20, 72, 16]] },
+        { "frame": 13, "hurt": [[-12, 0, 30, 48]] },
         { "frame": 16, "hurt": [[-12, 0, 24, 48]] }
-      ]
+      ],
+      "projectile": { "speed": 4.5, "life": 90, "spawn": [22, 20], "box": [0, 0, 20, 14] }
     },
     {
       "id": "5LP",

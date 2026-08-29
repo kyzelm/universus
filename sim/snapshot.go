@@ -12,7 +12,8 @@ package sim
 //	 4  int32   camera centre X (Fix)
 //	 8  int32   hitstop frames remaining
 //	12  player 0 block
-//	12+PlayerSnapshotSize  player 1 block
+//	12+PlayerSnapshotSize    player 1 block
+//	12+2*PlayerSnapshotSize  uint32 projectile count, then MaxProjectiles boxes
 //
 // Player block:
 //
@@ -31,7 +32,8 @@ package sim
 const (
 	boxSize            = 4 * 4
 	PlayerSnapshotSize = 7*4 + boxSize + 2*(4+MaxBoxes*boxSize)
-	SnapshotSize       = 3*4 + 2*PlayerSnapshotSize
+	projOffset         = 3*4 + 2*PlayerSnapshotSize
+	SnapshotSize       = projOffset + 4 + MaxProjectiles*boxSize
 )
 
 // ponytail: hand-rolled little-endian stores. encoding/binary would do this,
@@ -95,4 +97,18 @@ func (s *GameState) WriteSnapshot(b []byte) {
 			putBox(o[hitOff+4+int(k)*boxSize:], boxes[k])
 		}
 	}
+
+	// Projectiles are packed from the front, not by slot: the view draws them,
+	// it never has to name one, and a count plus that many boxes is the least
+	// the reader has to know.
+	live := 0
+	for i := range s.Projectiles {
+		pb := s.ProjectileBox(i)
+		if pb.Empty() {
+			continue
+		}
+		putBox(b[projOffset+4+live*boxSize:], pb)
+		live++
+	}
+	putU32(b[projOffset:], uint32(live))
 }

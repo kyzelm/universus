@@ -128,3 +128,33 @@ func TestSnapshotLeavesNoStaleBoxes(t *testing.T) {
 		}
 	}
 }
+
+// The view draws projectiles from the snapshot like everything else, so they
+// have to be in it — and packed from the front, since the sim's slot numbers
+// mean nothing on the other side.
+func TestSnapshotCarriesProjectiles(t *testing.T) {
+	b := make([]byte, SnapshotSize)
+
+	s := New()
+	s.WriteSnapshot(b)
+	if got := u32(b[projOffset:]); got != 0 {
+		t.Errorf("idle frame reports %d projectiles", got)
+	}
+
+	feed(&s, 2, 3)
+	s.Advance([2]uint16{pad[6] | InLP, 0})
+	for s.Players[0].StateFrame < char().Moves[2].Startup {
+		s.Advance([2]uint16{0, 0})
+	}
+	s.WriteSnapshot(b)
+
+	if got := u32(b[projOffset:]); got != 1 {
+		t.Fatalf("%d projectiles in the snapshot, want 1", got)
+	}
+	if w := i32(b[projOffset+4+8:]); w <= 0 {
+		t.Errorf("projectile box has width %d", w)
+	}
+	if got, want := i32(b[projOffset+4:]), int32(s.ProjectileBox(0).X); got != want {
+		t.Errorf("box X = %d, want %d", got, want)
+	}
+}
