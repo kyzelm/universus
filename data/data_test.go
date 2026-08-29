@@ -34,6 +34,32 @@ func TestEmbeddedRosterLoads(t *testing.T) {
 		}
 	}
 
+	// The full grounded normal set: every button, standing and crouching. A
+	// missing one reads in play as a button that does nothing.
+	for _, stance := range []int32{sim.StanceStand, sim.StanceCrouch} {
+		for _, b := range []uint16{sim.InLP, sim.InMP, sim.InHP, sim.InLK, sim.InMK, sim.InHK} {
+			found := false
+			for m := int32(0); m < cs[0].NumMoves; m++ {
+				mv := &cs[0].Moves[m]
+				found = found || (mv.Motion == sim.MotionNone && mv.Stance == stance && mv.Button == b)
+			}
+			if !found {
+				t.Errorf("no normal for stance %d button %#x", stance, b)
+			}
+		}
+	}
+
+	// Frame advantage is computed from the frame data, never authored, so this
+	// is a check on the numbers rather than on a field. Nothing may be more
+	// than +3 on block: a normal that is safely plus on block with no cost is
+	// a button with no answer to it.
+	for m := int32(0); m < cs[0].NumMoves; m++ {
+		mv := &cs[0].Moves[m]
+		if adv := mv.OnBlock(); adv > 3 {
+			t.Errorf("move %d is %+d on block", m, adv)
+		}
+	}
+
 	// The strength variants are the data-driven claim in miniature: three moves
 	// that differ only in numbers, sharing one motion and one code path.
 	strengths := map[uint16]bool{}

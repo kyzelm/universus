@@ -18,7 +18,7 @@ package sim
 // that can grow these is a loader that can produce two different sims.
 const (
 	MaxCharacters = 4
-	MaxMoves      = 8
+	MaxMoves      = 24
 	MaxKeyframes  = 8
 	MaxBoxes      = 4
 )
