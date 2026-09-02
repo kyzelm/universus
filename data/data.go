@@ -157,6 +157,18 @@ type jsonMove struct {
 
 	AttackLevel string `json:"attackLevel"`
 
+	// Recovery owed on touchdown by a move that was still in the air when it
+	// ended. Absent on every move that cannot end up there.
+	Landing int `json:"landing"`
+
+	// Invulnerable window, [start, end) in the move's own frames. Absent on
+	// everything that is not a reversal.
+	Invuln []int `json:"invuln"`
+
+	// Categories this move may be cancelled into once it has connected.
+	// Absent means it does not cancel, which is most of the list.
+	Cancel []string `json:"cancel"`
+
 	// Velocity the move gives the character on its first frame, [vx, vy],
 	// forward-relative. Absent for the moves that do not move anyone.
 	Launch []json.Number `json:"launch"`
@@ -190,6 +202,10 @@ var levels = map[string]int32{
 	// An overhead is a high that must be blocked standing; the distinction is
 	// startup, which is already in the frame data.
 	"overhead": sim.LevelHigh,
+}
+
+var cancelCategories = map[string]uint16{
+	"chain": sim.CancelChain, "special": sim.CancelSpecial,
 }
 
 var stances = map[string]int32{
@@ -337,6 +353,35 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 	}
 	if m.Motion, ok = inputMotions[jm.Input.Motion]; !ok {
 		return m, fmt.Errorf("unknown motion %q", jm.Input.Motion)
+	}
+
+	if jm.Landing < 0 {
+		return m, fmt.Errorf("landing must not be negative, got %d", jm.Landing)
+	}
+	m.Landing = int32(jm.Landing)
+
+	if len(jm.Invuln) != 0 {
+		if len(jm.Invuln) != 2 {
+			return m, fmt.Errorf("invuln wants [start, end), got %d values", len(jm.Invuln))
+		}
+		start, end := jm.Invuln[0], jm.Invuln[1]
+		// Half-open and non-empty: an authored window that contains no frames
+		// is a move someone believes is invincible and is not.
+		if start < 0 || end <= start {
+			return m, fmt.Errorf("invuln [%d, %d) is empty or negative", start, end)
+		}
+		if int32(end) > m.Total() {
+			return m, fmt.Errorf("invuln ends at frame %d, but the move is %d frames", end, m.Total())
+		}
+		m.InvulnStart, m.InvulnEnd = int32(start), int32(end)
+	}
+
+	for _, name := range jm.Cancel {
+		bit, ok := cancelCategories[name]
+		if !ok {
+			return m, fmt.Errorf("unknown cancel category %q", name)
+		}
+		m.CancelInto |= bit
 	}
 
 	if len(jm.Boxes) == 0 {

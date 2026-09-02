@@ -55,8 +55,16 @@ type PlayerState struct {
 	// cannot hit twice. Cleared when the move starts.
 	HasHit int32
 
-	// Stun is the remaining hitstun or blockstun.
+	// Stun is the remaining hitstun, blockstun or landing recovery. One
+	// counter, because all three are the same thing to the state machine: a
+	// fixed number of frames that accept no input.
 	Stun int32
+
+	// Landing is the recovery this player owes the moment they touch down —
+	// the debt of a move that ended while they were still in the air, carried
+	// because the move itself is gone by then. Cleared by every state change,
+	// so being hit out of the fall cancels it.
+	Landing int32
 
 	// Eaten is the newest frame whose button presses have already been spent,
 	// or -1. The input buffer keeps a press live for a few frames looking for a
@@ -197,9 +205,18 @@ func (s *GameState) Advance(in [2]uint16) {
 				// continuing on the ground. A move that *launched* from the
 				// ground — an uppercut — keeps its recovery, because those
 				// frames are the punish window that makes it a risk.
+				//
+				// Either way the character owes what the move that put them up
+				// there said they owe. Zero for a plain jump; without a value
+				// for the rest, a whiffed uppercut that expires overhead and an
+				// air normal held to the floor are both actionable on the frame
+				// they touch it, which is a free reversal and a free jump-in.
 				mv := p.move()
-				if p.State == StateAir || (mv != nil && mv.Stance == StanceAir) {
-					p.enter(StateIdle)
+				switch {
+				case mv != nil && mv.Stance == StanceAir:
+					p.land(mv.Landing)
+				case p.State == StateAir:
+					p.land(p.Landing)
 				}
 			}
 		}

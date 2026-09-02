@@ -79,7 +79,7 @@
       "projectile": { "speed": 4.5, "life": 90, "spawn": [22, 20], "box": [0, 0, 20, 14] }
     },
     {
-      "_comment": "Uppercut, DP+P. Rises on a launch velocity and gravity brings it down — the arc is not authored, it falls out of the same integration the jump uses. Airtime is 44/49/55 frames for the three strengths, and each move is six frames longer than that, so the last frames are spent on the ground as landing recovery. No invincibility yet: that needs a per-move invulnerable window in the frame data, and the reversal it exists for is still ahead.",
+      "_comment": "Uppercut, DP+P. Rises on a launch velocity and gravity brings it down — the arc is not authored, it falls out of the same integration the jump uses. Airtime is 44/49/55 frames for the three strengths, and each move is six frames longer than that, so the last frames are spent on the ground as landing recovery. The hitbox is anchored below the feet and is tall: the character is already thirty units up on the first active frame, and a box authored at head height from there is an anti-air that cannot touch the grounded opponent it is supposed to be reversing. Invincible on the way up, and only there: the light is invincible through its startup and into the first active frames, which is what makes it a reversal, the medium through startup alone, and the heavy for three frames of a five-frame startup — an anti-air with a damage bonus, not an escape. The recovery is the price and it is the same for all three.",
       "id": "623LP",
       "input": { "stance": "stand", "button": "LP", "motion": "dp" },
       "startup": 3,
@@ -90,10 +90,11 @@
       "blockstun": 14,
       "hitstop": 10,
       "attackLevel": "mid",
+      "invuln": [0, 5],
       "launch": [2.0, 8.0],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
-        { "frame": 3, "hurt": [[-12, 4, 24, 40]], "hit": [[4, 28, 26, 36]] },
+        { "frame": 3, "hurt": [[-12, 4, 24, 40]], "hit": [[4, -4, 26, 68]] },
         { "frame": 15, "hurt": [[-12, 4, 24, 40]] }
       ]
     },
@@ -108,10 +109,11 @@
       "blockstun": 14,
       "hitstop": 10,
       "attackLevel": "mid",
+      "invuln": [0, 4],
       "launch": [2.0, 9.0],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
-        { "frame": 4, "hurt": [[-12, 4, 24, 40]], "hit": [[4, 28, 26, 40]] },
+        { "frame": 4, "hurt": [[-12, 4, 24, 40]], "hit": [[4, -4, 26, 72]] },
         { "frame": 16, "hurt": [[-12, 4, 24, 40]] }
       ]
     },
@@ -126,10 +128,11 @@
       "blockstun": 14,
       "hitstop": 10,
       "attackLevel": "mid",
+      "invuln": [0, 3],
       "launch": [2.0, 10.0],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
-        { "frame": 5, "hurt": [[-12, 4, 24, 40]], "hit": [[4, 28, 26, 44]] },
+        { "frame": 5, "hurt": [[-12, 4, 24, 40]], "hit": [[4, -4, 26, 76]] },
         { "frame": 19, "hurt": [[-12, 4, 24, 40]] }
       ]
     },
@@ -144,6 +147,7 @@
       "blockstun": 11,
       "hitstop": 6,
       "attackLevel": "mid",
+      "cancel": ["special"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 4, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 30, 22, 12]] },
@@ -161,6 +165,7 @@
       "blockstun": 9,
       "hitstop": 5,
       "attackLevel": "low",
+      "cancel": ["special"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 5, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 2, 24, 10]] },
@@ -178,6 +183,7 @@
       "blockstun": 13,
       "hitstop": 8,
       "attackLevel": "mid",
+      "cancel": ["special"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 6, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 28, 26, 16]] },
@@ -212,6 +218,7 @@
       "blockstun": 11,
       "hitstop": 6,
       "attackLevel": "mid",
+      "cancel": ["special"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 5, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 18, 24, 14]] },
@@ -229,6 +236,7 @@
       "blockstun": 13,
       "hitstop": 8,
       "attackLevel": "mid",
+      "cancel": ["special"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 7, "hurt": [[-12, 0, 32, 48]], "hit": [[12, 16, 30, 16]] },
@@ -264,6 +272,7 @@
       "blockstun": 10,
       "hitstop": 6,
       "attackLevel": "mid",
+      "cancel": ["special"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 4, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 18, 22, 12]] },
@@ -281,6 +290,7 @@
       "blockstun": 12,
       "hitstop": 8,
       "attackLevel": "mid",
+      "cancel": ["special"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 6, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 22, 26, 18]] },
@@ -316,6 +326,7 @@
       "blockstun": 12,
       "hitstop": 8,
       "attackLevel": "low",
+      "cancel": ["special"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 7, "hurt": [[-12, 0, 32, 32]], "hit": [[12, 2, 30, 12]] },
@@ -341,7 +352,7 @@
       ]
     },
     {
-      "_comment": "Jumping normals. An overhead by nature — an airborne attack has to be blocked standing — and their recovery is the fall: landing ends the move.",
+      "_comment": "Jumping normals. An overhead by nature — an airborne attack has to be blocked standing — and their recovery is the fall, so landing ends the move — and charges landing recovery for it, the heavier the button the longer, or a jump-in would be free on the way down as well as on the way in.",
       "id": "jLP",
       "input": { "stance": "air", "button": "LP" },
       "startup": 5,
@@ -352,6 +363,7 @@
       "blockstun": 11,
       "hitstop": 6,
       "attackLevel": "overhead",
+      "landing": 3,
       "boxes": [
         { "frame": 0, "hurt": [[-12, 4, 24, 40]] },
         { "frame": 5, "hurt": [[-12, 4, 28, 40]], "hit": [[10, 20, 24, 16]] },
@@ -369,6 +381,7 @@
       "blockstun": 14,
       "hitstop": 10,
       "attackLevel": "overhead",
+      "landing": 5,
       "boxes": [
         { "frame": 0, "hurt": [[-12, 4, 24, 40]] },
         { "frame": 8, "hurt": [[-12, 4, 28, 40]], "hit": [[10, 16, 30, 22]] },
@@ -386,6 +399,7 @@
       "blockstun": 14,
       "hitstop": 10,
       "attackLevel": "overhead",
+      "landing": 6,
       "boxes": [
         { "frame": 0, "hurt": [[-12, 4, 24, 40]] },
         { "frame": 9, "hurt": [[-12, 4, 28, 40]], "hit": [[8, 4, 28, 26]] },

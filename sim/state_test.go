@@ -550,3 +550,80 @@ func TestMotionAloneDoesNothing(t *testing.T) {
 		t.Error("a bare quarter-circle started a move")
 	}
 }
+
+// cancelWindow runs the jab into the opponent and returns the state on the
+// first frame after hitstop, with the cancel window open and the jab still
+// running. Both cancel tests need exactly this setup.
+func cancelWindow(t *testing.T, gap int) GameState {
+	t.Helper()
+	s := facing(gap)
+
+	s.Advance([2]uint16{InLP, 0})
+	if s.Players[0].MoveIndex != 0 {
+		t.Fatalf("the jab did not come out: move %d", s.Players[0].MoveIndex)
+	}
+	for range char().Moves[0].Startup + char().Moves[0].Active {
+		s.Advance([2]uint16{0, 0})
+	}
+	for s.Hitstop > 0 {
+		s.Advance([2]uint16{0, 0})
+	}
+	return s
+}
+
+// A cancelable normal that connected is not a commitment any more: the special
+// comes out of it instead of waiting for its recovery. This is the mechanism
+// combos are made of, and the frames it saves are exactly the recovery the
+// normal would otherwise owe.
+func TestACancelableNormalCancelsIntoASpecial(t *testing.T) {
+	s := cancelWindow(t, 30)
+	jab := &char().Moves[0]
+
+	feed(&s, 2, 3) // the motion, inside the window
+	at := s.Players[0].StateFrame
+	s.Advance([2]uint16{pad[6] | InLP, 0})
+
+	p := &s.Players[0]
+	if p.MoveIndex != 2 {
+		t.Fatalf("move %d after a cancel out of the jab, want the special 2", p.MoveIndex)
+	}
+	if at >= jab.Total() {
+		t.Errorf("the jab was over (frame %d of %d): that is a fresh press, not a cancel", at, jab.Total())
+	}
+}
+
+// A whiff does not cancel. Without the connect requirement every cancelable
+// button is safe to throw out at nothing, since its recovery could always be
+// covered by the special that follows it.
+func TestAWhiffedNormalDoesNotCancel(t *testing.T) {
+	s := cancelWindow(t, 300) // out of range: the jab hits nothing
+	if s.Players[0].HasHit != 0 {
+		t.Fatal("the jab connected at 300 units")
+	}
+	jab := &char().Moves[0]
+
+	feed(&s, 2, 3)
+	s.Advance([2]uint16{pad[6] | InLP, 0})
+
+	if p := &s.Players[0]; p.MoveIndex != 0 || p.StateFrame >= jab.Total() {
+		t.Errorf("move %d on frame %d, want the jab still running to its own end",
+			p.MoveIndex, p.StateFrame)
+	}
+}
+
+// The cancel takes what the move being cancelled named and nothing else. The
+// jab names specials, so the reversal — a normal, whatever else it is — has to
+// wait, and so does everything that is not a move at all.
+func TestACancelTakesOnlyTheCategoriesTheMoveNames(t *testing.T) {
+	s := cancelWindow(t, 30)
+
+	s.Advance([2]uint16{InMP, 0}) // a normal: not in the jab's mask
+	if got := s.Players[0].MoveIndex; got != 0 {
+		t.Errorf("move %d came out of a special-only cancel window", got)
+	}
+
+	s.Advance([2]uint16{pad[8], 0}) // and a cancel window is not actionable
+	if got := s.Players[0].State; got != StateAttack {
+		t.Errorf("state %d: a jump came out of a cancel window", got)
+	}
+}

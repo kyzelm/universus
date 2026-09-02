@@ -30,6 +30,15 @@ const (
 	LevelLow
 )
 
+// Cancel categories — the bitmask a move carries saying what it may be
+// cancelled into once it has connected (03 Game Design/Combat System.md, D34).
+// Supers and Drive take the next bits when they exist; the two that exist now
+// are the two categories a move can be.
+const (
+	CancelChain   uint16 = 1 << 0 // another normal
+	CancelSpecial uint16 = 1 << 1
+)
+
 // Stances a move can be performed from.
 const (
 	StanceStand = iota
@@ -131,6 +140,27 @@ type Move struct {
 	// change velocity partway is a keyframe field away, and none does yet.
 	LaunchVX, LaunchVY Fix
 
+	// Landing is the recovery owed on touchdown by a move that was still in
+	// the air when it ended. Without it an air normal or an uppercut that runs
+	// out above the ground makes the character actionable the instant they
+	// touch it, which is a free reversal and a free jump-in.
+	Landing int32
+
+	// InvulnStart and InvulnEnd bound the frames on which the move has no
+	// hurtboxes at all, in the move's own frames and half-open: [start, end).
+	// Equal means none, which is most moves.
+	//
+	// ponytail: one window, whole-body. Strike-only and throw-only invuln are
+	// different windows on the same move in a full game; there are no throws
+	// yet, and a second pair of fields with nothing to distinguish them from
+	// the first is a guess about a system that does not exist.
+	InvulnStart, InvulnEnd int32
+
+	// CancelInto is the set of categories this move may be cancelled into once
+	// it has connected — zero for the moves that do not cancel, which is the
+	// default and the majority.
+	CancelInto uint16
+
 	NumKeys int32
 	Keys    [MaxKeyframes]Keyframe
 
@@ -143,6 +173,13 @@ type Move struct {
 // Launches reports whether the move sets its own velocity. A move that does
 // not is content to be carried by whatever the character was already doing.
 func (m *Move) Launches() bool { return m.LaunchVX != 0 || m.LaunchVY != 0 }
+
+// Invulnerable reports whether the move is invulnerable on the given frame of
+// itself. A move with no window answers false for every frame, since the empty
+// half-open range contains nothing.
+func (m *Move) Invulnerable(frame int32) bool {
+	return frame >= m.InvulnStart && frame < m.InvulnEnd
+}
 
 // Total is the move's full duration in frames.
 func (m *Move) Total() int32 { return m.Startup + m.Active + m.Recovery }

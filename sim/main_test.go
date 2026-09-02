@@ -40,16 +40,20 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 7,
+		NumMoves: 8,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
 	// is further than the players start apart in the hit tests below.
+	// It also cancels into specials, which makes it the fixture's designated
+	// cancelable normal: the jab and the special on move 2 share a button, so
+	// the cancel is told from a fresh press by the motion and by nothing else.
 	c.Moves[0] = Move{
 		Startup: 4, Active: 3, Recovery: 6,
 		Damage: 100, Hitstun: 14, Blockstun: 11, Hitstop: 6,
 		Level: LevelMid, Stance: StanceStand, Button: InLP,
-		NumKeys: 3,
+		CancelInto: CancelSpecial,
+		NumKeys:    3,
 	}
 	c.Moves[0].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
 	c.Moves[0].Keys[0].Hurt[0] = c.StandHurt
@@ -115,11 +119,14 @@ func testCharacter() Character {
 
 	// The same, but far too short to land in: it exists to exercise a move that
 	// runs out while the character is still in the air.
+	// It owes landing recovery for it: the fall is not free just because the
+	// move ended halfway up.
 	c.Moves[4] = Move{
 		Startup: 2, Active: 2, Recovery: 2,
 		Damage: 100, Hitstun: 12, Blockstun: 9, Hitstop: 5,
 		Level: LevelMid, Stance: StanceStand, Button: InHK,
 		LaunchVY: FromInt(8),
+		Landing:  5,
 		NumKeys:  1,
 	}
 	c.Moves[4].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
@@ -136,11 +143,13 @@ func testCharacter() Character {
 	c.Moves[5].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
 	c.Moves[5].Keys[0].Hurt[0] = c.StandHurt
 
-	// An air normal. No launch: it rides the jump it came out of.
+	// An air normal. No launch: it rides the jump it came out of, and it costs
+	// four frames on the way down.
 	c.Moves[6] = Move{
 		Startup: 3, Active: 4, Recovery: 8,
 		Damage: 200, Hitstun: 16, Blockstun: 12, Hitstop: 8,
 		Level: LevelHigh, Stance: StanceAir, Button: InLP,
+		Landing: 4,
 		NumKeys: 2,
 	}
 	c.Moves[6].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
@@ -148,6 +157,29 @@ func testCharacter() Character {
 	c.Moves[6].Keys[1] = Keyframe{Frame: 3, NumHurt: 1, NumHit: 1}
 	c.Moves[6].Keys[1].Hurt[0] = c.AirHurt
 	c.Moves[6].Keys[1].Hit[0] = Box{X: FromInt(10), Y: FromInt(16), W: FromInt(26), H: FromInt(20)}
+
+	// An invincible reversal: no hurtboxes at all for its startup and the first
+	// two active frames, so an attack that would beat it on frames alone loses
+	// to it anyway. On a real character this carries a DP motion; here it is on
+	// its own button, because what is under test is the window and not the
+	// recogniser, which has its own tests.
+	c.Moves[7] = Move{
+		Startup: 5, Active: 4, Recovery: 20,
+		Damage: 250, Hitstun: 20, Blockstun: 14, Hitstop: 8,
+		Level: LevelMid, Stance: StanceStand, Button: InMP,
+		InvulnStart: 0, InvulnEnd: 7,
+		NumKeys: 3,
+	}
+	c.Moves[7].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[7].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[7].Keys[1] = Keyframe{Frame: 5, NumHurt: 1, NumHit: 1}
+	c.Moves[7].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[7].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(30), W: FromInt(28), H: FromInt(12)}
+	// The hitbox goes away when the active window does: a keyframe persists
+	// until the next one, so a move with nothing after its active frames keeps
+	// swinging through its own recovery.
+	c.Moves[7].Keys[2] = Keyframe{Frame: 9, NumHurt: 1}
+	c.Moves[7].Keys[2].Hurt[0] = c.StandHurt
 
 	return c
 }

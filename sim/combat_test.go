@@ -470,3 +470,79 @@ func TestCrouchBlockingCoversLowsAndMids(t *testing.T) {
 		})
 	}
 }
+
+// Invincible frames are the absence of hurtboxes, and Hurtboxes is the one
+// funnel every attack and every projectile asks. A move inside its window
+// answers nothing, so there is nothing to hit.
+func TestInvulnerableFramesHaveNoHurtboxes(t *testing.T) {
+	s := New()
+	mv := &char().Moves[7]
+	s.Advance([2]uint16{InMP, 0})
+
+	var boxes [MaxBoxes]Box
+	for range mv.Total() {
+		p := &s.Players[0]
+		n := s.Hurtboxes(0, &boxes)
+		if inside := p.StateFrame < mv.InvulnEnd; inside != (n == 0) {
+			t.Fatalf("frame %d of the move: %d hurtboxes, invulnerable window is [%d, %d)",
+				p.StateFrame, n, mv.InvulnStart, mv.InvulnEnd)
+		}
+		s.Advance([2]uint16{0, 0})
+	}
+}
+
+// The point of the window: a reversal beats an attack that would beat it on
+// frames alone. The jab is faster and connects first; the reversal is not there
+// to be hit, and comes back down on the player who threw it.
+func TestAReversalBeatsAFasterAttack(t *testing.T) {
+	s := facing(30)
+	rev, jab := &char().Moves[7], &char().Moves[0]
+	full := [2]int32{s.Players[0].Health, s.Players[1].Health}
+
+	// Same frame, so the jab's active frames 4..6 land inside the reversal's
+	// invulnerable window and the reversal's own hitbox arrives on frame 5.
+	s.Advance([2]uint16{InMP, InLP})
+	for range 60 {
+		s.Advance([2]uint16{0, 0})
+	}
+
+	if got := full[0] - s.Players[0].Health; got != 0 {
+		t.Errorf("the reversal took %d damage during its invulnerable frames", got)
+	}
+	if got := full[1] - s.Players[1].Health; got != rev.Damage {
+		t.Errorf("the jab player took %d, want the reversal's %d", got, rev.Damage)
+	}
+	if jab.Startup >= rev.Startup {
+		t.Fatalf("fixture: the jab (%d) must be faster than the reversal (%d) or this proves nothing",
+			jab.Startup, rev.Startup)
+	}
+}
+
+// And the other half: past the window the same attack connects. Otherwise the
+// test above would pass on a move that simply never gets hit.
+func TestTheWindowEnds(t *testing.T) {
+	s := facing(300) // far enough that the reversal itself whiffs
+	rev := &char().Moves[7]
+	full := s.Players[0].Health
+
+	s.Advance([2]uint16{InMP, 0})
+	// Wait out the window and the reversal's own active frames, so what is
+	// under test is the hurtbox coming back and not a trade.
+	for s.Players[0].StateFrame < rev.Startup+rev.Active {
+		s.Advance([2]uint16{0, 0})
+	}
+	if s.Players[0].StateFrame < rev.InvulnEnd {
+		t.Fatal("fixture: the window outlasts the active frames")
+	}
+
+	// Walk the jab into range now that the invulnerable frames are behind it.
+	s.Players[0].X, s.Players[1].X = FromInt(-15), FromInt(15)
+	s.Advance([2]uint16{0, InLP})
+	for range 60 {
+		s.Advance([2]uint16{0, 0})
+	}
+
+	if s.Players[0].Health == full {
+		t.Error("the reversal was still invulnerable after its window ended")
+	}
+}

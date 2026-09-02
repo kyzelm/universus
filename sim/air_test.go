@@ -61,9 +61,109 @@ func TestLandingEndsAnAirNormal(t *testing.T) {
 			break
 		}
 	}
-	if p := &s.Players[0]; p.State != StateIdle {
-		t.Errorf("state %d on the ground, want idle: the air normal outlived the jump", p.State)
+	p := &s.Players[0]
+	if p.MoveIndex != -1 || p.State == StateAttack {
+		t.Errorf("state %d move %d on the ground: the air normal outlived the jump", p.State, p.MoveIndex)
 	}
+	// The move is over, but the landing is not free: the air normal's own data
+	// says what coming down out of it costs.
+	if p.State != StateLanding || p.Stun != char().Moves[6].Landing {
+		t.Errorf("state %d stun %d on the ground, want %d frames of landing recovery",
+			p.State, p.Stun, char().Moves[6].Landing)
+	}
+	for range char().Moves[6].Landing {
+		if Actionable(s.Players[0].State) {
+			t.Fatal("actionable during landing recovery")
+		}
+		s.Advance([2]uint16{0, 0})
+	}
+	if got := s.Players[0].State; got != StateIdle {
+		t.Errorf("state %d after the landing recovery ran out, want idle", got)
+	}
+}
+
+// A move that ran out on the way up still owes its landing frames on the way
+// down. The move itself is long gone by then — the debt is carried in the state
+// precisely because the thing that incurred it is not there to be asked.
+func TestAMoveThatExpiredInTheAirOwesItsLandingRecovery(t *testing.T) {
+	s := New()
+	s.Advance([2]uint16{InHK, 0}) // move 4: six frames long, ~32 in the air
+
+	for s.Players[0].State != StateAir {
+		s.Advance([2]uint16{0, 0})
+	}
+	if got := s.Players[0].Landing; got != char().Moves[4].Landing {
+		t.Fatalf("landing debt %d after the move expired mid-air, want %d", got, char().Moves[4].Landing)
+	}
+
+	for range 60 {
+		s.Advance([2]uint16{0, 0})
+		if s.Players[0].Y == GroundY {
+			break
+		}
+	}
+	if p := &s.Players[0]; p.State != StateLanding || p.Stun != char().Moves[4].Landing {
+		t.Errorf("state %d stun %d on touchdown, want %d frames of landing recovery",
+			p.State, p.Stun, char().Moves[4].Landing)
+	}
+}
+
+// A plain jump owes nothing. Landing recovery is the price of the move, not of
+// the jump, and a jump with no button in it is actionable the frame it lands.
+func TestAJumpWithNoAttackLandsActionable(t *testing.T) {
+	s := jump(t, 8)
+	for range 60 {
+		s.Advance([2]uint16{0, 0})
+		if s.Players[0].Y == GroundY {
+			break
+		}
+	}
+	if got := s.Players[0].State; got != StateIdle {
+		t.Errorf("state %d on landing a bare jump, want idle", got)
+	}
+}
+
+// Being hit out of the fall cancels the debt. It belongs to the move, and the
+// hit already ended the move — charging it on top of the hitstun would make
+// getting hit out of an air normal worse than the air normal landing.
+func TestAStateChangeClearsTheLandingDebt(t *testing.T) {
+	var p PlayerState
+	p.Landing = 5
+	p.enter(StateHitstun)
+	if p.Landing != 0 {
+		t.Errorf("landing debt %d survived the hit that ended the move", p.Landing)
+	}
+}
+
+// A press during landing recovery is buffered like any other press in a state
+// that cannot act on it: it comes out on the first frame that can.
+func TestAPressDuringLandingRecoveryBuffers(t *testing.T) {
+	s := jump(t, 8)
+	for s.Players[0].VY > 0 || s.Players[0].Y > FromInt(20) {
+		s.Advance([2]uint16{0, 0})
+	}
+	s.Advance([2]uint16{InLP, 0}) // the air normal, still running when it lands
+	for range 60 {
+		s.Advance([2]uint16{0, 0})
+		if s.Players[0].State == StateLanding {
+			break
+		}
+	}
+	if s.Players[0].State != StateLanding {
+		t.Fatal("never reached landing recovery")
+	}
+
+	s.Advance([2]uint16{InLP, 0}) // pressed into the recovery
+	for range InputBuffer {
+		if p := &s.Players[0]; p.State == StateAttack {
+			if p.MoveIndex != 0 {
+				t.Fatalf("move %d came out of the buffer, want the standing jab", p.MoveIndex)
+			}
+			return
+		}
+		s.Advance([2]uint16{0, 0})
+	}
+	t.Error("the press made during landing recovery was dropped")
 }
 
 // A launching move is not an air move, and landing does not end it: those

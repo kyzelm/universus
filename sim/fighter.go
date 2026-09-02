@@ -21,6 +21,10 @@ const (
 	StateAttack
 	StateHitstun
 	StateBlockstun
+	// StateLanding is the recovery owed for coming down out of a move. It is
+	// stun as far as the state machine is concerned — a fixed count of frames
+	// that accept nothing — so it runs on the same counter.
+	StateLanding
 )
 
 // Airborne reports whether the player is off the ground.
@@ -49,6 +53,23 @@ func (p *PlayerState) enter(state int32) {
 	p.State = state
 	p.StateFrame = 0
 	p.MoveIndex = -1
+	// The debt belongs to the move that incurred it. Anything that ends that
+	// move early — most of all being hit out of it — cancels the debt with it,
+	// or a player knocked out of an uppercut would land into recovery frames
+	// they never earned on top of the hitstun they did.
+	p.Landing = 0
+}
+
+// land ends an airborne action on touchdown, owing n frames of recovery. Zero
+// is the common case and means actionable immediately, which is what a jump
+// with no attack in it does.
+func (p *PlayerState) land(n int32) {
+	if n <= 0 {
+		p.enter(StateIdle)
+		return
+	}
+	p.enter(StateLanding)
+	p.Stun = n
 }
 
 // stay is enter for a state the player may already be in: holding forward for
@@ -99,11 +120,17 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 	c := CharacterAt(p.Char)
 	now := s.Frame
 
+	// A move that has connected stops being a commitment if its data says so:
+	// the cancel window accepts one thing, a move in a category the move being
+	// cancelled names. Zero everywhere else, which is every move that does not
+	// cancel and every state that is not an attack.
+	cancel := s.cancelMask(i)
+
 	// Stun and commitment states tick down elsewhere; they accept no input.
 	// StateAir is the exception, and only for buttons: an air normal is the one
 	// thing a jump accepts. There is no air walking, no double jump and no air
 	// dash, so the direction half below is unreachable from up there.
-	if !Actionable(p.State) && p.State != StateAir {
+	if !Actionable(p.State) && p.State != StateAir && cancel == 0 {
 		return
 	}
 
@@ -112,7 +139,11 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 
 	stance := int32(StanceStand)
 	switch {
-	case p.State == StateAir:
+	// Airborne rather than StateAir, for the cancel window's sake: a rising
+	// uppercut is off the ground without being in StateAir, and what it could
+	// cancel into up there is air moves. Grounded states sit exactly on
+	// GroundY, so nothing else reaching this line changes answer.
+	case p.Airborne():
 		stance = StanceAir
 	case crouching:
 		stance = StanceCrouch
@@ -120,8 +151,15 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 
 	// Attacks first: a button beats a direction on the same frame, which is
 	// what lets a crouching attack come out of a walk without a spare frame.
-	if m := s.moveFor(i, stance, now); m >= 0 {
+	if m := s.moveFor(i, stance, now, cancel); m >= 0 {
 		p.enterMove(m, now)
+		return
+	}
+
+	// A cancel window is not an actionable state. Nothing below this line — no
+	// dash, no jump, no walk — comes out of the middle of an attack; the window
+	// exists for the one move the data named and for nothing else.
+	if p.State == StateAttack {
 		return
 	}
 
@@ -213,6 +251,24 @@ func (p *PlayerState) doubleTapped(now uint32, dir uint8) bool {
 	return false
 }
 
+// cancelMask is the set of categories the player's current move may be
+// cancelled into this frame, or zero for no cancel.
+//
+// Two conditions, both standard, both load-bearing. **The move must have
+// connected** — HasHit, which is set on block as much as on hit, so a blocked
+// normal cancels and a whiffed one does not; a whiff cancel would make every
+// cancelable button safe to throw out. And the window opens at the first active
+// frame, so a cancel cannot come out before the move it is cancelling has had a
+// chance to be one.
+func (s *GameState) cancelMask(i int) uint16 {
+	p := &s.Players[i]
+	mv := p.move()
+	if mv == nil || p.HasHit == 0 || p.StateFrame < mv.Startup {
+		return 0
+	}
+	return mv.CancelInto
+}
+
 // moveFor finds the move a recent button press selects, or -1.
 //
 // **This is where the input buffer is consumed.** A press does not have to land
@@ -230,7 +286,10 @@ func (p *PlayerState) doubleTapped(now uint32, dir uint8) bool {
 // Scanning the move list in index order — the same order on every machine — and
 // strictly newer beats equal, so a tie between two moves on the same frame goes
 // to the lower index. A character's move list is authored most-specific first.
-func (s *GameState) moveFor(i int, stance int32, now uint32) int32 {
+//
+// cancel restricts the search to the categories a cancel allows; zero is the
+// ordinary path and allows every move.
+func (s *GameState) moveFor(i int, stance int32, now uint32, cancel uint16) int32 {
 	p := &s.Players[i]
 	c := CharacterAt(p.Char)
 
@@ -247,6 +306,20 @@ func (s *GameState) moveFor(i int, stance int32, now uint32) int32 {
 	for m := int32(0); m < c.NumMoves; m++ {
 		mv := &c.Moves[m]
 		special := mv.Motion != MotionNone
+
+		// A cancel takes only what the move being cancelled named. The category
+		// is the move's own nature — a motion makes it a special, its absence
+		// makes it a chain — so the target needs no field of its own to say
+		// what it is.
+		if cancel != 0 {
+			cat := CancelChain
+			if special {
+				cat = CancelSpecial
+			}
+			if cancel&cat == 0 {
+				continue
+			}
+		}
 
 		// Ground and air never mix, specials included: a fireball motion is
 		// still on the stick when the character leaves the ground, and without
@@ -346,18 +419,22 @@ func (s *GameState) advanceState(i int) {
 			// hands over to StateAir, not to idle: an idle player is actionable,
 			// and actionable in mid-air is a different game.
 			//
-			// ponytail: no landing recovery. Real uppercuts have some; it is a
-			// state with a duration, and it belongs with reversals in M2.
+			// The move is gone by the next frame, so what it owes on landing is
+			// recorded now. Anything else would need the state machine to
+			// remember which move a fall came out of, which is the same field
+			// under a worse name.
 			if p.Y > GroundY {
 				p.JumpVX = p.VX // StateAir drives VX from this
+				owed := mv.Landing
 				p.enter(StateAir)
+				p.Landing = owed
 				return
 			}
 			p.enter(StateIdle)
 			return
 		}
 
-	case StateHitstun, StateBlockstun:
+	case StateHitstun, StateBlockstun, StateLanding:
 		if p.Stun > 0 {
 			p.Stun--
 		}
@@ -389,6 +466,14 @@ func (s *GameState) Hurtboxes(i int, out *[MaxBoxes]Box) int32 {
 	c := CharacterAt(p.Char)
 
 	if mv := p.move(); mv != nil {
+		// An invulnerable frame has no hurtboxes at all, which is the whole
+		// mechanism: this is the one funnel every attack and every projectile
+		// asks, so a move that answers nothing here cannot be hit by anything.
+		// It is also what the debug overlay draws, so the window is visible
+		// without a second code path to disagree with this one.
+		if mv.Invulnerable(p.StateFrame) {
+			return 0
+		}
 		if k := mv.BoxesAt(p.StateFrame); k != nil {
 			for b := int32(0); b < k.NumHurt; b++ {
 				out[b] = k.Hurt[b].World(p.X, p.Y, p.Facing)

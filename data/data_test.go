@@ -181,6 +181,12 @@ func TestValidationRejectsBadData(t *testing.T) {
 			c.Moves[0].Boxes[0].Hit = [][]json.Number{{"12", "30", "22", "12"}}
 		}},
 
+		{"empty invuln window", func(c *jsonCharacter) { c.Moves[0].Invuln = []int{4, 4} }},
+		{"invuln with one value", func(c *jsonCharacter) { c.Moves[0].Invuln = []int{0} }},
+		{"invuln past the end of the move", func(c *jsonCharacter) { c.Moves[0].Invuln = []int{0, 999} }},
+		{"negative landing recovery", func(c *jsonCharacter) { c.Moves[0].Landing = -1 }},
+		{"unknown cancel category", func(c *jsonCharacter) { c.Moves[0].Cancel = []string{"super4"} }},
+
 		// The one the design note itself got wrong: 8.0 and -0.03 pass every
 		// individual check and give a nine-second jump.
 		{"jump constants that do not go together", func(c *jsonCharacter) { c.Gravity = "-0.03" }},
@@ -192,6 +198,37 @@ func TestValidationRejectsBadData(t *testing.T) {
 				t.Error("accepted data that should have been rejected")
 			}
 		})
+	}
+}
+
+// A renamed or mistyped JSON key parses to zero without complaint, and the
+// symptom is a move that is quietly no longer invincible, no longer cancelable
+// and free on landing. Cheap insurance: the shipped roster must actually use
+// each of the three.
+func TestTheShippedRosterUsesThePerMoveProperties(t *testing.T) {
+	cs, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	var invuln, landing, cancel int
+	for i := range cs {
+		for m := int32(0); m < cs[i].NumMoves; m++ {
+			mv := &cs[i].Moves[m]
+			if mv.InvulnEnd > mv.InvulnStart {
+				invuln++
+			}
+			if mv.Landing > 0 {
+				landing++
+			}
+			if mv.CancelInto != 0 {
+				cancel++
+			}
+		}
+	}
+	if invuln == 0 || landing == 0 || cancel == 0 {
+		t.Errorf("roster has %d invulnerable, %d landing-recovery and %d cancelable moves, want some of each",
+			invuln, landing, cancel)
 	}
 }
 
