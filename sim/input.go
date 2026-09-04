@@ -45,7 +45,34 @@ const (
 	MotionQCF         // ↓ ↘ →
 	MotionQCB         // ↓ ↙ ←
 	MotionDP          // → ↓ ↘
+
+	// The super motions: the same quarter-circle twice. Values are appended,
+	// never reordered — a Motion is part of a move's identity in the data.
+	MotionQCFx2 // ↓ ↘ → ↓ ↘ →
+	MotionQCBx2 // ↓ ↙ ← ↓ ↙ ←
 )
+
+// satisfies reports whether a recognised motion also counts as a simpler one it
+// contains. A double quarter-circle is a quarter-circle that kept going, so a
+// player who inputs 236236 and has no meter gets the fireball rather than
+// nothing at all — which is what every game in the genre does, and what makes a
+// dropped super merely disappointing instead of a dead frame.
+//
+// Only ever true in the direction of *more* input satisfying less. A plain QCF
+// never counts as a super motion, or the meter cost would be the only thing
+// standing between a fireball and a level 3.
+func (m Motion) satisfies(want Motion) bool {
+	if m == want {
+		return true
+	}
+	switch m {
+	case MotionQCFx2:
+		return want == MotionQCF
+	case MotionQCBx2:
+		return want == MotionQCB
+	}
+	return false
+}
 
 // The motion table, **in priority order** — the first match wins.
 //
@@ -59,15 +86,28 @@ const (
 // per the design note; the scan is lenient, so intermediate directions may be
 // skipped as long as these land in order inside the window.
 //
+// **The doubles come before everything, and DP before the singles.** Two
+// orderings, both load-bearing, both with a test that fails when they are
+// swapped. A double quarter-circle contains a DP subsequence — ↓↘→↓↘→ read
+// backward offers →, ↘, ↓ in the order a dragon punch wants — so a super motion
+// checked after DP is a dragon punch every time. And the single quarter-circle
+// is a prefix of the double, which is the ordinary priority case.
+//
 // Adding HCF for the grappler's command throw, or a charge motion if a charge
 // character ever exists, is a row here and nothing else. Neither is built:
 // charge is expansion-only by the roster plan's own account, and building an
-// input path no character uses is how engines grow dead code.
+// input path no character uses is how engines grow dead code. The two super
+// motions below were exactly that row-and-nothing-else when the supers landed.
+//
+// The doubles take a wider window, because they are twice the input. Still
+// inside InputHistory, which every window must be.
 var motions = []struct {
 	motion Motion
 	seq    []uint8
 	window uint32
 }{
+	{MotionQCFx2, []uint8{DirDown, DirDownFwd, DirFwd, DirDown, DirDownFwd, DirFwd}, 26},
+	{MotionQCBx2, []uint8{DirDown, DirDownBack, DirBack, DirDown, DirDownBack, DirBack}, 26},
 	{MotionDP, []uint8{DirFwd, DirDown, DirDownFwd}, 13},
 	{MotionQCB, []uint8{DirDown, DirDownBack, DirBack}, 13},
 	{MotionQCF, []uint8{DirDown, DirDownFwd, DirFwd}, 13},

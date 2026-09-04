@@ -115,6 +115,13 @@ func (p *PlayerState) enterMove(index int32, now uint32) {
 	// it came out of continues underneath it, which is what makes an air normal
 	// something you do during a jump rather than something that stops one.
 	mv := &CharacterAt(p.Char).Moves[index]
+
+	// The meter is spent here, on the frame the move starts, and nowhere else.
+	// moveFor has already refused a super the player cannot afford, so this is
+	// a deduction and not a check — one place that can take the bars, which is
+	// what keeps "it came out" and "it was paid for" from ever disagreeing.
+	p.Super -= mv.SuperCost()
+
 	if !p.Airborne() || mv.Launches() {
 		p.VX = mv.LaunchVX.Mul(FromInt(int(p.Facing)))
 		p.VY = mv.LaunchVY
@@ -303,32 +310,35 @@ func (s *GameState) moveFor(i int, stance int32, now uint32, cancel uint16) int3
 	p := &s.Players[i]
 	c := CharacterAt(p.Char)
 
-	// Candidates are ranked press frame first, special over normal second, and
-	// the whole comparison is one integer: two ranks per frame, the odd one
-	// taken by the special. A newer press therefore always outranks an older
-	// one whatever it was, which is the ordering in words and cheaper to read
-	// than the three-way condition it replaces.
+	// Candidates are ranked press frame first and move tier second — super over
+	// special over normal — and the whole comparison is one integer: three
+	// ranks per frame, one per tier. A newer press therefore always outranks an
+	// older one whatever it was, which is the ordering in words and cheaper to
+	// read than the nested conditions it replaces.
 	//
-	// Starting the bar at p.Eaten*2+1 is what spends a press: nothing at or
-	// before that frame can outrank it, special or not.
-	best, bestRank := int32(-1), p.Eaten*2+1
+	// Starting the bar at the top rank of p.Eaten's frame is what spends a
+	// press: nothing at or before that frame can outrank it, at any tier.
+	best, bestRank := int32(-1), p.Eaten*tiers+tiers-1
 
 	for m := int32(0); m < c.NumMoves; m++ {
 		mv := &c.Moves[m]
 		special := mv.Motion != MotionNone
 
 		// A cancel takes only what the move being cancelled named. The category
-		// is the move's own nature — a motion makes it a special, its absence
-		// makes it a chain — so the target needs no field of its own to say
-		// what it is.
-		if cancel != 0 {
-			cat := CancelChain
-			if special {
-				cat = CancelSpecial
-			}
-			if cancel&cat == 0 {
-				continue
-			}
+		// is the move's own nature — a level makes it a super, a motion makes
+		// it a special, neither makes it a chain — so the target needs no field
+		// of its own to say what it is.
+		if cancel != 0 && cancel&mv.Category() == 0 {
+			continue
+		}
+
+		// The meter gates the super, and it gates it *here*, at selection: a
+		// level 3 the player cannot afford must not be picked and then fail,
+		// because a picked move has already beaten every cheaper one that
+		// shared the button. Refusing it in the search is what lets the fireball
+		// come out of the same input instead.
+		if cost := mv.SuperCost(); cost > p.Super {
+			continue
 		}
 
 		// Ground and air never mix, specials included: a fireball motion is
@@ -358,19 +368,37 @@ func (s *GameState) moveFor(i int, stance int32, now uint32, cancel uint16) int3
 		// the move finally comes out. A buffered special is one the player
 		// completed several frames ago; asking whether the motion is still
 		// recognised now would drop exactly the inputs the buffer exists for.
-		if special && s.MotionAt(i, uint32(f)) != mv.Motion {
+		//
+		// satisfies rather than equality, because a double quarter-circle is a
+		// quarter-circle that kept going: the same input offers the super and
+		// the fireball, and which one comes out is decided by the tier below
+		// and by whether the meter could pay for it.
+		if special && !s.MotionAt(i, uint32(f)).satisfies(mv.Motion) {
 			continue
 		}
 
-		rank := f * 2
-		if special {
-			rank++
-		}
+		rank := f*tiers + tierOf(mv)
 		if rank > bestRank {
 			best, bestRank = m, rank
 		}
 	}
 	return best
+}
+
+// The selection tiers. A super outranks a special outranks a normal on the same
+// press, which is what puts the level 3 ahead of the fireball when one input
+// describes both.
+const tiers = 3
+
+func tierOf(m *Move) int32 {
+	switch {
+	case m.Super > 0:
+		return 2
+	case m.Motion != MotionNone:
+		return 1
+	default:
+		return 0
+	}
 }
 
 // advanceState is step 2: run the current state's clock and decide what the

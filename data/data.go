@@ -271,6 +271,10 @@ type jsonMove struct {
 	// Absent means it does not cancel, which is most of the list.
 	Cancel []string `json:"cancel"`
 
+	// Super level, 1 to 3. Absent on everything that is not one, which is the
+	// whole roster bar three moves per character.
+	Super int `json:"super"`
+
 	// Velocity the move gives the character on its first frame, [vx, vy],
 	// forward-relative. Absent for the moves that do not move anyone.
 	Launch []json.Number `json:"launch"`
@@ -308,6 +312,7 @@ var levels = map[string]int32{
 
 var cancelCategories = map[string]uint16{
 	"chain": sim.CancelChain, "special": sim.CancelSpecial,
+	"super1": sim.CancelSuper1, "super2": sim.CancelSuper2, "super3": sim.CancelSuper3,
 }
 
 var stances = map[string]int32{
@@ -319,6 +324,7 @@ var stances = map[string]int32{
 // all write "none" would be noise in every entry.
 var inputMotions = map[string]sim.Motion{
 	"": sim.MotionNone, "qcf": sim.MotionQCF, "qcb": sim.MotionQCB, "dp": sim.MotionDP,
+	"qcfx2": sim.MotionQCFx2, "qcbx2": sim.MotionQCBx2,
 }
 
 // ---- conversion and validation --------------------------------------------
@@ -476,6 +482,18 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 			return m, fmt.Errorf("invuln ends at frame %d, but the move is %d frames", end, m.Total())
 		}
 		m.InvulnStart, m.InvulnEnd = int32(start), int32(end)
+	}
+
+	if jm.Super < 0 || jm.Super > 3 {
+		return m, fmt.Errorf("super must be 1, 2 or 3, got %d", jm.Super)
+	}
+	m.Super = int32(jm.Super)
+
+	// A super with no motion is a super on a bare button press, which would
+	// beat the normal on that button for the rest of the match. The typo is
+	// silent otherwise: the move works, it is just never not selected.
+	if m.Super > 0 && m.Motion == sim.MotionNone {
+		return m, fmt.Errorf("super %d has no motion", m.Super)
 	}
 
 	for _, name := range jm.Cancel {

@@ -64,7 +64,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 8,
+		NumMoves: 10,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -72,11 +72,14 @@ func testCharacter() Character {
 	// It also cancels into specials, which makes it the fixture's designated
 	// cancelable normal: the jab and the special on move 2 share a button, so
 	// the cancel is told from a fresh press by the motion and by nothing else.
+	// It feeds the level 1 super as well — the design gives level 1 to
+	// cancelable normals and to nothing else, and move 1 below is the source
+	// that proves the tiering by not having it.
 	c.Moves[0] = Move{
 		Startup: 4, Active: 3, Recovery: 6,
 		Damage: 100, Hitstun: 14, Blockstun: 11, Hitstop: 6,
 		Level: LevelMid, Stance: StanceStand, Button: InLP,
-		CancelInto: CancelSpecial,
+		CancelInto: CancelSpecial | CancelSuper1 | CancelSuper3,
 		NumKeys:    3,
 	}
 	c.Moves[0].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
@@ -89,11 +92,15 @@ func testCharacter() Character {
 
 	// A crouching low, so the block-level tests have something that must be
 	// blocked crouching.
+	// It cancels into the level 3 super and nothing else, which is the heavy's
+	// tier: level 3 comes out of anything, level 1 only out of the normals that
+	// were cancelable to begin with.
 	c.Moves[1] = Move{
 		Startup: 5, Active: 2, Recovery: 9,
 		Damage: 80, Hitstun: 12, Blockstun: 9, Hitstop: 5,
 		Level: LevelLow, Stance: StanceCrouch, Button: InLK,
-		NumKeys: 2,
+		CancelInto: CancelSuper3,
+		NumKeys:    2,
 	}
 	c.Moves[1].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
 	c.Moves[1].Keys[0].Hurt[0] = c.CrouchHurt
@@ -204,6 +211,42 @@ func testCharacter() Character {
 	// swinging through its own recovery.
 	c.Moves[7].Keys[2] = Keyframe{Frame: 9, NumHurt: 1}
 	c.Moves[7].Keys[2].Hurt[0] = c.StandHurt
+
+	// The level 1 super, on the jab's button and the fireball's motion doubled.
+	// Three moves share InLP and only the motion and the meter tell them apart,
+	// which is the whole selection rule in one button.
+	c.Moves[8] = Move{
+		Startup: 6, Active: 3, Recovery: 12,
+		Damage: 400, Hitstun: 20, Blockstun: 14, Hitstop: 8,
+		Level: LevelMid, Stance: StanceStand, Button: InLP, Motion: MotionQCFx2,
+		Super:   1,
+		NumKeys: 3,
+	}
+	c.Moves[8].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[8].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[8].Keys[1] = Keyframe{Frame: 6, NumHurt: 1, NumHit: 1}
+	c.Moves[8].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[8].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(20), W: FromInt(30), H: FromInt(20)}
+	c.Moves[8].Keys[2] = Keyframe{Frame: 9, NumHurt: 1}
+	c.Moves[8].Keys[2].Hurt[0] = c.StandHurt
+
+	// The level 3, on the other double motion so the two supers cannot be
+	// confused for one another, and on the reversal's button so the pair also
+	// covers "a motion move and a bare-button move sharing a button".
+	c.Moves[9] = Move{
+		Startup: 4, Active: 3, Recovery: 20,
+		Damage: 900, Hitstun: 24, Blockstun: 16, Hitstop: 10,
+		Level: LevelMid, Stance: StanceStand, Button: InMP, Motion: MotionQCBx2,
+		Super:   3,
+		NumKeys: 3,
+	}
+	c.Moves[9].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[9].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[9].Keys[1] = Keyframe{Frame: 4, NumHurt: 1, NumHit: 1}
+	c.Moves[9].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[9].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(0), W: FromInt(34), H: FromInt(46)}
+	c.Moves[9].Keys[2] = Keyframe{Frame: 7, NumHurt: 1}
+	c.Moves[9].Keys[2].Hurt[0] = c.StandHurt
 
 	return c
 }

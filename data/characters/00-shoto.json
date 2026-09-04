@@ -24,6 +24,66 @@
 
   "moves": [
     {
+      "_comment": "Level 1. QCF x2 + LP, one bar. A fireball ender: cheap, the lowest damage of the three, and the thing a cancelable normal is actually converting into. The double quarter-circle contains a single one, so the same input throws an ordinary fireball when the bar is not there — the meter is checked when the move is selected, not after it comes out. Like the fireball it is the projectile that hits; the move itself has no hitbox.",
+      "id": "236236LP",
+      "input": { "stance": "stand", "button": "LP", "motion": "qcfx2" },
+      "super": 1,
+      "startup": 8,
+      "active": 3,
+      "recovery": 40,
+      "damage": 1400,
+      "hitstun": 24,
+      "blockstun": 16,
+      "hitstop": 12,
+      "attackLevel": "mid",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 8, "hurt": [[-12, 0, 30, 48]] },
+        { "frame": 11, "hurt": [[-12, 0, 24, 48]] }
+      ],
+      "projectile": { "speed": 4.0, "life": 120, "spawn": [22, 14], "box": [0, 0, 28, 30] }
+    },
+    {
+      "_comment": "Level 2. QCF x2 + LK, two bars. The invincible reversal per the roster plan: invulnerable through startup and into the active frames, rising on a launch velocity like the uppercut does, gravity supplying the arc. Airtime is 46 frames at 8.5 up against 0.375 down and the move is 56, so it lands with recovery still to pay — the price that stops an invincible wake-up from being free.",
+      "id": "236236LK",
+      "input": { "stance": "stand", "button": "LK", "motion": "qcfx2" },
+      "super": 2,
+      "startup": 6,
+      "active": 10,
+      "recovery": 40,
+      "damage": 2200,
+      "hitstun": 26,
+      "blockstun": 18,
+      "hitstop": 14,
+      "attackLevel": "mid",
+      "invuln": [0, 10],
+      "launch": [1.5, 8.5],
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 6, "hurt": [[-12, 4, 24, 40]], "hit": [[2, -4, 30, 72]] },
+        { "frame": 16, "hurt": [[-12, 4, 24, 40]] }
+      ]
+    },
+    {
+      "_comment": "Level 3. QCB x2 + LP, three bars, the round-closer: over a third of a health bar, and slow enough to be a read rather than a reaction. A different motion from the other two so all three fit on the punch and kick buttons the roster already uses without colliding with the fireball or the uppercut. Cinematic in the design note; here it is a large hitbox and a long recovery, because the camera work is art and the numbers are not.",
+      "id": "214214LP",
+      "input": { "stance": "stand", "button": "LP", "motion": "qcbx2" },
+      "super": 3,
+      "startup": 9,
+      "active": 4,
+      "recovery": 45,
+      "damage": 3600,
+      "hitstun": 30,
+      "blockstun": 20,
+      "hitstop": 16,
+      "attackLevel": "mid",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 9, "hurt": [[-12, 0, 30, 48]], "hit": [[10, 0, 44, 52]] },
+        { "frame": 13, "hurt": [[-12, 0, 24, 48]] }
+      ]
+    },
+    {
       "_comment": "Fireball. QCF+P per the roster plan, three strength variants that are the same entry with different numbers — the data-driven claim, cheaply. The strengths differ in travel speed, light slowest, per the roster plan: a slow fireball is a wall to walk behind, a fast one is a poke. The move itself has no hitbox; everything that hits is the projectile.",
       "id": "236LP",
       "input": { "stance": "stand", "button": "LP", "motion": "qcf" },
@@ -90,6 +150,7 @@
       "blockstun": 14,
       "hitstop": 10,
       "attackLevel": "mid",
+      "cancel": ["super2", "super3"],
       "invuln": [0, 5],
       "launch": [2.0, 8.0],
       "boxes": [
@@ -109,6 +170,7 @@
       "blockstun": 14,
       "hitstop": 10,
       "attackLevel": "mid",
+      "cancel": ["super2", "super3"],
       "invuln": [0, 4],
       "launch": [2.0, 9.0],
       "boxes": [
@@ -128,6 +190,7 @@
       "blockstun": 14,
       "hitstop": 10,
       "attackLevel": "mid",
+      "cancel": ["super2", "super3"],
       "invuln": [0, 3],
       "launch": [2.0, 10.0],
       "boxes": [
@@ -147,7 +210,7 @@
       "blockstun": 11,
       "hitstop": 6,
       "attackLevel": "mid",
-      "cancel": ["special"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 4, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 30, 22, 12]] },
@@ -165,7 +228,7 @@
       "blockstun": 9,
       "hitstop": 5,
       "attackLevel": "low",
-      "cancel": ["special"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 5, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 2, 24, 10]] },
@@ -183,7 +246,7 @@
       "blockstun": 13,
       "hitstop": 8,
       "attackLevel": "mid",
-      "cancel": ["special"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 6, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 28, 26, 16]] },
@@ -201,6 +264,7 @@
       "blockstun": 15,
       "hitstop": 10,
       "attackLevel": "mid",
+      "cancel": ["super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 9, "hurt": [[-12, 0, 34, 48]], "hit": [[12, 26, 32, 18]] },
@@ -218,7 +282,7 @@
       "blockstun": 11,
       "hitstop": 6,
       "attackLevel": "mid",
-      "cancel": ["special"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 5, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 18, 24, 14]] },
@@ -236,7 +300,7 @@
       "blockstun": 13,
       "hitstop": 8,
       "attackLevel": "mid",
-      "cancel": ["special"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 7, "hurt": [[-12, 0, 32, 48]], "hit": [[12, 16, 30, 16]] },
@@ -255,6 +319,7 @@
       "blockstun": 15,
       "hitstop": 10,
       "attackLevel": "high",
+      "cancel": ["super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 11, "hurt": [[-12, 0, 34, 48]], "hit": [[12, 30, 32, 18]] },
@@ -272,7 +337,7 @@
       "blockstun": 10,
       "hitstop": 6,
       "attackLevel": "mid",
-      "cancel": ["special"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 4, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 18, 22, 12]] },
@@ -290,7 +355,7 @@
       "blockstun": 12,
       "hitstop": 8,
       "attackLevel": "mid",
-      "cancel": ["special"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 6, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 22, 26, 18]] },
@@ -309,6 +374,7 @@
       "blockstun": 15,
       "hitstop": 10,
       "attackLevel": "mid",
+      "cancel": ["super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 8, "hurt": [[-12, 0, 32, 32]], "hit": [[10, 26, 26, 26]] },
@@ -326,7 +392,7 @@
       "blockstun": 12,
       "hitstop": 8,
       "attackLevel": "low",
-      "cancel": ["special"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 7, "hurt": [[-12, 0, 32, 32]], "hit": [[12, 2, 30, 12]] },
@@ -345,6 +411,7 @@
       "blockstun": 14,
       "hitstop": 10,
       "attackLevel": "low",
+      "cancel": ["super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 9, "hurt": [[-12, 0, 34, 32]], "hit": [[12, 2, 38, 10]] },

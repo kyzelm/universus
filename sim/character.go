@@ -18,7 +18,7 @@ package sim
 // that can grow these is a loader that can produce two different sims.
 const (
 	MaxCharacters = 4
-	MaxMoves      = 24
+	MaxMoves      = 32
 	MaxKeyframes  = 8
 	MaxBoxes      = 4
 )
@@ -32,12 +32,24 @@ const (
 
 // Cancel categories — the bitmask a move carries saying what it may be
 // cancelled into once it has connected (03 Game Design/Combat System.md, D34).
-// Supers and Drive take the next bits when they exist; the two that exist now
-// are the two categories a move can be.
+// Drive takes the next bit when that system exists.
+//
+// The three super levels are separate categories rather than one, because the
+// design tiers them by source: a level 1 comes out of cancelable normals only,
+// a level 2 out of those and specials, and a level 3 out of anything at all
+// including the heavies that cancel into nothing else. That tiering is data —
+// each source move names the levels it feeds — and it costs three bits.
 const (
 	CancelChain   uint16 = 1 << 0 // another normal
 	CancelSpecial uint16 = 1 << 1
+	CancelSuper1  uint16 = 1 << 2
+	CancelSuper2  uint16 = 1 << 3
+	CancelSuper3  uint16 = 1 << 4
 )
+
+// superCancel is the category of a super at the given level. Index 0 is unused:
+// level 0 is not a super.
+var superCancel = [4]uint16{0, CancelSuper1, CancelSuper2, CancelSuper3}
 
 // Stances a move can be performed from.
 const (
@@ -156,6 +168,13 @@ type Move struct {
 	// the first is a guess about a system that does not exist.
 	InvulnStart, InvulnEnd int32
 
+	// Super is the move's super level, 1 to 3, or 0 for everything else. It is
+	// both the identity and the price: a level N super costs N bars, which is
+	// the design's own table read straight down (03 Game Design/Resource
+	// System.md). Split the two apart when a character wants a level 2 that
+	// costs 3, and not before.
+	Super int32
+
 	// CancelInto is the set of categories this move may be cancelled into once
 	// it has connected — zero for the moves that do not cancel, which is the
 	// default and the majority.
@@ -168,6 +187,24 @@ type Move struct {
 	// stun stay here, on the move — the projectile in flight reads them back
 	// through its move index.
 	Proj ProjectileSpec
+}
+
+// SuperCost is what the move costs to perform, in resource units. Zero for
+// everything that is not a super, which is everything the meter does not gate.
+func (m *Move) SuperCost() int32 { return m.Super * BarUnits }
+
+// Category is the cancel category the move *is*, as opposed to the ones it
+// cancels into. Derived rather than authored: a super declares its level, a
+// motion makes a move a special, and the absence of both makes it a normal — so
+// nothing has to say twice what it already is, and the two cannot disagree.
+func (m *Move) Category() uint16 {
+	if m.Super > 0 && m.Super < int32(len(superCancel)) {
+		return superCancel[m.Super]
+	}
+	if m.Motion != MotionNone {
+		return CancelSpecial
+	}
+	return CancelChain
 }
 
 // Launches reports whether the move sets its own velocity. A move that does

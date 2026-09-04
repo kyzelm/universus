@@ -187,6 +187,9 @@ func TestValidationRejectsBadData(t *testing.T) {
 		{"negative landing recovery", func(c *jsonCharacter) { c.Moves[0].Landing = -1 }},
 		{"unknown cancel category", func(c *jsonCharacter) { c.Moves[0].Cancel = []string{"super4"} }},
 
+		{"a fourth super level", func(c *jsonCharacter) { c.Moves[0].Super = 4 }},
+		{"a super with no motion", func(c *jsonCharacter) { c.Moves[0].Input.Motion = "" }},
+
 		// The one the design note itself got wrong: 8.0 and -0.03 pass every
 		// individual check and give a nine-second jump.
 		{"jump constants that do not go together", func(c *jsonCharacter) { c.Gravity = "-0.03" }},
@@ -371,5 +374,80 @@ func TestVersionCoversTheBalanceFile(t *testing.T) {
 	}
 	if v == without {
 		t.Error("the version does not cover balance.json")
+	}
+}
+
+// Three supers per character, one at each level, each with a motion. A super
+// with no motion comes out on a bare button and beats the normal on it for the
+// rest of the match, which is why the loader refuses one.
+func TestTheShippedRosterHasThreeSupers(t *testing.T) {
+	cs, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, c := range cs {
+		levels := map[int32]int{}
+		for m := int32(0); m < c.NumMoves; m++ {
+			mv := &c.Moves[m]
+			if mv.Super == 0 {
+				continue
+			}
+			levels[mv.Super]++
+
+			if mv.Motion == sim.MotionNone {
+				t.Errorf("character %d: a level %d super with no motion", i, mv.Super)
+			}
+			if got, want := mv.SuperCost(), mv.Super*sim.BarUnits; got != want {
+				t.Errorf("character %d: level %d costs %d, want %d", i, mv.Super, got, want)
+			}
+			// The design's own table: cheap and low damage at level 1, the
+			// round-closer at level 3.
+			if mv.Super == 3 && mv.Damage < 2000 {
+				t.Errorf("character %d: the level 3 deals %d, which is not a round-closer", i, mv.Damage)
+			}
+		}
+
+		for lvl := int32(1); lvl <= 3; lvl++ {
+			if levels[lvl] != 1 {
+				t.Errorf("character %d has %d supers at level %d, want exactly 1", i, levels[lvl], lvl)
+			}
+		}
+	}
+}
+
+// The cancel tiering is data, and it is only tiering if the sources differ.
+// Level 1 out of cancelable normals, level 3 out of anything — including the
+// heavies, which cancel into nothing else.
+func TestSuperCancelsAreTieredBySource(t *testing.T) {
+	cs, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i, c := range cs {
+		var feedsL1, feedsL3Only, feedsFromSpecial int
+		for m := int32(0); m < c.NumMoves; m++ {
+			mv := &c.Moves[m]
+			switch {
+			case mv.CancelInto&sim.CancelSuper1 != 0:
+				feedsL1++
+			case mv.CancelInto == sim.CancelSuper3:
+				feedsL3Only++
+			}
+			if mv.Motion != sim.MotionNone && mv.Super == 0 && mv.CancelInto&sim.CancelSuper2 != 0 {
+				feedsFromSpecial++
+			}
+		}
+
+		if feedsL1 == 0 {
+			t.Errorf("character %d: nothing cancels into the level 1", i)
+		}
+		if feedsL3Only == 0 {
+			t.Errorf("character %d: no move reaches only the level 3, so the tiering is not tiered", i)
+		}
+		if feedsFromSpecial == 0 {
+			t.Errorf("character %d: no special cancels into the level 2", i)
+		}
 	}
 }
