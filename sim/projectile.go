@@ -145,7 +145,7 @@ func (s *GameState) resolveProjectiles(in [2]uint16) {
 				continue
 			}
 			c := CharacterAt(s.Players[pr.Owner].Char)
-			s.applyHit(defender, &c.Moves[pr.Move], in[defender])
+			s.applyHit(int(pr.Owner), defender, &c.Moves[pr.Move], in[defender])
 			pr.Active = 0
 			break
 		}

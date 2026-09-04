@@ -43,6 +43,19 @@ type PlayerState struct {
 
 	Health int32
 
+	// Drive and Super are the two resources (03 Game Design/Resource System.md),
+	// in units of a thousandth of a bar — see resource.go. Drive starts full
+	// every round and is spent by defence; Super starts empty, is built by
+	// fighting, and carries between rounds.
+	Drive int32
+	Super int32
+
+	// Burnout is 1 while the Drive gauge is refilling from empty. A modifier
+	// flag, not a state: a burnt-out player still walks, attacks and blocks —
+	// they do it with longer blockstun, chip damage on blocked specials, and no
+	// Drive mechanics at all.
+	Burnout int32
+
 	// State and StateFrame are the state machine. StateFrame counts from 0 on
 	// the frame the state was entered.
 	State      int32
@@ -136,6 +149,10 @@ func NewMatch(c0, c1 int32) GameState {
 	for i := range s.Players {
 		s.Players[i].MoveIndex = -1
 		s.Players[i].Eaten = -1
+		// Drive starts full and Super starts empty. Super carrying over between
+		// rounds is what makes it strategic — there are no rounds yet, so for
+		// now it starts a match at zero and that is the whole rule.
+		s.Players[i].Drive = DriveMax
 	}
 	s.updateCamera()
 	return s
@@ -257,8 +274,10 @@ func (s *GameState) Advance(in [2]uint16) {
 	// order the loop happened to reach them.
 	s.resolveProjectiles(in)
 
-	// 8. Timers, resources, round state — round flow is M2. The camera is here
-	// because it is derived from positions, which are final by now.
+	// 8. Timers, resources, round state — round flow is still to come. The
+	// camera is here because it is derived from positions, which are final by
+	// now, and the resources after the hits that spent and built them.
+	s.updateResources()
 	s.updateCamera()
 
 	// 9. Increment frame. The caller takes the checksum; the sim does not
@@ -300,31 +319,54 @@ func (s *GameState) resolveHit(attacker, defender int, mv *Move, defenderIn uint
 		return
 	}
 	ap.HasHit = 1
-	s.applyHit(defender, mv, defenderIn)
+	s.applyHit(attacker, defender, mv, defenderIn)
 }
 
 // applyHit is the half of a connect that lands on the defender: block or hit,
-// stun, damage, hitstop. Split out because a projectile connects without any
-// attacker to mark — the fireball's owner may have recovered and walked away
-// frames ago, and marking their current move as having hit would disable a
-// hitbox they are holding out right now.
-func (s *GameState) applyHit(defender int, mv *Move, defenderIn uint16) {
-	dp := &s.Players[defender]
+// stun, damage, resources, hitstop. Split out because a projectile connects
+// without any attacker to *mark* — the fireball's owner may have recovered and
+// walked away frames ago, and marking their current move as having hit would
+// disable a hitbox they are holding out right now. They still own the meter it
+// builds, which is why the index comes along.
+func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16) {
+	ap, dp := &s.Players[attacker], &s.Players[defender]
 
 	if s.blocking(defender, defenderIn, mv.Level) {
 		dp.enter(StateBlockstun)
 		dp.Stun = mv.Blockstun
-		// ponytail: no chip damage. It only exists during Burnout, and Burnout
-		// is the Drive system, which is M2.
+
+		if dp.Burnout != 0 {
+			// The Burnout penalties, and the only place in the game where
+			// blocking deals damage (D32). No further Drive is taken: the
+			// gauge is already empty and refilling, and taking from it again
+			// would extend Burnout for as long as the pressure lasts.
+			dp.Stun += balance.BurnoutBlockstun
+			if mv.Motion != MotionNone {
+				dp.hurt(mv.Damage * balance.BurnoutChipPercent / 100)
+			}
+		} else {
+			// **Blocking spends Drive.** This is the pressure loop: defence
+			// costs a resource, and the resource running out is Burnout.
+			dp.spendDrive(balance.DriveBlockCost)
+		}
 	} else {
 		dp.enter(StateHitstun)
 		dp.Stun = mv.Hitstun
-		dp.Health -= mv.Damage
-		if dp.Health < 0 {
-			dp.Health = 0
-		}
+		dp.hurt(mv.Damage)
+
+		// Both fighters build Super from the same hit, at different rates: the
+		// one landing it is rewarded, the one eating it is compensated.
+		ap.gainSuper(mv.Damage * balance.SuperDealtPercent / 100)
+		dp.gainSuper(mv.Damage * balance.SuperTakenPercent / 100)
+
 		// ponytail: no damage scaling, no juggles, no counter hits. Combo
-		// scaling is M2 and needs a combo counter to scale against.
+		// scaling needs a combo counter to scale against.
+	}
+
+	// A special that connects pays a flat bonus whether it hit or was blocked.
+	// It is paid for the connect, not for the damage behind it.
+	if mv.Motion != MotionNone {
+		ap.gainSuper(balance.SuperOnSpecial)
 	}
 
 	// Hitstop is one value for the match, not one per player: both fighters

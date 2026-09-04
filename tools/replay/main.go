@@ -56,6 +56,12 @@ func loadRoster() error {
 	if !sim.LoadCharacters(cs) {
 		return fmt.Errorf("sim refused the roster (%d characters)", len(cs))
 	}
+
+	b, err := data.LoadBalance()
+	if err != nil {
+		return err
+	}
+	sim.LoadBalance(b)
 	return nil
 }
 

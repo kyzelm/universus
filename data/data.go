@@ -24,8 +24,14 @@ import (
 	"universus/sim"
 )
 
-//go:embed characters/*.json
+//go:embed characters/*.json balance.json
 var files embed.FS
+
+// balanceFile is the global tunables. Not a character, but part of the same
+// identity for the same reason: two clients with different Drive costs run
+// different simulations from identical inputs, so it is embedded and it is
+// covered by Version.
+const balanceFile = "balance.json"
 
 // Load reads, validates and converts the embedded roster.
 //
@@ -67,6 +73,27 @@ func Load() ([]sim.Character, error) {
 	return out, nil
 }
 
+// LoadBalance reads, validates and converts the embedded tunables.
+func LoadBalance() (sim.Balance, error) {
+	var b sim.Balance
+
+	raw, err := files.ReadFile(balanceFile)
+	if err != nil {
+		return b, err
+	}
+
+	var jb jsonBalance
+	if err := json.Unmarshal(raw, &jb); err != nil {
+		return b, fmt.Errorf("%s: %w", balanceFile, err)
+	}
+
+	b, err = jb.convert()
+	if err != nil {
+		return b, fmt.Errorf("%s: %w", balanceFile, err)
+	}
+	return b, nil
+}
+
 // Version is a hash of the raw embedded bytes — the value the match handshake
 // compares. It covers the files as authored, before conversion, so any edit to
 // any character changes it.
@@ -80,7 +107,9 @@ func Version() (uint32, error) {
 	}
 
 	h := uint32(2166136261)
-	for _, name := range names {
+	// The balance file is hashed with the roster: a client that tuned the block
+	// cost is as desynced as one that tuned a hitbox.
+	for _, name := range append(names, balanceFile) {
 		raw, err := files.ReadFile(name)
 		if err != nil {
 			return 0, err
@@ -136,6 +165,79 @@ type jsonCharacter struct {
 	AirHurt    []json.Number `json:"airHurt"`
 
 	Moves []jsonMove `json:"moves"`
+}
+
+// jsonBalance groups by resource, because that is how the design note reads and
+// how the values are tuned. All integers: a resource is never a float.
+type jsonBalance struct {
+	Drive struct {
+		Regen            int `json:"regen"`
+		RegenWalkForward int `json:"regenWalkForward"`
+		RegenBurnout     int `json:"regenBurnout"`
+		BlockCost        int `json:"blockCost"`
+		BurnoutBlockstun int `json:"burnoutBlockstun"`
+		BurnoutChip      int `json:"burnoutChipPercent"`
+	} `json:"drive"`
+
+	Super struct {
+		DealtPercent int `json:"dealtPercent"`
+		TakenPercent int `json:"takenPercent"`
+		OnSpecial    int `json:"onSpecial"`
+	} `json:"super"`
+}
+
+func (jb *jsonBalance) convert() (sim.Balance, error) {
+	var b sim.Balance
+
+	for _, f := range []struct {
+		name string
+		n    int
+		dst  *int32
+	}{
+		{"drive.regen", jb.Drive.Regen, &b.DriveRegen},
+		{"drive.regenWalkForward", jb.Drive.RegenWalkForward, &b.DriveRegenWalkF},
+		{"drive.regenBurnout", jb.Drive.RegenBurnout, &b.DriveRegenBurnout},
+		{"drive.blockCost", jb.Drive.BlockCost, &b.DriveBlockCost},
+		{"drive.burnoutBlockstun", jb.Drive.BurnoutBlockstun, &b.BurnoutBlockstun},
+		{"drive.burnoutChipPercent", jb.Drive.BurnoutChip, &b.BurnoutChipPercent},
+		{"super.dealtPercent", jb.Super.DealtPercent, &b.SuperDealtPercent},
+		{"super.takenPercent", jb.Super.TakenPercent, &b.SuperTakenPercent},
+		{"super.onSpecial", jb.Super.OnSpecial, &b.SuperOnSpecial},
+	} {
+		if f.n < 0 {
+			return b, fmt.Errorf("%s must not be negative, got %d", f.name, f.n)
+		}
+		*f.dst = int32(f.n)
+	}
+
+	// Chip is a fraction of the move's damage, so a value over 100 makes
+	// blocking a special worse than eating it.
+	if b.BurnoutChipPercent > 100 {
+		return b, fmt.Errorf("drive.burnoutChipPercent is %d, want 0..100", b.BurnoutChipPercent)
+	}
+	if b.DriveBlockCost <= 0 {
+		return b, fmt.Errorf("drive.blockCost must be positive, or blocking is free")
+	}
+	// Walking in is meant to be the faster rate. If it is not, the gauge
+	// rewards backing off, which is the opposite of the design.
+	if b.DriveRegenWalkF < b.DriveRegen {
+		return b, fmt.Errorf("drive.regenWalkForward %d is below drive.regen %d",
+			b.DriveRegenWalkF, b.DriveRegen)
+	}
+
+	// Coupled, like jumpVelocity against gravity: the refill rate is what sets
+	// how long Burnout lasts, and neither field says so on its own. The design
+	// note asks for ~9 seconds; anything from 1 to 30 is a game, and zero is a
+	// player who never comes out of Burnout at all.
+	if b.DriveRegenBurnout <= 0 {
+		return b, fmt.Errorf("drive.regenBurnout must be positive, or Burnout never ends")
+	}
+	if f := sim.DriveMax / b.DriveRegenBurnout; f < 60 || f > 1800 {
+		return b, fmt.Errorf("drive.regenBurnout %d gives a %d-frame Burnout, want 60..1800",
+			b.DriveRegenBurnout, f)
+	}
+
+	return b, nil
 }
 
 type jsonMove struct {

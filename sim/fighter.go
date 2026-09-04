@@ -72,6 +72,16 @@ func (p *PlayerState) land(n int32) {
 	p.Stun = n
 }
 
+// hurt takes n damage, floored at zero. One place, because chip damage and a
+// clean hit must clamp the same way — a health value below zero is a bar that
+// draws backwards and a round that ends twice.
+func (p *PlayerState) hurt(n int32) {
+	p.Health -= n
+	if p.Health < 0 {
+		p.Health = 0
+	}
+}
+
 // stay is enter for a state the player may already be in: holding forward for
 // twenty frames is one walk, not twenty. Re-entering every frame would pin
 // StateFrame at zero and make "frames spent in this state" unusable for

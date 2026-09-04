@@ -17,13 +17,15 @@ package sim
 //
 // Player block:
 //
-//	 0  int32   X (Fix)          16  int32  state
-//	 4  int32   Y (Fix)          20  int32  state frame
-//	 8  int32   facing           24  int32  health
-//	12  int32   move index       28  pushbox   (4 x int32)
-//	44  uint32  hurt count       48  hurtboxes (MaxBoxes x 4 x int32)
-//	48+64 = 112  uint32 hit count
-//	116 hitboxes (MaxBoxes x 4 x int32)
+//	 0  int32   X (Fix)          20  int32  state frame
+//	 4  int32   Y (Fix)          24  int32  health
+//	 8  int32   facing           28  int32  drive
+//	12  int32   move index       32  int32  super
+//	16  int32   state            36  int32  burnout
+//	40  pushbox (4 x int32)
+//	56  uint32  hurt count       60  hurtboxes (MaxBoxes x 4 x int32)
+//	60+64 = 124  uint32 hit count
+//	128 hitboxes (MaxBoxes x 4 x int32)
 //
 // Boxes ride along for the debug overlay. It is the tool that debugs every
 // system built on top of them, so it is built early and it reads the same boxes
@@ -31,7 +33,7 @@ package sim
 // wrong thing.
 const (
 	boxSize            = 4 * 4
-	PlayerSnapshotSize = 7*4 + boxSize + 2*(4+MaxBoxes*boxSize)
+	PlayerSnapshotSize = 10*4 + boxSize + 2*(4+MaxBoxes*boxSize)
 	projOffset         = 3*4 + 2*PlayerSnapshotSize
 	SnapshotSize       = projOffset + 4 + MaxProjectiles*boxSize
 )
@@ -82,15 +84,20 @@ func (s *GameState) WriteSnapshot(b []byte) {
 		putI32(o[16:], p.State)
 		putI32(o[20:], p.StateFrame)
 		putI32(o[24:], p.Health)
-		putBox(o[28:], s.Pushbox(i))
+		// The gauges ride along with health: they are the two most-read HUD
+		// elements after it, and Burnout has to be unmistakable on screen.
+		putI32(o[28:], p.Drive)
+		putI32(o[32:], p.Super)
+		putI32(o[36:], p.Burnout)
+		putBox(o[40:], s.Pushbox(i))
 
 		n := s.Hurtboxes(i, &boxes)
-		putU32(o[44:], uint32(n))
+		putU32(o[56:], uint32(n))
 		for k := int32(0); k < n; k++ {
-			putBox(o[48+int(k)*boxSize:], boxes[k])
+			putBox(o[60+int(k)*boxSize:], boxes[k])
 		}
 
-		hitOff := 48 + MaxBoxes*boxSize
+		hitOff := 60 + MaxBoxes*boxSize
 		n = s.Hitboxes(i, &boxes)
 		putU32(o[hitOff:], uint32(n))
 		for k := int32(0); k < n; k++ {

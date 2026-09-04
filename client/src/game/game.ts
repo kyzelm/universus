@@ -9,6 +9,9 @@ import {
   loadSim,
   type PlayerSnapshot,
   readSnapshot,
+  BAR_UNITS,
+  DRIVE_BARS,
+  SUPER_BARS,
   reset,
   rewind,
   STATE_NAMES,
@@ -97,7 +100,7 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     text: '',
     style: {fill: 0x8a94a6, fontFamily: 'monospace', fontSize: 12},
   })
-  hud.position.set(8, 30)
+  hud.position.set(8, 52)
   app.stage.addChild(hud)
 
   const input = createInput()
@@ -143,7 +146,7 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     // A projectile is a hitbox with no character attached, so it is drawn as
     // one: the overlay's job is to show what can hit you.
     for (const b of snap.projectiles) drawHitbox(boxes, b)
-    for (let i = 0; i < bars.length; i++) drawHealth(bars[i], snap.players[i], i)
+    for (let i = 0; i < bars.length; i++) drawBars(bars[i], snap.players[i], i, snap.frame)
 
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.
@@ -202,15 +205,67 @@ function drawHitbox(g: Graphics, b: Box): void {
 const BAR_W = 340
 const MAX_HEALTH = 10000
 
-function drawHealth(g: Graphics, p: PlayerSnapshot, seat: number): void {
+const EMPTY_COLOR = 0x2a2f38
+const HEALTH_COLOR = 0xd8c15a
+const DRIVE_COLOR = 0x4ac8e0
+const BURNOUT_COLOR = 0xe07a2a
+const SUPER_COLOR = 0xc86ee0
+
+/**
+ * Health, then the two resources. They are the most-read elements on screen
+ * after the fighters, and Burnout has to be readable at a glance: the Drive
+ * gauge changes colour and pulses, so a supervisor watching a demo can see the
+ * resource system working without being told.
+ */
+function drawBars(g: Graphics, p: PlayerSnapshot, seat: number, frame: number): void {
   const x = seat === 0 ? 10 : VIEW_W - 10 - BAR_W
-  const frac = Math.max(0, Math.min(1, p.health / MAX_HEALTH))
-  const w = BAR_W * frac
 
   g.clear()
-  g.rect(x, 8, BAR_W, 14).fill(0x2a2f38)
+  g.rect(x, 8, BAR_W, 14).fill(EMPTY_COLOR)
   // Drains from the centre outward, so both bars empty toward the middle.
-  g.rect(seat === 0 ? x + BAR_W - w : x, 8, w, 14).fill(0xd8c15a)
+  const w = BAR_W * clamp01(p.health / MAX_HEALTH)
+  g.rect(seat === 0 ? x + BAR_W - w : x, 8, w, 14).fill(HEALTH_COLOR)
+
+  const burnout = p.burnout !== 0
+  drawGauge(g, x, 25, 9, seat, p.drive, DRIVE_BARS, {
+    color: burnout ? BURNOUT_COLOR : DRIVE_COLOR,
+    // A slow pulse, driven by the sim's frame so it cannot drift from the
+    // state it is reporting.
+    alpha: burnout ? 0.55 + 0.45 * Math.sin(frame / 6) : 1,
+  })
+  drawGauge(g, x, 37, 7, seat, p.super, SUPER_BARS, {color: SUPER_COLOR, alpha: 1})
+}
+
+/**
+ * One segmented gauge. The segments are the point: a bar count is what the
+ * player reads, since every Drive mechanic is priced in whole or half bars.
+ */
+function drawGauge(
+  g: Graphics,
+  x: number,
+  y: number,
+  h: number,
+  seat: number,
+  value: number,
+  bars: number,
+  style: {color: number; alpha: number},
+): void {
+  const gap = 2
+  const segW = (BAR_W - gap * (bars - 1)) / bars
+
+  for (let i = 0; i < bars; i++) {
+    // Both gauges fill away from the outside edge of the screen, like health.
+    const index = seat === 0 ? bars - 1 - i : i
+    const sx = x + index * (segW + gap)
+    const filled = clamp01(value / BAR_UNITS - i) * segW
+
+    g.rect(sx, y, segW, h).fill(EMPTY_COLOR)
+    g.rect(seat === 0 ? sx + segW - filled : sx, y, filled, h).fill(style)
+  }
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v))
 }
 
 function localHud(
@@ -220,7 +275,12 @@ function localHud(
   const ms = (p: number) => stepCost.percentile(p).toFixed(3)
   const who = (i: number) => {
     const p = snap.players[i]
-    return `p${i} ${STATE_NAMES[p.state] ?? p.state}:${p.stateFrame} hp ${p.health}`
+    const drive = (p.drive / BAR_UNITS).toFixed(1)
+    const meter = (p.super / BAR_UNITS).toFixed(1)
+    return (
+      `p${i} ${STATE_NAMES[p.state] ?? p.state}:${p.stateFrame} hp ${p.health} ` +
+      `drive ${drive}${p.burnout ? ' BURNOUT' : ''} super ${meter}`
+    )
   }
   return [
     `frame ${snap.frame}`,

@@ -1,0 +1,18 @@
+{
+  "_comment": "Global tunables — 03 Game Design/Resource System.md. Not character data: one set of numbers for the match. Drive and Super are in thousandths of a bar; rates are units per frame; percentages are out of 100.",
+
+  "drive": {
+    "regen": 6,
+    "regenWalkForward": 12,
+    "regenBurnout": 12,
+    "blockCost": 250,
+    "burnoutBlockstun": 4,
+    "burnoutChipPercent": 12
+  },
+
+  "super": {
+    "dealtPercent": 30,
+    "takenPercent": 15,
+    "onSpecial": 100
+  }
+}

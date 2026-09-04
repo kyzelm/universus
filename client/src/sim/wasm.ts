@@ -28,8 +28,8 @@ const ONE = 65536
 const MAX_BOXES = 4
 const MAX_PROJECTILES = 4
 const BOX = 4 * 4
-const HIT_OFF = 48 + MAX_BOXES * BOX
-const PLAYER_SIZE = 7 * 4 + BOX + 2 * (4 + MAX_BOXES * BOX)
+const HIT_OFF = 60 + MAX_BOXES * BOX
+const PLAYER_SIZE = 10 * 4 + BOX + 2 * (4 + MAX_BOXES * BOX)
 const HEADER = 3 * 4
 const PROJ_OFF = HEADER + 2 * PLAYER_SIZE
 
@@ -46,7 +46,17 @@ export const STATE_NAMES = [
   'attack',
   'hitstun',
   'blockstun',
+  'landing',
 ]
+
+/**
+ * Resource maxima, mirroring sim/resource.go: a bar is a thousand units, and
+ * the gauges are 6 and 3 bars. The HUD needs them to draw a fraction; the sim
+ * is the only thing that may change them.
+ */
+export const DRIVE_BARS = 6
+export const SUPER_BARS = 3
+export const BAR_UNITS = 1000
 
 export interface Box {
   x: number
@@ -63,6 +73,10 @@ export interface PlayerSnapshot {
   state: number
   stateFrame: number
   health: number
+  drive: number
+  super: number
+  /** 1 while the Drive gauge is refilling from empty. */
+  burnout: number
   pushbox: Box
   hurtboxes: Box[]
   hitboxes: Box[]
@@ -196,8 +210,11 @@ export function readSnapshot(): Snapshot {
         state: v.getInt32(o + 16, true),
         stateFrame: v.getInt32(o + 20, true),
         health: v.getInt32(o + 24, true),
-        pushbox: readBox(v, o + 28),
-        hurtboxes: readBoxList(v, o + 44),
+        drive: v.getInt32(o + 28, true),
+        super: v.getInt32(o + 32, true),
+        burnout: v.getInt32(o + 36, true),
+        pushbox: readBox(v, o + 40),
+        hurtboxes: readBoxList(v, o + 56),
         hitboxes: readBoxList(v, o + HIT_OFF),
       }
     }),

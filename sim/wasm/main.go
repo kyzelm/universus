@@ -29,6 +29,13 @@ func main() {
 	if !sim.LoadCharacters(cs) {
 		panic("sim refused the embedded roster")
 	}
+	// The balance data is loaded for the same reason and with the same
+	// consequence: an unloaded balance is a match with no Drive costs.
+	b, err := data.LoadBalance()
+	if err != nil {
+		panic("balance data failed to load: " + err.Error())
+	}
+	sim.LoadBalance(b)
 	session = sim.NewSession()
 
 	done := make(chan struct{})

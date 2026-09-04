@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs'
 import {beforeAll, expect, test} from 'vitest'
 import '../../public/wasm_exec.js'
-import {advance, initSim, readSnapshot, reset} from './wasm'
+import {advance, BAR_UNITS, DRIVE_BARS, initSim, readSnapshot, reset, SUPER_BARS} from './wasm'
 
 // The Go build and the TypeScript reader agree on a byte layout or they do
 // not. This runs the real module off disk and checks that they do.
@@ -33,6 +33,45 @@ test('frame 0 is readable before the first advance', () => {
   // Health comes from the embedded character file; a zero here means the
   // roster did not load inside the WASM binary.
   expect(s.players[0].health).toBeGreaterThan(0)
+})
+
+// The gauges are read from the same block as health and one field further
+// along. A wrong offset here reads the pushbox as a resource, which draws a
+// full Drive gauge for a player who is in Burnout.
+test('the resource gauges cross the boundary', () => {
+  reset()
+  const start = readSnapshot()
+
+  expect(start.players.map((p) => p.drive)).toEqual([
+    DRIVE_BARS * BAR_UNITS,
+    DRIVE_BARS * BAR_UNITS,
+  ])
+  expect(start.players.map((p) => [p.super, p.burnout])).toEqual([
+    [0, 0],
+    [0, 0],
+  ])
+
+  // Same walk-in as the hit test: they start out of range of everything, and
+  // holding away walks the defender back out of it again.
+  const walkIn = () => {
+    for (let i = 0; i < 60; i++) advance(RIGHT, LEFT)
+  }
+
+  // Blocking spends Drive. Player 1 faces left, so RIGHT is holding away.
+  walkIn()
+  for (let i = 0; i < 40; i++) advance(i === 0 ? LP : 0, RIGHT)
+  const blocked = readSnapshot()
+  expect(blocked.players[1].drive).toBeLessThan(DRIVE_BARS * BAR_UNITS)
+  expect(blocked.players[1].health).toBe(start.players[1].health)
+
+  // Landing one builds Super for both of them, at different rates.
+  walkIn()
+  for (let i = 0; i < 40; i++) advance(i === 0 ? LP : 0, 0)
+  const hit = readSnapshot()
+  expect(hit.players[0].super).toBeGreaterThan(0)
+  expect(hit.players[1].super).toBeGreaterThan(0)
+  expect(hit.players[0].super).toBeGreaterThan(hit.players[1].super)
+  expect(hit.players[0].super).toBeLessThanOrEqual(SUPER_BARS * BAR_UNITS)
 })
 
 // The overlay is only worth having if it shows the boxes the sim collides.

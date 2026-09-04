@@ -16,7 +16,31 @@ func TestMain(m *testing.M) {
 	if !LoadCharacters([]Character{testCharacter()}) {
 		panic("fixture roster rejected")
 	}
+	LoadBalance(testBalance())
 	os.Exit(m.Run())
+}
+
+// The balance fixture, in round numbers for the same reason as the character
+// one: a test that asserts "eight blocked hits burn you out" must not fail
+// because someone tuned the block cost.
+//
+// One bar per blocked hit, 100 units of regeneration a frame, and a Burnout
+// that refills in exactly 20 frames.
+func testBalance() Balance {
+	return Balance{
+		DriveRegen:      10,
+		DriveRegenWalkF: 20,
+
+		DriveRegenBurnout: DriveMax / 20,
+		DriveBlockCost:    BarUnits,
+
+		BurnoutBlockstun:   5,
+		BurnoutChipPercent: 10,
+
+		SuperDealtPercent: 50,
+		SuperTakenPercent: 25,
+		SuperOnSpecial:    200,
+	}
 }
 
 func testCharacter() Character {

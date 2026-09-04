@@ -252,3 +252,124 @@ func validCharacter(t *testing.T) jsonCharacter {
 	}
 	return jc
 }
+
+// The balance file is loaded on the same terms as the roster: it fails here
+// rather than at the start of a match, and every field it sets is one the sim
+// would otherwise run at zero.
+func TestEmbeddedBalanceLoads(t *testing.T) {
+	b, err := LoadBalance()
+	if err != nil {
+		t.Fatalf("the embedded balance does not load: %v", err)
+	}
+
+	// A zero here is a renamed or mistyped key, which parses without complaint
+	// and shows up in play as a gauge that never moves.
+	for _, f := range []struct {
+		name string
+		v    int32
+	}{
+		{"drive.regen", b.DriveRegen},
+		{"drive.regenWalkForward", b.DriveRegenWalkF},
+		{"drive.regenBurnout", b.DriveRegenBurnout},
+		{"drive.blockCost", b.DriveBlockCost},
+		{"drive.burnoutBlockstun", b.BurnoutBlockstun},
+		{"drive.burnoutChipPercent", b.BurnoutChipPercent},
+		{"super.dealtPercent", b.SuperDealtPercent},
+		{"super.takenPercent", b.SuperTakenPercent},
+		{"super.onSpecial", b.SuperOnSpecial},
+	} {
+		if f.v <= 0 {
+			t.Errorf("%s is %d", f.name, f.v)
+		}
+	}
+
+	// The shipped numbers have to produce a game, not just a valid file. The
+	// design note asks for a Burnout of roughly nine seconds and a Drive gauge
+	// that a blocking player can actually empty.
+	if f := sim.DriveMax / b.DriveRegenBurnout; f < 300 || f > 720 {
+		t.Errorf("Burnout lasts %d frames, want roughly the ~9 seconds the design asks for", f)
+	}
+	if n := sim.DriveMax / b.DriveBlockCost; n < 8 || n > 40 {
+		t.Errorf("%d blocked hits empty the gauge; that is not a pressure system", n)
+	}
+}
+
+func TestBalanceValidationRejectsBadData(t *testing.T) {
+	valid := func(t *testing.T) jsonBalance {
+		t.Helper()
+		raw, err := files.ReadFile(balanceFile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var jb jsonBalance
+		if err := json.Unmarshal(raw, &jb); err != nil {
+			t.Fatal(err)
+		}
+		return jb
+	}
+
+	for _, tc := range []struct {
+		name string
+		edit func(*jsonBalance)
+	}{
+		{"negative regen", func(b *jsonBalance) { b.Drive.Regen = -1 }},
+		{"free blocking", func(b *jsonBalance) { b.Drive.BlockCost = 0 }},
+		{"chip over 100%", func(b *jsonBalance) { b.Drive.BurnoutChip = 101 }},
+		{"walking in regenerates slower than standing still", func(b *jsonBalance) {
+			b.Drive.RegenWalkForward = b.Drive.Regen - 1
+		}},
+		{"Burnout that never ends", func(b *jsonBalance) { b.Drive.RegenBurnout = 0 }},
+		{"Burnout over in a blink", func(b *jsonBalance) { b.Drive.RegenBurnout = sim.DriveMax }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jb := valid(t)
+			tc.edit(&jb)
+			if _, err := jb.convert(); err == nil {
+				t.Error("accepted balance data that should have been rejected")
+			}
+		})
+	}
+}
+
+// The balance file is part of the simulation's identity: a client that tuned
+// the block cost is as desynced as one that tuned a hitbox, and the handshake
+// compares one number for both.
+func TestVersionCoversTheBalanceFile(t *testing.T) {
+	raw, err := files.ReadFile(balanceFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := Version()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := uint32(2166136261)
+	for _, b := range raw {
+		h = (h ^ uint32(b)) * 16777619
+	}
+	if v == h {
+		t.Fatal("setup: the version is the balance hash alone")
+	}
+
+	// Hashing the roster without it must give a different answer, or the file
+	// is embedded and unhashed.
+	names, err := filenames()
+	if err != nil {
+		t.Fatal(err)
+	}
+	without := uint32(2166136261)
+	for _, name := range names {
+		r, err := files.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, b := range append([]byte(name), r...) {
+			without = (without ^ uint32(b)) * 16777619
+		}
+	}
+	if v == without {
+		t.Error("the version does not cover balance.json")
+	}
+}
