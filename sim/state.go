@@ -50,6 +50,18 @@ type PlayerState struct {
 	Drive int32
 	Super int32
 
+	// Combo is how many hits the player has taken without recovering, and
+	// ComboStarter the scaling multiplier captured from the move that began it
+	// — captured, because the starter scales the whole combo and the move that
+	// started it is gone by the third hit.
+	//
+	// Counter is the class of the most recent hit taken (CounterNone,
+	// CounterHit, CounterPunish). In the state because the HUD reads it: a
+	// counter hit nobody can see is one nobody learns from.
+	Combo        int32
+	ComboStarter int32
+	Counter      int32
+
 	// Burnout is 1 while the Drive gauge is refilling from empty. A modifier
 	// flag, not a state: a burnt-out player still walks, attacks and blocks —
 	// they do it with longer blockstun, chip damage on blocked specials, and no
@@ -278,6 +290,17 @@ func (s *GameState) Advance(in [2]uint16) {
 	// camera is here because it is derived from positions, which are final by
 	// now, and the resources after the hits that spent and built them.
 	s.updateResources()
+
+	// A combo lasts exactly as long as the hitstun holding it together. The
+	// moment the defender is out of hitstun the next hit starts a new combo at
+	// full damage, which is the definition of the combo ending — and this runs
+	// after resolution, so a hit landed this frame is already counted.
+	for i := range s.Players {
+		if p := &s.Players[i]; p.State != StateHitstun {
+			p.Combo = 0
+			p.ComboStarter = 0
+		}
+	}
 	s.updateCamera()
 
 	// 9. Increment frame. The caller takes the checksum; the sim does not
@@ -332,6 +355,8 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 	ap, dp := &s.Players[attacker], &s.Players[defender]
 
 	if s.blocking(defender, defenderIn, mv.Level) {
+		// A blocked hit is not a hit: it ends no combo and starts none, and the
+		// counter class of the last real hit stands until the next one.
 		dp.enter(StateBlockstun)
 		dp.Stun = mv.Blockstun
 
@@ -342,7 +367,9 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 			// would extend Burnout for as long as the pressure lasts.
 			dp.Stun += balance.BurnoutBlockstun
 			if mv.Motion != MotionNone {
-				dp.hurt(mv.Damage * balance.BurnoutChipPercent / 100)
+				// Chip, and chip cannot kill. Losing a round to a blocked
+				// fireball is the most unsatisfying way to lose one.
+				dp.chip(mv.Damage * balance.BurnoutChipPercent / 100)
 			}
 		} else {
 			// **Blocking spends Drive.** This is the pressure loop: defence
@@ -350,17 +377,34 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 			dp.spendDrive(balance.DriveBlockCost)
 		}
 	} else {
-		dp.enter(StateHitstun)
-		dp.Stun = mv.Hitstun
-		dp.hurt(mv.Damage)
+		// The counter class is read before anything is applied: it is a fact
+		// about the defender's own attack, and entering hitstun destroys it.
+		counter := s.counterClass(defender)
 
-		// Both fighters build Super from the same hit, at different rates: the
-		// one landing it is rewarded, the one eating it is compensated.
+		// The starter scales the whole combo, so it is captured on the hit that
+		// begins one and never recomputed. Reading it off the current move
+		// instead would let a combo that started with a jab finish at heavy
+		// scaling, which is the entire thing starter scaling exists to stop.
+		if dp.Combo == 0 {
+			dp.ComboStarter = starterScale(mv)
+		}
+		dp.Combo++
+		dp.Counter = counter
+
+		dp.enter(StateHitstun)
+		dp.Stun = mv.Hitstun + counterHitstun(counter)
+		dp.hurt(scaledDamage(mv, dp.ComboStarter, dp.Combo, counter))
+
+		// Super is built from the move's base damage, not the scaled figure.
+		// Metering off the scaled number would pay less for the tenth hit of a
+		// combo than for the first, which quietly makes long combos worse than
+		// short ones at building meter — a balance decision nobody made.
 		ap.gainSuper(mv.Damage * balance.SuperDealtPercent / 100)
 		dp.gainSuper(mv.Damage * balance.SuperTakenPercent / 100)
 
-		// ponytail: no damage scaling, no juggles, no counter hits. Combo
-		// scaling needs a combo counter to scale against.
+		// ponytail: no juggles. A juggle counter needs something that puts the
+		// defender in the air, and no move launches anyone but its own owner —
+		// juggles arrive with knockdowns and launchers, not before.
 	}
 
 	// A special that connects pays a flat bonus whether it hit or was blocked.

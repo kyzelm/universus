@@ -50,6 +50,22 @@ type Balance struct {
 	BurnoutBlockstun   int32
 	BurnoutChipPercent int32
 
+	// The damage pipeline (see damage.go). ComboScale is indexed by hit number
+	// and its last entry is the floor; the starters are the multiplier the move
+	// that began a combo applies to the whole of it.
+	ComboScale       [ComboScaleSteps]int32
+	StarterLight     int32
+	StarterMedium    int32
+	StarterHeavy     int32
+	MinDamagePercent int32
+
+	// A counter hit pays more damage and more hitstun; a punish counter — a hit
+	// landed in the opponent's recovery — pays the same damage and more frames
+	// still.
+	CounterHitPercent int32
+	CounterHitstun    int32
+	PunishHitstun     int32
+
 	// Super is built by dealing damage, by taking it, and by landing a special.
 	// The first two are percentages of the damage; the third is flat, because
 	// it is paid for the connect rather than for the numbers behind it.

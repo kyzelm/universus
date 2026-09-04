@@ -179,6 +179,17 @@ type jsonBalance struct {
 		BurnoutChip      int `json:"burnoutChipPercent"`
 	} `json:"drive"`
 
+	Damage struct {
+		ComboScale        []int `json:"comboScale"`
+		StarterLight      int   `json:"starterLight"`
+		StarterMedium     int   `json:"starterMedium"`
+		StarterHeavy      int   `json:"starterHeavy"`
+		MinDamagePercent  int   `json:"minDamagePercent"`
+		CounterHitPercent int   `json:"counterHitPercent"`
+		CounterHitstun    int   `json:"counterHitstun"`
+		PunishHitstun     int   `json:"punishHitstun"`
+	} `json:"damage"`
+
 	Super struct {
 		DealtPercent int `json:"dealtPercent"`
 		TakenPercent int `json:"takenPercent"`
@@ -200,6 +211,13 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 		{"drive.blockCost", jb.Drive.BlockCost, &b.DriveBlockCost},
 		{"drive.burnoutBlockstun", jb.Drive.BurnoutBlockstun, &b.BurnoutBlockstun},
 		{"drive.burnoutChipPercent", jb.Drive.BurnoutChip, &b.BurnoutChipPercent},
+		{"damage.starterLight", jb.Damage.StarterLight, &b.StarterLight},
+		{"damage.starterMedium", jb.Damage.StarterMedium, &b.StarterMedium},
+		{"damage.starterHeavy", jb.Damage.StarterHeavy, &b.StarterHeavy},
+		{"damage.minDamagePercent", jb.Damage.MinDamagePercent, &b.MinDamagePercent},
+		{"damage.counterHitPercent", jb.Damage.CounterHitPercent, &b.CounterHitPercent},
+		{"damage.counterHitstun", jb.Damage.CounterHitstun, &b.CounterHitstun},
+		{"damage.punishHitstun", jb.Damage.PunishHitstun, &b.PunishHitstun},
 		{"super.dealtPercent", jb.Super.DealtPercent, &b.SuperDealtPercent},
 		{"super.takenPercent", jb.Super.TakenPercent, &b.SuperTakenPercent},
 		{"super.onSpecial", jb.Super.OnSpecial, &b.SuperOnSpecial},
@@ -235,6 +253,57 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 	if f := sim.DriveMax / b.DriveRegenBurnout; f < 60 || f > 1800 {
 		return b, fmt.Errorf("drive.regenBurnout %d gives a %d-frame Burnout, want 60..1800",
 			b.DriveRegenBurnout, f)
+	}
+
+	// The scaling table. Exactly one entry per step, because the last one is
+	// the floor every hit past the table takes and a short table would silently
+	// move that floor.
+	if len(jb.Damage.ComboScale) != sim.ComboScaleSteps {
+		return b, fmt.Errorf("damage.comboScale has %d entries, want %d",
+			len(jb.Damage.ComboScale), sim.ComboScaleSteps)
+	}
+	prev := 101
+	for i, v := range jb.Damage.ComboScale {
+		if v <= 0 || v > 100 {
+			return b, fmt.Errorf("damage.comboScale[%d] is %d, want 1..100", i, v)
+		}
+		// Scaling that goes back up is a transposed pair, and the symptom is a
+		// combo that deals more on its sixth hit than its fifth.
+		if v > prev {
+			return b, fmt.Errorf("damage.comboScale[%d] is %d, above the %d before it", i, v, prev)
+		}
+		prev = v
+		b.ComboScale[i] = int32(v)
+	}
+
+	for _, f := range []struct {
+		name string
+		v    int32
+		lo   int32
+		hi   int32
+	}{
+		{"damage.starterLight", b.StarterLight, 1, 100},
+		{"damage.starterMedium", b.StarterMedium, 1, 100},
+		{"damage.starterHeavy", b.StarterHeavy, 1, 100},
+		{"damage.minDamagePercent", b.MinDamagePercent, 1, 100},
+		// A counter hit that pays less than a normal one is the sign flipped.
+		{"damage.counterHitPercent", b.CounterHitPercent, 100, 300},
+	} {
+		if f.v < f.lo || f.v > f.hi {
+			return b, fmt.Errorf("%s is %d, want %d..%d", f.name, f.v, f.lo, f.hi)
+		}
+	}
+
+	// The starters are an ordering, not three independent numbers: a light that
+	// scales harder than a heavy inverts what starter scaling is for.
+	if b.StarterLight > b.StarterMedium || b.StarterMedium > b.StarterHeavy {
+		return b, fmt.Errorf("starter scaling is not ordered light <= medium <= heavy: %d, %d, %d",
+			b.StarterLight, b.StarterMedium, b.StarterHeavy)
+	}
+	// A punish counter is the bigger reward of the two, by definition.
+	if b.PunishHitstun < b.CounterHitstun {
+		return b, fmt.Errorf("damage.punishHitstun %d is below damage.counterHitstun %d",
+			b.PunishHitstun, b.CounterHitstun)
 	}
 
 	return b, nil

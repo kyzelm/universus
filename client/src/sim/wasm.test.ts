@@ -64,14 +64,26 @@ test('the resource gauges cross the boundary', () => {
   expect(blocked.players[1].drive).toBeLessThan(DRIVE_BARS * BAR_UNITS)
   expect(blocked.players[1].health).toBe(start.players[1].health)
 
-  // Landing one builds Super for both of them, at different rates.
+  // Landing one builds Super for both of them, at different rates. Stop on the
+  // frame it connects: the combo readout below only exists while the defender
+  // is still in hitstun, which is the whole meaning of a combo.
   walkIn()
-  for (let i = 0; i < 40; i++) advance(i === 0 ? LP : 0, 0)
+  const before = readSnapshot().players[1].health
+  for (let i = 0; i < 40; i++) {
+    advance(i === 0 ? LP : 0, 0)
+    if (readSnapshot().players[1].health < before) break
+  }
   const hit = readSnapshot()
   expect(hit.players[0].super).toBeGreaterThan(0)
   expect(hit.players[1].super).toBeGreaterThan(0)
   expect(hit.players[0].super).toBeGreaterThan(hit.players[1].super)
   expect(hit.players[0].super).toBeLessThanOrEqual(SUPER_BARS * BAR_UNITS)
+
+  // The combo readout is read from two fields further along the same block, so
+  // a wrong offset here would draw the pushbox width as a hit count.
+  expect(hit.players[1].combo).toBe(1)
+  expect(hit.players[1].counter).toBe(0) // an idle defender is no counter hit
+  expect(hit.players[0].combo).toBe(0)
 })
 
 // The overlay is only worth having if it shows the boxes the sim collides.

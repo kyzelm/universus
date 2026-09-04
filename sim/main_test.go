@@ -37,6 +37,20 @@ func testBalance() Balance {
 		BurnoutBlockstun:   5,
 		BurnoutChipPercent: 10,
 
+		// The scaling table is the shipped shape; the numbers are round enough
+		// to check by hand either way.
+		ComboScale:       [ComboScaleSteps]int32{100, 100, 80, 70, 60, 50, 40, 30, 20, 10},
+		StarterLight:     80,
+		StarterMedium:    90,
+		StarterHeavy:     100,
+		MinDamagePercent: 10,
+
+		// Deliberately not the shipped 125: a test that passes on the fixture
+		// and on the live balance is a test that is reading neither.
+		CounterHitPercent: 150,
+		CounterHitstun:    5,
+		PunishHitstun:     10,
+
 		SuperDealtPercent: 50,
 		SuperTakenPercent: 25,
 		SuperOnSpecial:    200,
@@ -250,6 +264,12 @@ func testCharacter() Character {
 
 	return c
 }
+
+// jabFirstHit is what move 0 actually deals as the clean opening hit of a
+// combo: 100 base, scaled by the light starter's 80% and by the first hit's
+// 100%. Written out rather than computed, so a test asserting it cannot agree
+// with a broken formula by running the same broken formula.
+const jabFirstHit = 80
 
 // char is the fixture as the sim sees it, for tests that need its numbers.
 func char() *Character { return CharacterAt(0) }

@@ -76,11 +76,11 @@ func TestSnapshotCarriesTheCollidingBoxes(t *testing.T) {
 	s.WriteSnapshot(b)
 
 	p0 := b[12:]
-	if got := u32(p0[56:]); got == 0 {
+	if got := u32(p0[64:]); got == 0 {
 		t.Error("no hurtboxes in the snapshot")
 	}
 
-	hitOff := 60 + MaxBoxes*boxSize
+	hitOff := 68 + MaxBoxes*boxSize
 	if got := u32(p0[hitOff:]); int32(got) != nHit {
 		t.Fatalf("hit count = %d, want %d", got, nHit)
 	}
@@ -91,7 +91,7 @@ func TestSnapshotCarriesTheCollidingBoxes(t *testing.T) {
 	}
 
 	// The pushbox is always present.
-	push := p0[40:]
+	push := p0[48:]
 	if i32(push[8:]) <= 0 || i32(push[12:]) <= 0 {
 		t.Error("pushbox has no size")
 	}
@@ -110,7 +110,7 @@ func TestSnapshotLeavesNoStaleBoxes(t *testing.T) {
 	}
 	s.WriteSnapshot(b)
 
-	hitOff := 12 + 60 + MaxBoxes*boxSize
+	hitOff := 12 + 68 + MaxBoxes*boxSize
 	if u32(b[hitOff:]) == 0 {
 		t.Fatal("setup: expected a hitbox")
 	}

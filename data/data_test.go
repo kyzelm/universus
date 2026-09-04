@@ -277,6 +277,13 @@ func TestEmbeddedBalanceLoads(t *testing.T) {
 		{"drive.blockCost", b.DriveBlockCost},
 		{"drive.burnoutBlockstun", b.BurnoutBlockstun},
 		{"drive.burnoutChipPercent", b.BurnoutChipPercent},
+		{"damage.starterLight", b.StarterLight},
+		{"damage.starterMedium", b.StarterMedium},
+		{"damage.starterHeavy", b.StarterHeavy},
+		{"damage.minDamagePercent", b.MinDamagePercent},
+		{"damage.counterHitPercent", b.CounterHitPercent},
+		{"damage.counterHitstun", b.CounterHitstun},
+		{"damage.punishHitstun", b.PunishHitstun},
 		{"super.dealtPercent", b.SuperDealtPercent},
 		{"super.takenPercent", b.SuperTakenPercent},
 		{"super.onSpecial", b.SuperOnSpecial},
@@ -323,6 +330,19 @@ func TestBalanceValidationRejectsBadData(t *testing.T) {
 		}},
 		{"Burnout that never ends", func(b *jsonBalance) { b.Drive.RegenBurnout = 0 }},
 		{"Burnout over in a blink", func(b *jsonBalance) { b.Drive.RegenBurnout = sim.DriveMax }},
+
+		{"a short scaling table", func(b *jsonBalance) { b.Damage.ComboScale = []int{100, 80} }},
+		{"scaling that rises", func(b *jsonBalance) { b.Damage.ComboScale[4] = 100 }},
+		{"scaling to zero", func(b *jsonBalance) { b.Damage.ComboScale[9] = 0 }},
+		{"a light starter that scales less than a heavy", func(b *jsonBalance) {
+			b.Damage.StarterLight = b.Damage.StarterHeavy + 1
+		}},
+		{"a counter hit worth less than a clean one", func(b *jsonBalance) {
+			b.Damage.CounterHitPercent = 99
+		}},
+		{"a punish counter worth fewer frames than a counter", func(b *jsonBalance) {
+			b.Damage.PunishHitstun = b.Damage.CounterHitstun - 1
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			jb := valid(t)
@@ -449,5 +469,41 @@ func TestSuperCancelsAreTieredBySource(t *testing.T) {
 		if feedsFromSpecial == 0 {
 			t.Errorf("character %d: no special cancels into the level 2", i)
 		}
+	}
+}
+
+// The damage pipeline's numbers. The structure is the thesis content and the
+// values are a starting point, but a value that is structurally wrong — a
+// scaling table that rises, a counter hit worth less than a clean one — is a
+// balance bug the loader can catch for free.
+func TestTheShippedScalingTable(t *testing.T) {
+	b, err := LoadBalance()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if b.ComboScale[0] != 100 {
+		t.Errorf("the first hit of a combo scales to %d%%, want 100", b.ComboScale[0])
+	}
+	// The floor is the last entry, and it is what every hit past the table
+	// takes. Zero there is the degenerate-loop bug the design note warns about.
+	if floor := b.ComboScale[sim.ComboScaleSteps-1]; floor <= 0 || floor > 50 {
+		t.Errorf("the scaling floor is %d%%, want a small positive percentage", floor)
+	}
+	for i := 1; i < sim.ComboScaleSteps; i++ {
+		if b.ComboScale[i] > b.ComboScale[i-1] {
+			t.Errorf("comboScale rises at %d: %d after %d", i, b.ComboScale[i], b.ComboScale[i-1])
+		}
+	}
+
+	if b.StarterLight >= b.StarterHeavy {
+		t.Errorf("a light starter scales to %d%% and a heavy to %d%%: starter scaling does nothing",
+			b.StarterLight, b.StarterHeavy)
+	}
+	if b.CounterHitPercent <= 100 {
+		t.Errorf("a counter hit pays %d%%, which is not a bonus", b.CounterHitPercent)
+	}
+	if b.CounterHitstun <= 0 {
+		t.Error("a counter hit carries no extra hitstun, so it cannot open anything")
 	}
 }

@@ -99,8 +99,10 @@ func TestAttackConnectsAndDealsDamage(t *testing.T) {
 		s.Advance([2]uint16{0, 0})
 	}
 
-	if got := s.Players[1].Health; got != full-mv.Damage {
-		t.Errorf("health = %d, want %d after a %d-damage hit", got, full-mv.Damage, mv.Damage)
+	// The jab is a light, so its 100 base arrives as 80 — the starter scaling
+	// applies to the opening hit of a combo as much as to the rest of it.
+	if got := s.Players[1].Health; got != full-jabFirstHit {
+		t.Errorf("health = %d, want %d after the jab", got, full-jabFirstHit)
 	}
 	if s.Players[1].State != StateHitstun && s.Players[1].Stun == 0 {
 		t.Errorf("defender is not in hitstun: state = %d stun = %d", s.Players[1].State, s.Players[1].Stun)
@@ -111,7 +113,6 @@ func TestAttackConnectsAndDealsDamage(t *testing.T) {
 // its damage three times.
 func TestOneActiveWindowHitsOnce(t *testing.T) {
 	s := facing(30)
-	mv := &char().Moves[0]
 	full := s.Players[1].Health
 
 	s.Advance([2]uint16{InLP, 0})
@@ -119,8 +120,8 @@ func TestOneActiveWindowHitsOnce(t *testing.T) {
 		s.Advance([2]uint16{0, 0})
 	}
 
-	if got := full - s.Players[1].Health; got != mv.Damage {
-		t.Errorf("total damage %d, want %d — the active window hit more than once", got, mv.Damage)
+	if got := full - s.Players[1].Health; got != jabFirstHit {
+		t.Errorf("total damage %d, want %d — the active window hit more than once", got, jabFirstHit)
 	}
 }
 
@@ -255,9 +256,13 @@ func TestSimultaneousHitsTrade(t *testing.T) {
 		s.Advance([2]uint16{0, 0})
 	}
 
+	// Both were attacking when they were hit, so both hits are counter hits:
+	// the jab's 80 at the fixture's 150%. A trade is the one exchange where
+	// that is true of both players at once.
+	const traded = jabFirstHit * 150 / 100
 	for i := range s.Players {
-		if got := full[i] - s.Players[i].Health; got != mv.Damage {
-			t.Errorf("player %d took %d in the trade, want %d — both should be hit", i, got, mv.Damage)
+		if got := full[i] - s.Players[i].Health; got != traded {
+			t.Errorf("player %d took %d in the trade, want %d — both should be hit", i, got, traded)
 		}
 	}
 }
@@ -509,8 +514,12 @@ func TestAReversalBeatsAFasterAttack(t *testing.T) {
 	if got := full[0] - s.Players[0].Health; got != 0 {
 		t.Errorf("the reversal took %d damage during its invulnerable frames", got)
 	}
-	if got := full[1] - s.Players[1].Health; got != rev.Damage {
-		t.Errorf("the jab player took %d, want the reversal's %d", got, rev.Damage)
+	// The reversal's 250, scaled by its medium starter and paid at counter-hit
+	// rates — it landed on a player who was mid-jab, which is what a counter
+	// hit is.
+	const punished = 250 * 90 / 100 * 150 / 100
+	if got := full[1] - s.Players[1].Health; got != punished {
+		t.Errorf("the jab player took %d, want the reversal's %d", got, punished)
 	}
 	if jab.Startup >= rev.Startup {
 		t.Fatalf("fixture: the jab (%d) must be faster than the reversal (%d) or this proves nothing",

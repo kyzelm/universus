@@ -10,6 +10,7 @@ import {
   type PlayerSnapshot,
   readSnapshot,
   BAR_UNITS,
+  COUNTER_NAMES,
   DRIVE_BARS,
   SUPER_BARS,
   reset,
@@ -96,6 +97,20 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   const bars = [new Graphics(), new Graphics()]
   bars.forEach((b) => app.stage.addChild(b))
 
+  // The combo readout, one per seat. A counter hit that is not visible is one
+  // nobody learns from, so it is drawn every frame rather than on the HUD's
+  // slower clock.
+  const combos = [0, 1].map((seat) => {
+    const t = new Text({
+      text: '',
+      style: {fill: 0xe0c04a, fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold'},
+    })
+    t.position.set(seat === 0 ? 12 : VIEW_W - 12, 48)
+    t.anchor.set(seat === 0 ? 0 : 1, 0)
+    app.stage.addChild(t)
+    return t
+  })
+
   const hud = new Text({
     text: '',
     style: {fill: 0x8a94a6, fontFamily: 'monospace', fontSize: 12},
@@ -146,7 +161,12 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     // A projectile is a hitbox with no character attached, so it is drawn as
     // one: the overlay's job is to show what can hit you.
     for (const b of snap.projectiles) drawHitbox(boxes, b)
-    for (let i = 0; i < bars.length; i++) drawBars(bars[i], snap.players[i], i, snap.frame)
+    for (let i = 0; i < bars.length; i++) {
+      drawBars(bars[i], snap.players[i], i, snap.frame)
+      // The combo belongs to the player taking it; it is shown on the side of
+      // the player landing it, which is where every game in the genre puts it.
+      setCombo(combos[1 - i], snap.players[i])
+    }
 
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.
@@ -268,6 +288,18 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
 }
 
+/** Reads as "COUNTER · 3 hits", or nothing at all outside a combo. */
+function setCombo(t: Text, defender: PlayerSnapshot): void {
+  const parts = []
+  if (defender.combo > 0) {
+    if (COUNTER_NAMES[defender.counter]) parts.push(COUNTER_NAMES[defender.counter])
+    parts.push(`${defender.combo} hit${defender.combo === 1 ? '' : 's'}`)
+  }
+  const text = parts.join(' · ')
+  // Assigning re-lays out the text, so only do it when it actually changed.
+  if (t.text !== text) t.text = text
+}
+
 function localHud(
   snap: ReturnType<typeof readSnapshot>,
   stepCost: ReturnType<typeof createSamples>,
@@ -279,7 +311,8 @@ function localHud(
     const meter = (p.super / BAR_UNITS).toFixed(1)
     return (
       `p${i} ${STATE_NAMES[p.state] ?? p.state}:${p.stateFrame} hp ${p.health} ` +
-      `drive ${drive}${p.burnout ? ' BURNOUT' : ''} super ${meter}`
+      `drive ${drive}${p.burnout ? ' BURNOUT' : ''} super ${meter}` +
+      (p.combo ? ` combo ${p.combo}` : '')
     )
   }
   return [

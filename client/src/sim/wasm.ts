@@ -28,8 +28,8 @@ const ONE = 65536
 const MAX_BOXES = 4
 const MAX_PROJECTILES = 4
 const BOX = 4 * 4
-const HIT_OFF = 60 + MAX_BOXES * BOX
-const PLAYER_SIZE = 10 * 4 + BOX + 2 * (4 + MAX_BOXES * BOX)
+const HIT_OFF = 68 + MAX_BOXES * BOX
+const PLAYER_SIZE = 12 * 4 + BOX + 2 * (4 + MAX_BOXES * BOX)
 const HEADER = 3 * 4
 const PROJ_OFF = HEADER + 2 * PLAYER_SIZE
 
@@ -58,6 +58,9 @@ export const DRIVE_BARS = 6
 export const SUPER_BARS = 3
 export const BAR_UNITS = 1000
 
+/** Counter-hit classes, mirroring sim/damage.go. Index is the snapshot value. */
+export const COUNTER_NAMES = ['', 'COUNTER', 'PUNISH COUNTER']
+
 export interface Box {
   x: number
   y: number
@@ -77,6 +80,10 @@ export interface PlayerSnapshot {
   super: number
   /** 1 while the Drive gauge is refilling from empty. */
   burnout: number
+  /** Hits taken without recovering; 0 when not in a combo. */
+  combo: number
+  /** Class of the most recent hit taken — index into COUNTER_NAMES. */
+  counter: number
   pushbox: Box
   hurtboxes: Box[]
   hitboxes: Box[]
@@ -213,8 +220,10 @@ export function readSnapshot(): Snapshot {
         drive: v.getInt32(o + 28, true),
         super: v.getInt32(o + 32, true),
         burnout: v.getInt32(o + 36, true),
-        pushbox: readBox(v, o + 40),
-        hurtboxes: readBoxList(v, o + 56),
+        combo: v.getInt32(o + 40, true),
+        counter: v.getInt32(o + 44, true),
+        pushbox: readBox(v, o + 48),
+        hurtboxes: readBoxList(v, o + 64),
         hitboxes: readBoxList(v, o + HIT_OFF),
       }
     }),
