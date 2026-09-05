@@ -37,3 +37,31 @@ canvas {
   font-family: monospace;
   font-size: 0.7rem;
 }
+
+.net .row {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* The condition in force has to be obvious: a matrix cell run twice under the
+   wrong settings is a row of numbers that means nothing. */
+.net .row button.on {
+  outline: 1px solid #4ac8e0;
+}
+
+.net .row input {
+  width: 3.5rem;
+  margin: 0 0.25rem;
+  background: #14161a;
+  color: #c9d1d9;
+  border: 1px solid #2a2f38;
+}
+
+.conditions {
+  display: grid;
+  gap: 0.25rem;
+  justify-items: center;
+}

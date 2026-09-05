@@ -1,4 +1,5 @@
 import {Application, Container, Graphics, Text} from 'pixi.js'
+import {CLEAN, createLink, type Impairment, type Link} from '../net/impair'
 import {createNetplay, depthP99, type Netplay} from '../net/netplay'
 import type {Peer} from '../net/peer'
 import {
@@ -67,6 +68,11 @@ export interface Game {
   connect(peer: Peer, seat: 0 | 1): void
   /** Feed a packet in. The panel owns the channel, so it forwards them here. */
   receive(data: ArrayBuffer): void
+  /**
+   * Sets the artificial network conditions applied to arriving packets. The
+   * measurement matrix is run by calling this, not by rebuilding anything.
+   */
+  impair(cfg: Impairment): void
   dispose(): void
 }
 
@@ -145,9 +151,17 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
 
   const input = createInput()
   const clock = createClock()
-  const stepCost = createSamples()
+  let stepCost = createSamples()
+
+  // Wall-clock time between displayed frames. The sim step is measured
+  // separately above; this is the number the 60 fps bar is actually about,
+  // because a frame that fits the budget and is still displayed late is a
+  // dropped frame to the player.
+  let frameCost = createSamples()
+  let longFrames = 0
 
   let net: Netplay | null = null
+  let link: Link | null = null
   let ticks = 0
 
   // Every playtest is a free regression log, and the corpus is worth more than
@@ -159,6 +173,12 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   const recorded: number[] = []
 
   app.ticker.add((ticker) => {
+    frameCost.push(ticker.deltaMS)
+    // A frame that took longer than one and a half steps is one the display
+    // did not get. Counted rather than averaged: under continuous rollback the
+    // question is whether any frame was missed, not what the mean was.
+    if (ticker.deltaMS > STEP_MS * 1.5) longFrames++
+
     for (let i = clock.tick(ticker.deltaMS); i > 0; i--) {
       const [p1, p2] = input.poll()
 
@@ -199,7 +219,8 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.
     if (snap.frame % HUD_EVERY === 0) {
-      hud.text = net ? netHud(net) : localHud(snap, stepCost)
+      const top = net ? netHud(net, link) : localHud(snap)
+      hud.text = `${top}\n${costHud(stepCost, frameCost, longFrames)}`
     }
   })
 
@@ -216,16 +237,34 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     connect(peer, seat) {
       reset()
       ticks = 0
+      longFrames = 0
       net = createNetplay({advance, rewind, checksum, dataVersion}, (data) => peer.send(data), seat)
+      // Every arriving packet goes through the impairment layer, whatever it
+      // is set to — the clean setting passes straight through, so a real match
+      // runs the same path a measured one does.
+      link = createLink((data) => net?.receive(data), CLEAN)
       net.hello()
     },
 
     receive(data) {
-      net?.receive(data)
+      if (link) link.receive(data)
+      else net?.receive(data)
+    },
+
+    impair(cfg) {
+      link?.set(cfg)
+      // The cost numbers belong to the condition that produced them. Rollback
+      // depth changes what a frame costs, so a cell measured on the previous
+      // cell's samples is a cell reporting the wrong thing.
+      stepCost = createSamples()
+      frameCost = createSamples()
+      longFrames = 0
+      net?.resetStats()
     },
 
     dispose() {
       input.dispose()
+      link?.dispose()
       // The Go runtime keeps running: quit() cannot be undone and loadSim is
       // cached, so a remount would have no sim. reset() on start covers it.
       app.destroy(true, {children: true})
@@ -381,11 +420,7 @@ function setCombo(t: Text, defender: PlayerSnapshot): void {
   setText(t, parts.join(' · '))
 }
 
-function localHud(
-  snap: ReturnType<typeof readSnapshot>,
-  stepCost: ReturnType<typeof createSamples>,
-): string {
-  const ms = (p: number) => stepCost.percentile(p).toFixed(3)
+function localHud(snap: Snapshot): string {
   const who = (i: number) => {
     const p = snap.players[i]
     const drive = (p.drive / BAR_UNITS).toFixed(1)
@@ -401,17 +436,38 @@ function localHud(
     snap.hitstop ? `HITSTOP ${snap.hitstop}` : '',
     who(0),
     who(1),
-    `sim p50 ${ms(50)}ms p99 ${ms(99)}ms`,
   ]
     .filter(Boolean)
     .join('  ')
 }
 
 /**
+ * The cost line, shown in both modes. Under netplay the sim figure includes
+ * every rollback replay the frame ran, which is the measurement M-A asks for:
+ * a frame with an 8-frame rollback runs the sim nine times and still has to fit
+ * 16.6 ms. `long` counts frames the display did not get at all — the number the
+ * "sustained 60 fps under continuous rollback" bar is really about, since a
+ * frame can fit the budget and still be shown late.
+ */
+function costHud(
+  stepCost: ReturnType<typeof createSamples>,
+  frameCost: ReturnType<typeof createSamples>,
+  longFrames: number,
+): string {
+  const sim = (p: number) => stepCost.percentile(p).toFixed(3)
+  const frame = (p: number) => frameCost.percentile(p).toFixed(1)
+
+  return (
+    `sim p50 ${sim(50)}ms p99 ${sim(99)}ms  ` +
+    `frame p50 ${frame(50)}ms p99 ${frame(99)}ms  long ${longFrames}`
+  )
+}
+
+/**
  * The numbers this project exists to report. Percentiles, never means, and
  * stalls and desyncs shown as raw counts because one of either matters.
  */
-function netHud(net: Netplay): string {
+function netHud(net: Netplay, link: Link | null): string {
   const s = net.stats
   if (s.dataMismatch) {
     return 'REFUSED: the peer has different character data. Rebuild both ends from the same commit.'
@@ -427,5 +483,23 @@ function netHud(net: Netplay): string {
     `stalls ${s.stalls}`,
     `checked ${s.verified}`,
     s.desyncs ? `DESYNC at frame ${s.desyncFrame}` : `desync 0`,
-  ].join('  ')
+    conditions(link),
+  ]
+    .filter(Boolean)
+    .join('  ')
+}
+
+/**
+ * The artificial conditions in force, and what they actually did. Silent when
+ * the layer is clean, because a line that is always there stops being read —
+ * and every number above it means something different once this one appears.
+ */
+function conditions(link: Link | null): string {
+  if (!link) return ''
+  const {delayMs, jitterMs, lossPercent} = link.cfg
+  if (delayMs <= 0 && jitterMs <= 0 && lossPercent <= 0) return ''
+
+  const {arrived, dropped} = link.stats
+  const rate = ((dropped / Math.max(1, arrived + dropped)) * 100).toFixed(1)
+  return `SIM-NET +${delayMs}±${jitterMs}ms ${lossPercent}% loss (dropped ${dropped}, ${rate}%)`
 }

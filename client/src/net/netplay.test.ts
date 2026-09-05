@@ -1,4 +1,5 @@
-import {describe, expect, test} from 'vitest'
+import {afterEach, describe, expect, test, vi} from 'vitest'
+import {createLink} from './impair'
 import {
   CHECKSUM_EVERY,
   createNetplay,
@@ -344,4 +345,59 @@ test('a peer with matching character data plays normally', () => {
   net.receive(encodeControl(0xaaaa))
   expect(net.stats.dataMismatch).toBe(false)
   expect(net.step(0)).toBe(true)
+})
+
+/**
+ * The netcode driven through the real impairment layer, which is the condition
+ * it exists for: localhost produces one-frame rollbacks and never exercises the
+ * window. 100 ms round trip, 15 ms of jitter and 5% loss is a cell of the
+ * measurement matrix (01 Thesis/Measurement Methodology.md, M-B), and the two
+ * ends must still agree on every frame they both simulated.
+ *
+ * Timers are faked, so the run is a few milliseconds of real time and the
+ * seeded layer drops exactly the same packets every time it runs.
+ */
+describe('under artificial network conditions', () => {
+  afterEach(() => vi.useRealTimers())
+
+  test('two ends stay identical through latency, jitter and loss', () => {
+    vi.useFakeTimers()
+
+    const STEP_MS = 1000 / 60
+    const cfg = {delayMs: 50, jitterMs: 15, lossPercent: 5}
+
+    const simA = stubSim()
+    const simB = stubSim()
+
+    // Each end's link impairs what *arrives* at it, which is where the real one
+    // sits. Different seeds, or both directions would suffer in lockstep.
+    let A!: ReturnType<typeof createNetplay>
+    let B!: ReturnType<typeof createNetplay>
+    const toB = createLink((d) => B.receive(d), cfg, 11)
+    const toA = createLink((d) => A.receive(d), cfg, 22)
+
+    A = createNetplay(simA, (d) => toB.receive(d), 0)
+    B = createNetplay(simB, (d) => toA.receive(d), 1)
+
+    for (let f = 0; f < 600; f++) {
+      A.step(f & 0xf)
+      B.step((f * 3) & 0xf)
+      vi.advanceTimersByTime(STEP_MS)
+    }
+    // Let everything still in flight land, then settle the last corrections.
+    vi.advanceTimersByTime(1000)
+
+    const shared = Math.min(simA.frame, simB.frame)
+    expect(shared).toBeGreaterThan(400) // it stalled sometimes, not constantly
+    expect(simA.applied.slice(0, shared)).toEqual(simB.applied.slice(0, shared))
+
+    // The point of the exercise: this is the path localhost never takes.
+    expect(A.stats.rollbacks).toBeGreaterThan(0)
+    expect(A.stats.desyncs).toBe(0)
+    expect(B.stats.desyncs).toBe(0)
+    // A correction older than the window cannot be applied, and one arriving
+    // is the first sign the parameters do not fit the conditions.
+    expect(A.stats.dropped).toBe(0)
+    expect(B.stats.dropped).toBe(0)
+  })
 })

@@ -91,6 +91,13 @@ export interface NetplayStats {
 export interface Netplay {
   /** Simulates one frame. False means it stalled and no frame was simulated. */
   step(localBits: number): boolean
+  /**
+   * Zeroes the counters without touching the match. **A new network condition
+   * is a new measurement**: the matrix cell being run has to be timed on its
+   * own frames, or every cell after the first reports a blend of itself and
+   * everything before it (01 Thesis/Measurement Methodology.md).
+   */
+  resetStats(): void
   /** Announces our character data hash. Sent once, on connect. */
   hello(): void
   receive(data: ArrayBuffer): void
@@ -312,6 +319,26 @@ export function createNetplay(
       while (known[confirmed + 1]) confirmed++
       if (earliest >= 0) rollback(earliest)
       settle()
+    },
+
+    resetStats() {
+      Object.assign(stats, {
+        frames: 0,
+        rollbacks: 0,
+        depths: Array(MAX_ROLLBACK + 1).fill(0),
+        predicted: 0,
+        mispredicted: 0,
+        stalls: 0,
+        dropped: 0,
+        malformed: 0,
+        verified: 0,
+        desyncs: 0,
+        desyncFrame: -1,
+        rtt: createSamples(),
+        replayMs: createSamples(),
+      })
+      // dataMismatch is deliberately not cleared: it is a fact about the peer,
+      // not a measurement, and it does not stop being true.
     },
 
     ping() {
