@@ -3,6 +3,7 @@ package data
 import (
 	"bytes"
 	"encoding/json"
+	"math/bits"
 	"testing"
 
 	"universus/sim"
@@ -190,6 +191,14 @@ func TestValidationRejectsBadData(t *testing.T) {
 		{"a fourth super level", func(c *jsonCharacter) { c.Moves[0].Super = 4 }},
 		{"a super with no motion", func(c *jsonCharacter) { c.Moves[0].Input.Motion = "" }},
 
+		{"an unknown button inside a combination", func(c *jsonCharacter) {
+			c.Moves[0].Input.Button = "LP+LOL"
+		}},
+		{"a throw that releases immediately", func(c *jsonCharacter) {
+			c.Moves[0].Throw, c.Moves[0].Hitstun = true, 0
+		}},
+		{"a throw that is also a super", func(c *jsonCharacter) { c.Moves[0].Throw = true }},
+
 		// The one the design note itself got wrong: 8.0 and -0.03 pass every
 		// individual check and give a nine-second jump.
 		{"jump constants that do not go together", func(c *jsonCharacter) { c.Gravity = "-0.03" }},
@@ -331,6 +340,9 @@ func TestBalanceValidationRejectsBadData(t *testing.T) {
 		{"Burnout that never ends", func(b *jsonBalance) { b.Drive.RegenBurnout = 0 }},
 		{"Burnout over in a blink", func(b *jsonBalance) { b.Drive.RegenBurnout = sim.DriveMax }},
 
+		{"a throw nobody can escape", func(b *jsonBalance) { b.Throw.TechFrames = 0 }},
+		{"a tech window longer than a throw", func(b *jsonBalance) { b.Throw.TechFrames = 21 }},
+
 		{"a short scaling table", func(b *jsonBalance) { b.Damage.ComboScale = []int{100, 80} }},
 		{"scaling that rises", func(b *jsonBalance) { b.Damage.ComboScale[4] = 100 }},
 		{"scaling to zero", func(b *jsonBalance) { b.Damage.ComboScale[9] = 0 }},
@@ -439,6 +451,36 @@ func TestTheShippedRosterHasThreeSupers(t *testing.T) {
 // The cancel tiering is data, and it is only tiering if the sources differ.
 // Level 1 out of cancelable normals, level 3 out of anything — including the
 // heavies, which cancel into nothing else.
+// The throw is what makes blocking a decision, so the shipped roster has to
+// have one — and it has to be on more than one button, since a throw sharing a
+// button with a normal would take that button over for the rest of the match.
+func TestTheShippedRosterHasAThrow(t *testing.T) {
+	cs, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	throws := 0
+	for _, c := range cs {
+		for m := int32(0); m < c.NumMoves; m++ {
+			mv := &c.Moves[m]
+			if !mv.IsThrow() {
+				continue
+			}
+			throws++
+			if bits.OnesCount16(mv.Button) < 2 {
+				t.Errorf("the throw is on one button (%#x)", mv.Button)
+			}
+			if mv.Hitstun <= 0 {
+				t.Error("the throw has no hitstun")
+			}
+		}
+	}
+	if throws != len(cs) {
+		t.Errorf("%d throws across %d characters, want one each", throws, len(cs))
+	}
+}
+
 func TestSuperCancelsAreTieredBySource(t *testing.T) {
 	cs, err := Load()
 	if err != nil {

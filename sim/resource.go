@@ -77,6 +77,14 @@ type Balance struct {
 	RoundEndHold int32
 	IntroFrames  int32
 
+	// Throws (03 Game Design/Movement and Defense.md). ThrowTechFrames is how
+	// long the escape window is, ThrowTechRecovery what both players owe after
+	// one, and ThrowTechPush how far apart they end up, in whole units — a
+	// distance, not a speed, because a tech separates rather than launches.
+	ThrowTechFrames   int32
+	ThrowTechRecovery int32
+	ThrowTechPush     int32
+
 	// Super is built by dealing damage, by taking it, and by landing a special.
 	// The first two are percentages of the damage; the third is flat, because
 	// it is paid for the connect rather than for the numbers behind it.

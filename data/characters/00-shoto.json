@@ -200,6 +200,25 @@
       ]
     },
     {
+      "_comment": "The throw. LP and LK on the same frame, which is what makes it a decision rather than a button: press LP first and the jab comes out, and the throw is lost. Unblockable — that is the point of it, since blocking beats every strike in the game — but refused against anyone airborne or in stun, and escapable by pressing throw inside the tech window. It reaches a shade further than 5LP, so at jab range the defender is genuinely choosing between blocking and teching, and 23 frames of recovery is what guessing wrong costs the thrower.",
+      "id": "LPLK",
+      "input": { "stance": "stand", "button": "LP+LK" },
+      "throw": true,
+      "startup": 5,
+      "active": 3,
+      "recovery": 23,
+      "damage": 1200,
+      "hitstun": 60,
+      "blockstun": 0,
+      "hitstop": 12,
+      "attackLevel": "mid",
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 5, "hurt": [[-12, 0, 24, 48]], "hit": [[12, 8, 26, 34]] },
+        { "frame": 8, "hurt": [[-12, 0, 24, 48]] }
+      ]
+    },
+    {
       "id": "5LP",
       "input": { "stance": "stand", "button": "LP" },
       "startup": 4,

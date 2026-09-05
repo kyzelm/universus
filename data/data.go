@@ -197,6 +197,15 @@ type jsonBalance struct {
 		Intro        int `json:"intro"`
 	} `json:"round"`
 
+	// Throws. The tech window is the design's ~5 frames; the recovery and the
+	// push are what both players get out of one, and they are shared because a
+	// tech that favoured either side would make the throw free or unusable.
+	Throw struct {
+		TechFrames   int `json:"techFrames"`
+		TechRecovery int `json:"techRecovery"`
+		TechPush     int `json:"techPush"`
+	} `json:"throw"`
+
 	Damage struct {
 		ComboScale        []int `json:"comboScale"`
 		StarterLight      int   `json:"starterLight"`
@@ -235,6 +244,9 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 		{"round.koFreeze", jb.Round.KOFreeze, &b.KOFreeze},
 		{"round.roundEndHold", jb.Round.RoundEndHold, &b.RoundEndHold},
 		{"round.intro", jb.Round.Intro, &b.IntroFrames},
+		{"throw.techFrames", jb.Throw.TechFrames, &b.ThrowTechFrames},
+		{"throw.techRecovery", jb.Throw.TechRecovery, &b.ThrowTechRecovery},
+		{"throw.techPush", jb.Throw.TechPush, &b.ThrowTechPush},
 		{"damage.starterLight", jb.Damage.StarterLight, &b.StarterLight},
 		{"damage.starterMedium", jb.Damage.StarterMedium, &b.StarterMedium},
 		{"damage.starterHeavy", jb.Damage.StarterHeavy, &b.StarterHeavy},
@@ -268,6 +280,14 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 	if min := b.RoundsToWin*2 - 1; b.MaxRounds < min {
 		return b, fmt.Errorf("round.maxRounds is %d, below the %d rounds a first-to-%d needs",
 			b.MaxRounds, min, b.RoundsToWin)
+	}
+
+	// A tech window of zero is a throw nobody can escape, which is the mechanic
+	// without the half that makes it fair. The upper bound is the other
+	// failure: a window longer than a throw's startup techs presses made before
+	// the throw existed.
+	if b.ThrowTechFrames <= 0 || b.ThrowTechFrames > 20 {
+		return b, fmt.Errorf("throw.techFrames is %d, want 1..20", b.ThrowTechFrames)
 	}
 
 	// Chip is a fraction of the move's damage, so a value over 100 makes
@@ -386,6 +406,10 @@ type jsonMove struct {
 	// whole roster bar three moves per character.
 	Super int `json:"super"`
 
+	// Throw marks the move unblockable, refused against anyone airborne or in
+	// stun, and escapable by a tech. Absent on everything that is not one.
+	Throw bool `json:"throw"`
+
 	// Velocity the move gives the character on its first frame, [vx, vy],
 	// forward-relative. Absent for the moves that do not move anyone.
 	Launch []json.Number `json:"launch"`
@@ -412,6 +436,25 @@ type jsonKeyframe struct {
 var buttons = map[string]uint16{
 	"LP": sim.InLP, "MP": sim.InMP, "HP": sim.InHP,
 	"LK": sim.InLK, "MK": sim.InMK, "HK": sim.InHK,
+}
+
+// parseButtons reads "LP" or a combination like "LP+LK". The combination is
+// what a throw is: two buttons pressed on one frame, which the sim reads as a
+// mask (see sim.pressed). Order does not matter and repeats are harmless, since
+// the result is a set of bits.
+func parseButtons(spec string) (uint16, error) {
+	var mask uint16
+	for _, name := range strings.Split(spec, "+") {
+		bit, ok := buttons[strings.TrimSpace(name)]
+		if !ok {
+			return 0, fmt.Errorf("unknown button %q", name)
+		}
+		mask |= bit
+	}
+	if mask == 0 {
+		return 0, fmt.Errorf("move has no button")
+	}
+	return mask, nil
 }
 
 var levels = map[string]int32{
@@ -564,10 +607,13 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 	m.Blockstun = int32(jm.Blockstun)
 	m.Hitstop = int32(jm.Hitstop)
 
-	var ok bool
-	if m.Button, ok = buttons[jm.Input.Button]; !ok {
-		return m, fmt.Errorf("unknown button %q", jm.Input.Button)
+	button, err := parseButtons(jm.Input.Button)
+	if err != nil {
+		return m, err
 	}
+	m.Button = button
+
+	var ok bool
 	if m.Stance, ok = stances[jm.Input.Stance]; !ok {
 		return m, fmt.Errorf("unknown stance %q", jm.Input.Stance)
 	}
@@ -609,6 +655,19 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 	// silent otherwise: the move works, it is just never not selected.
 	if m.Super > 0 && m.Motion == sim.MotionNone {
 		return m, fmt.Errorf("super %d has no motion", m.Super)
+	}
+
+	if jm.Throw {
+		m.Throw = 1
+		// A throw is decided entirely by its hitstun and its reach: it cannot
+		// be blocked, so blockstun is a value nobody will ever read, and a
+		// throw that let go instantly would be a hit with no consequence.
+		if m.Hitstun <= 0 {
+			return m, fmt.Errorf("throw has no hitstun, so it releases immediately")
+		}
+		if m.Super > 0 {
+			return m, fmt.Errorf("a throw cannot also be a super")
+		}
 	}
 
 	for _, name := range jm.Cancel {

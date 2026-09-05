@@ -368,6 +368,15 @@ func (s *GameState) Advance(in [2]uint16) {
 // player 1 out of range before player 1's hit is tested, and the trade would
 // stop being a trade.
 func (s *GameState) connects(attacker, defender int) bool {
+	// A throw refuses a defender it is not allowed to take, and it refuses them
+	// *here* rather than at resolution: a throw that whiffs has to actually
+	// whiff. Its recovery is the price of trying, and a throw that quietly
+	// counted as a connect would keep its cancel window and its once-per-move
+	// hit flag while doing nothing at all.
+	if mv := s.Players[attacker].move(); mv != nil && mv.IsThrow() && !s.throwable(defender) {
+		return false
+	}
+
 	var hits, hurts [MaxBoxes]Box
 	nh := s.Hitboxes(attacker, &hits)
 	if nh == 0 {
@@ -394,6 +403,15 @@ func (s *GameState) resolveHit(attacker, defender int, mv *Move, defenderIn uint
 	if mv == nil {
 		return
 	}
+	// A throw is resolved whole, by its own path: it cannot be blocked, cannot
+	// counter-hit, and may be escaped by a tech that ends the attacker's move
+	// too — which is why it marks the connect itself rather than being marked
+	// here and then possibly undone.
+	if mv.IsThrow() {
+		s.applyThrow(attacker, defender, mv, s.Frame)
+		return
+	}
+
 	ap.HasHit = 1
 	s.applyHit(attacker, defender, mv, defenderIn)
 }

@@ -50,7 +50,9 @@ export default function App() {
         <b>Num4 5 6</b> — all six work standing, crouching and in the air. Specials:{' '}
         <b>fireball</b> ↓ ↘ → + punch and <b>uppercut</b> → ↓ ↘ + punch, three strengths
         each. Supers, once the meter has the bars: <b>L1</b> ↓ ↘ → ↓ ↘ → + LP,{' '}
-        <b>L2</b> ↓ ↘ → ↓ ↘ → + LK, <b>L3</b> ↓ ↙ ← ↓ ↙ ← + LP.{' '}
+        <b>L2</b> ↓ ↘ → ↓ ↘ → + LK, <b>L3</b> ↓ ↙ ← ↓ ↙ ← + LP. <b>Throw</b> is LP+LK on
+        the same frame — it beats blocking, misses anyone airborne, and is escaped by
+        pressing throw back within five frames.{' '}
         <button type="button" onClick={() => game && saveLog(game)} disabled={!game}>
           save input log
         </button>

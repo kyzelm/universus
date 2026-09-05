@@ -47,6 +47,7 @@ export const STATE_NAMES = [
   'hitstun',
   'blockstun',
   'landing',
+  'thrown',
 ]
 
 /**

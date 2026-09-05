@@ -219,7 +219,23 @@ func (s *GameState) Pressed(player int, button uint16) bool {
 
 func (s *GameState) PressedAt(player int, button uint16, now uint32) bool {
 	p := &s.Players[player]
-	return p.at(now, 0)&button != 0 && p.at(now, 1)&button == 0
+	return pressed(button, p.at(now, 0), p.at(now, 1))
+}
+
+// pressed is the edge rule, and it is written for a **mask** rather than a
+// single bit: every bit down now, and not every bit down the frame before.
+//
+// A throw is two buttons, and the two are never physically simultaneous — the
+// player presses LP and LK a frame or two apart, and the move has to come out
+// on the frame the pair completes. "All of them down now, not all of them down
+// before" says exactly that, and for a single-bit mask it is the plain edge it
+// always was.
+//
+// An empty mask is no press. Every frame satisfies "all zero bits are down",
+// which would make a move with no button fire on every frame forever; the
+// loader rejects one, and this is the brace to that belt.
+func pressed(mask, now, before uint16) bool {
+	return mask != 0 && now&mask == mask && before&mask != mask
 }
 
 // pressFrame is the newest frame within the buffer window on which button was
@@ -233,8 +249,16 @@ func (s *GameState) PressedAt(player int, button uint16, now uint32) bool {
 // int32 rather than uint32: "no press" needs a value outside the frame numbers,
 // and every field it is compared against is int32 for the state's layout rule.
 func (p *PlayerState) pressFrame(now uint32, button uint16) int32 {
-	for back := uint32(0); back < InputBuffer && back <= now; back++ {
-		if p.at(now, back)&button != 0 && p.at(now, back+1)&button == 0 {
+	return p.pressWithin(now, button, InputBuffer)
+}
+
+// pressWithin is pressFrame over an arbitrary window. The throw tech window is
+// its own length and its own rule — a few frames to answer a throw already in
+// progress — and it has no business borrowing the input buffer's number just
+// because both are measured in frames of history.
+func (p *PlayerState) pressWithin(now uint32, button uint16, window uint32) int32 {
+	for back := uint32(0); back < window && back <= now; back++ {
+		if pressed(button, p.at(now, back), p.at(now, back+1)) {
 			return int32(now - back)
 		}
 	}

@@ -63,6 +63,12 @@ func testBalance() Balance {
 		SuperTakenPercent: 25,
 		SuperOnSpecial:    200,
 
+		// The design's own five-frame tech window; a tech that costs 15 frames
+		// and pushes 20 units is easy to check by hand.
+		ThrowTechFrames:   5,
+		ThrowTechRecovery: 15,
+		ThrowTechPush:     20,
+
 		// Round flow in round numbers again, and a round long enough that no
 		// other test in the package can time one out by accident: the longest
 		// of them runs 2000 frames.
@@ -96,7 +102,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 10,
+		NumMoves: 11,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -279,6 +285,26 @@ func testCharacter() Character {
 	c.Moves[9].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(0), W: FromInt(34), H: FromInt(46)}
 	c.Moves[9].Keys[2] = Keyframe{Frame: 7, NumHurt: 1}
 	c.Moves[9].Keys[2].Hurt[0] = c.StandHurt
+
+	// A throw, on two buttons. It is the move that makes blocking a decision
+	// rather than an answer, and the pair of buttons is what the tech is
+	// pressed with — so the fixture's throw is also the fixture's tech input.
+	//
+	// Its box reaches 34 units, a little further than the jab: a throw whiffing
+	// where a jab connects would make every test below a range test by
+	// accident.
+	c.Moves[10] = Move{
+		Startup: 5, Active: 3, Recovery: 20,
+		Damage: 400, Hitstun: 40, Hitstop: 8,
+		Level: LevelMid, Stance: StanceStand, Button: InLP | InLK,
+		Throw:   1,
+		NumKeys: 2,
+	}
+	c.Moves[10].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[10].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[10].Keys[1] = Keyframe{Frame: 5, NumHurt: 1, NumHit: 1}
+	c.Moves[10].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[10].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(10), W: FromInt(22), H: FromInt(30)}
 
 	return c
 }

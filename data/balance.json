@@ -19,6 +19,12 @@
     "intro": 90
   },
 
+  "throw": {
+    "techFrames": 5,
+    "techRecovery": 20,
+    "techPush": 24
+  },
+
   "damage": {
     "comboScale": [100, 100, 80, 70, 60, 50, 40, 30, 20, 10],
     "starterLight": 80,

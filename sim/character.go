@@ -168,6 +168,12 @@ type Move struct {
 	// the first is a guess about a system that does not exist.
 	InvulnStart, InvulnEnd int32
 
+	// Throw marks a throw: unblockable, refused against anyone airborne or in
+	// stun, and escapable by teching (03 Game Design/Movement and Defense.md).
+	// A flag rather than a level, because a throw is one kind of thing and the
+	// numbers that vary between throws are the ones every move already has.
+	Throw int32
+
 	// Super is the move's super level, 1 to 3, or 0 for everything else. It is
 	// both the identity and the price: a level N super costs N bars, which is
 	// the design's own table read straight down (03 Game Design/Resource
@@ -188,6 +194,10 @@ type Move struct {
 	// through its move index.
 	Proj ProjectileSpec
 }
+
+// IsThrow reports a throw. Named rather than compared inline: the flag is read
+// in five places and "mv.Throw != 0" reads like an amount of throw.
+func (m *Move) IsThrow() bool { return m.Throw != 0 }
 
 // SuperCost is what the move costs to perform, in resource units. Zero for
 // everything that is not a super, which is everything the meter does not gate.

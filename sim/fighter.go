@@ -25,6 +25,11 @@ const (
 	// stun as far as the state machine is concerned — a fixed count of frames
 	// that accept nothing — so it runs on the same counter.
 	StateLanding
+	// StateThrown is being thrown, and it is also the recovery both players owe
+	// after a throw is teched. The same counter again: from the state machine's
+	// side every one of these is a fixed number of frames that accept nothing,
+	// and the difference between them is who is embarrassed.
+	StateThrown
 )
 
 // Airborne reports whether the player is off the ground.
@@ -385,16 +390,23 @@ func (s *GameState) moveFor(i int, stance int32, now uint32, cancel uint16) int3
 	return best
 }
 
-// The selection tiers. A super outranks a special outranks a normal on the same
-// press, which is what puts the level 3 ahead of the fireball when one input
-// describes both.
-const tiers = 3
+// The selection tiers. A super outranks a special outranks a throw outranks a
+// normal on the same press, which is what puts the level 3 ahead of the
+// fireball when one input describes both.
+//
+// The throw's tier is what makes LP+LK a throw rather than a jab. Both moves
+// see a fresh press on that frame — the jab's button is a subset of the
+// throw's — and the more specific input has to win, or a character with a
+// throw cannot press two buttons at once for anything else again.
+const tiers = 4
 
 func tierOf(m *Move) int32 {
 	switch {
 	case m.Super > 0:
-		return 2
+		return 3
 	case m.Motion != MotionNone:
+		return 2
+	case m.IsThrow():
 		return 1
 	default:
 		return 0
@@ -472,7 +484,7 @@ func (s *GameState) advanceState(i int) {
 			return
 		}
 
-	case StateHitstun, StateBlockstun, StateLanding:
+	case StateHitstun, StateBlockstun, StateLanding, StateThrown:
 		if p.Stun > 0 {
 			p.Stun--
 		}
