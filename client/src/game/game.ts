@@ -12,12 +12,18 @@ import {
   BAR_UNITS,
   COUNTER_NAMES,
   DRIVE_BARS,
+  NOBODY,
+  PHASE_FIGHT,
+  PHASE_INTRO,
+  PHASE_KO,
+  PHASE_MATCH_END,
   SUPER_BARS,
   reset,
   rewind,
+  type Snapshot,
   STATE_NAMES,
 } from '../sim/wasm'
-import {createClock} from './clock'
+import {createClock, STEP_MS} from './clock'
 import {createInput} from './input'
 import {createSamples} from './stats'
 
@@ -111,6 +117,25 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     return t
   })
 
+  // The round clock and the announcement. Both read the sim's own phase and
+  // timer: a view that counted its own seconds would show a different number
+  // from the one the round actually ends on.
+  const timer = new Text({
+    text: '',
+    style: {fill: 0xe8ecf2, fontFamily: 'monospace', fontSize: 26, fontWeight: 'bold'},
+  })
+  timer.position.set(VIEW_W / 2, 6)
+  timer.anchor.set(0.5, 0)
+  app.stage.addChild(timer)
+
+  const announce = new Text({
+    text: '',
+    style: {fill: 0xe8ecf2, fontFamily: 'monospace', fontSize: 30, fontWeight: 'bold'},
+  })
+  announce.position.set(VIEW_W / 2, 150)
+  announce.anchor.set(0.5, 0.5)
+  app.stage.addChild(announce)
+
   const hud = new Text({
     text: '',
     style: {fill: 0x8a94a6, fontFamily: 'monospace', fontSize: 12},
@@ -161,8 +186,11 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     // A projectile is a hitbox with no character attached, so it is drawn as
     // one: the overlay's job is to show what can hit you.
     for (const b of snap.projectiles) drawHitbox(boxes, b)
+    setText(timer, `${seconds(snap.timer)}`)
+    setText(announce, announcement(snap))
+
     for (let i = 0; i < bars.length; i++) {
-      drawBars(bars[i], snap.players[i], i, snap.frame)
+      drawBars(bars[i], snap.players[i], i, snap.frame, snap.wins[i])
       // The combo belongs to the player taking it; it is shown on the side of
       // the player landing it, which is where every game in the genre puts it.
       setCombo(combos[1 - i], snap.players[i])
@@ -225,7 +253,11 @@ function drawHitbox(g: Graphics, b: Box): void {
 const BAR_W = 340
 const MAX_HEALTH = 10000
 
+/** Pips drawn per seat. Mirrors balance.json's round.roundsToWin. */
+const ROUNDS_TO_WIN = 2
+
 const EMPTY_COLOR = 0x2a2f38
+const WIN_COLOR = 0xe8ecf2
 const HEALTH_COLOR = 0xd8c15a
 const DRIVE_COLOR = 0x4ac8e0
 const BURNOUT_COLOR = 0xe07a2a
@@ -237,7 +269,13 @@ const SUPER_COLOR = 0xc86ee0
  * gauge changes colour and pulses, so a supervisor watching a demo can see the
  * resource system working without being told.
  */
-function drawBars(g: Graphics, p: PlayerSnapshot, seat: number, frame: number): void {
+function drawBars(
+  g: Graphics,
+  p: PlayerSnapshot,
+  seat: number,
+  frame: number,
+  wins: number,
+): void {
   const x = seat === 0 ? 10 : VIEW_W - 10 - BAR_W
 
   g.clear()
@@ -254,6 +292,13 @@ function drawBars(g: Graphics, p: PlayerSnapshot, seat: number, frame: number): 
     alpha: burnout ? 0.55 + 0.45 * Math.sin(frame / 6) : 1,
   })
   drawGauge(g, x, 37, 7, seat, p.super, SUPER_BARS, {color: SUPER_COLOR, alpha: 1})
+
+  // Round wins, as pips beside the health bar. Two of them takes the match, so
+  // there is never a number worth writing out.
+  for (let i = 0; i < ROUNDS_TO_WIN; i++) {
+    const px = seat === 0 ? x + BAR_W + 6 + i * 12 : x - 12 - i * 12
+    g.circle(px, 15, 4).fill(i < wins ? WIN_COLOR : EMPTY_COLOR)
+  }
 }
 
 /**
@@ -284,6 +329,44 @@ function drawGauge(
   }
 }
 
+/**
+ * The round clock in whole seconds, rounded up: the sim counts frames, and the
+ * view is the only place allowed to hold a number that is not exact.
+ */
+function seconds(frames: number): number {
+  return Math.ceil((frames * STEP_MS) / 1000)
+}
+
+/**
+ * What is written across the middle of the screen. Driven by the phase the sim
+ * is in rather than by anything the view worked out for itself — the sim is
+ * what decides a round is over, and the two must not disagree by a frame.
+ */
+function announcement(snap: Snapshot): string {
+  const who = (seat: number) => `PLAYER ${seat + 1}`
+
+  switch (snap.phase) {
+    case PHASE_FIGHT:
+      return ''
+    case PHASE_KO:
+      // A drawn round ended either on a double KO or on the clock; both read
+      // as a draw, and the distinction is not one the player needs.
+      if (snap.roundWinner === NOBODY) return 'DRAW'
+      return snap.timer === 0 ? 'TIME UP' : 'K.O.'
+    case PHASE_INTRO:
+      return 'FIGHT'
+    case PHASE_MATCH_END:
+      return `${who(snap.winner)} WINS THE MATCH`
+    default:
+      return snap.roundWinner === NOBODY ? 'DRAW' : `${who(snap.roundWinner)} WINS THE ROUND`
+  }
+}
+
+/** Assigning re-lays out the text, so only do it when it actually changed. */
+function setText(t: Text, text: string): void {
+  if (t.text !== text) t.text = text
+}
+
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v))
 }
@@ -295,9 +378,7 @@ function setCombo(t: Text, defender: PlayerSnapshot): void {
     if (COUNTER_NAMES[defender.counter]) parts.push(COUNTER_NAMES[defender.counter])
     parts.push(`${defender.combo} hit${defender.combo === 1 ? '' : 's'}`)
   }
-  const text = parts.join(' · ')
-  // Assigning re-lays out the text, so only do it when it actually changed.
-  if (t.text !== text) t.text = text
+  setText(t, parts.join(' · '))
 }
 
 function localHud(

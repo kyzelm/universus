@@ -30,7 +30,7 @@ const MAX_PROJECTILES = 4
 const BOX = 4 * 4
 const HIT_OFF = 68 + MAX_BOXES * BOX
 const PLAYER_SIZE = 12 * 4 + BOX + 2 * (4 + MAX_BOXES * BOX)
-const HEADER = 3 * 4
+const HEADER = 9 * 4
 const PROJ_OFF = HEADER + 2 * PLAYER_SIZE
 
 /** Mirrors the state constants in sim/fighter.go, for the debug readout. */
@@ -48,6 +48,20 @@ export const STATE_NAMES = [
   'blockstun',
   'landing',
 ]
+
+/**
+ * Round phases, mirroring sim/round.go. Only PHASE_FIGHT runs the game; the
+ * rest freeze both fighters and run their own clock, which is why the view can
+ * key its announcement off the phase alone.
+ */
+export const PHASE_FIGHT = 0
+export const PHASE_KO = 1
+export const PHASE_ROUND_END = 2
+export const PHASE_INTRO = 3
+export const PHASE_MATCH_END = 4
+
+/** No winner: a draw round, or a match that is still being played. */
+export const NOBODY = -1
 
 /**
  * Resource maxima, mirroring sim/resource.go: a bar is a thousand units, and
@@ -93,6 +107,16 @@ export interface Snapshot {
   frame: number
   camX: number
   hitstop: number
+  /** Round phase — one of the PHASE_* constants. */
+  phase: number
+  /** The round clock, in frames. The view is what turns it into seconds. */
+  timer: number
+  /** Rounds won, per seat. */
+  wins: number[]
+  /** Who took the round just decided, or NOBODY for a draw. */
+  roundWinner: number
+  /** Match winner once the phase is PHASE_MATCH_END, NOBODY until then. */
+  winner: number
   players: PlayerSnapshot[]
   /**
    * Live projectiles, packed from the front — the sim's slot numbers do not
@@ -207,6 +231,11 @@ export function readSnapshot(): Snapshot {
     frame: v.getUint32(0, true),
     camX: v.getInt32(4, true) / ONE,
     hitstop: v.getInt32(8, true),
+    phase: v.getInt32(12, true),
+    timer: v.getInt32(16, true),
+    wins: [v.getInt32(20, true), v.getInt32(24, true)],
+    roundWinner: v.getInt32(28, true),
+    winner: v.getInt32(32, true),
     players: [0, 1].map((i) => {
       const o = HEADER + i * PLAYER_SIZE
       return {

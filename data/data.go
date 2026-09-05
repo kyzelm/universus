@@ -33,6 +33,12 @@ var files embed.FS
 // covered by Version.
 const balanceFile = "balance.json"
 
+// framesPerSecond is the fixed timestep, and it lives here rather than in the
+// sim on purpose: **the simulation has no clock but the frame number**. This is
+// the one place a human-facing duration is turned into frames, at load time,
+// where being wrong is a validation error rather than a desync.
+const framesPerSecond = 60
+
 // Load reads, validates and converts the embedded roster.
 //
 // Order is by filename, so the roster indices are the same on every machine —
@@ -179,6 +185,18 @@ type jsonBalance struct {
 		BurnoutChip      int `json:"burnoutChipPercent"`
 	} `json:"drive"`
 
+	// Round is authored in seconds, because 99 is the number the design note
+	// and every other fighting game state, and 5940 is not. The conversion
+	// happens here: the sim is given frames and never learns what a second is.
+	Round struct {
+		Seconds      int `json:"seconds"`
+		RoundsToWin  int `json:"roundsToWin"`
+		MaxRounds    int `json:"maxRounds"`
+		KOFreeze     int `json:"koFreeze"`
+		RoundEndHold int `json:"roundEndHold"`
+		Intro        int `json:"intro"`
+	} `json:"round"`
+
 	Damage struct {
 		ComboScale        []int `json:"comboScale"`
 		StarterLight      int   `json:"starterLight"`
@@ -211,6 +229,12 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 		{"drive.blockCost", jb.Drive.BlockCost, &b.DriveBlockCost},
 		{"drive.burnoutBlockstun", jb.Drive.BurnoutBlockstun, &b.BurnoutBlockstun},
 		{"drive.burnoutChipPercent", jb.Drive.BurnoutChip, &b.BurnoutChipPercent},
+		{"round.seconds", jb.Round.Seconds * framesPerSecond, &b.RoundFrames},
+		{"round.roundsToWin", jb.Round.RoundsToWin, &b.RoundsToWin},
+		{"round.maxRounds", jb.Round.MaxRounds, &b.MaxRounds},
+		{"round.koFreeze", jb.Round.KOFreeze, &b.KOFreeze},
+		{"round.roundEndHold", jb.Round.RoundEndHold, &b.RoundEndHold},
+		{"round.intro", jb.Round.Intro, &b.IntroFrames},
 		{"damage.starterLight", jb.Damage.StarterLight, &b.StarterLight},
 		{"damage.starterMedium", jb.Damage.StarterMedium, &b.StarterMedium},
 		{"damage.starterHeavy", jb.Damage.StarterHeavy, &b.StarterHeavy},
@@ -226,6 +250,24 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 			return b, fmt.Errorf("%s must not be negative, got %d", f.name, f.n)
 		}
 		*f.dst = int32(f.n)
+	}
+
+	// The round clock. Zero is a round that is over before it starts, and the
+	// symptom is a match that plays its whole best-of-three in four seconds of
+	// transitions.
+	if b.RoundFrames <= 0 {
+		return b, fmt.Errorf("round.seconds must be positive, got %d", jb.Round.Seconds)
+	}
+	if b.RoundsToWin <= 0 {
+		return b, fmt.Errorf("round.roundsToWin must be positive, or no round ever wins a match")
+	}
+	// Coupled, like jumpVelocity against gravity: the cap has to allow the
+	// rounds the match needs before it can be decided by damage instead, and
+	// neither field says so alone. Best of three is 2 to win and 3 rounds; the
+	// two extra rounds the design allows for draws make it 5.
+	if min := b.RoundsToWin*2 - 1; b.MaxRounds < min {
+		return b, fmt.Errorf("round.maxRounds is %d, below the %d rounds a first-to-%d needs",
+			b.MaxRounds, min, b.RoundsToWin)
 	}
 
 	// Chip is a fraction of the move's damage, so a value over 100 makes
@@ -405,8 +447,12 @@ func (jc *jsonCharacter) convert() (sim.Character, error) {
 	var c sim.Character
 	var err error
 
-	if jc.Health <= 0 {
-		return c, fmt.Errorf("health must be positive, got %d", jc.Health)
+	// The upper bound is not a design opinion, it is arithmetic: a timeout is
+	// decided by cross-multiplying the two players' health against each other's
+	// maximum, and two values above 46 340 overflow the int32 that holds the
+	// product. 30 000 is three times the shipped pool and well clear of it.
+	if jc.Health <= 0 || jc.Health > 30000 {
+		return c, fmt.Errorf("health is %d, want 1..30000", jc.Health)
 	}
 	c.Health = int32(jc.Health)
 

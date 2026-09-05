@@ -13,7 +13,15 @@ import (
 // says nothing. The fixture uses round numbers chosen to make the arithmetic
 // checkable by hand. data's own tests cover the shipped file.
 func TestMain(m *testing.M) {
-	if !LoadCharacters([]Character{testCharacter()}) {
+	// Two entries, the second identical bar a smaller health pool. It exists
+	// for one test — a timeout is decided on the *percentage* of a pool, and a
+	// roster where both pools are the same size cannot tell that rule from the
+	// wrong one — but it is loaded for every test, because a roster that
+	// changes between tests is a roster the tests can disagree about.
+	small := testCharacter()
+	small.Health /= 2
+
+	if !LoadCharacters([]Character{testCharacter(), small}) {
 		panic("fixture roster rejected")
 	}
 	LoadBalance(testBalance())
@@ -54,6 +62,16 @@ func testBalance() Balance {
 		SuperDealtPercent: 50,
 		SuperTakenPercent: 25,
 		SuperOnSpecial:    200,
+
+		// Round flow in round numbers again, and a round long enough that no
+		// other test in the package can time one out by accident: the longest
+		// of them runs 2000 frames.
+		RoundFrames:  3600,
+		RoundsToWin:  2,
+		MaxRounds:    5,
+		KOFreeze:     10,
+		RoundEndHold: 20,
+		IntroFrames:  30,
 	}
 }
 

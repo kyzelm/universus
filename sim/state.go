@@ -135,6 +135,35 @@ type GameState struct {
 	// sim and it is in the state.
 	Hitstop int32
 
+	// Round flow — see round.go. Phase is what the match is doing (fighting,
+	// the KO freeze, the result, the next round's intro) and PhaseFrame is its
+	// clock. In the state because they decide when input resumes, which is
+	// gameplay and not presentation.
+	Phase      int32
+	PhaseFrame int32
+
+	// Timer is the round clock, counted in frames because the sim has no other
+	// clock and is never allowed one.
+	Timer int32
+
+	// Round is the 1-based number of the round being played and Wins the rounds
+	// each player has taken. A draw awards neither of them (D53).
+	Round int32
+	Wins  [2]int32
+
+	// RoundWinner is who took the round just decided, RoundNobody for a draw;
+	// Winner is the match winner once Phase is PhaseMatchEnd and RoundNobody
+	// until then. Both are here rather than derived because the view draws them
+	// and a rewind has to take them back.
+	RoundWinner int32
+	Winner      int32
+
+	// Dealt is cumulative damage dealt across the whole match, per player. It
+	// exists for one thing: the tiebreak when the round cap runs out (D54). It
+	// therefore survives a round reset, which is why it is here and not on the
+	// player.
+	Dealt [2]int32
+
 	// CamX is the camera centre. **In the state, because corner position is
 	// gameplay** — a desynced camera is a desynced corner, and the corner is
 	// where a large part of the game happens.
@@ -161,11 +190,20 @@ func NewMatch(c0, c1 int32) GameState {
 	for i := range s.Players {
 		s.Players[i].MoveIndex = -1
 		s.Players[i].Eaten = -1
-		// Drive starts full and Super starts empty. Super carrying over between
-		// rounds is what makes it strategic — there are no rounds yet, so for
-		// now it starts a match at zero and that is the whole rule.
+		// Drive starts full and Super starts empty. Super is the one thing that
+		// carries between rounds (see startRound), which is what makes it the
+		// strategic gauge of the two.
 		s.Players[i].Drive = DriveMax
 	}
+
+	// Round 1, fighting. **A match starts in the fight, not in an intro**: the
+	// intro is the gap between rounds, and one in front of frame 0 would mean
+	// every replay, every test and every determinism run began with ninety
+	// frames of nothing.
+	s.Round = 1
+	s.Timer = balance.RoundFrames
+	s.RoundWinner = RoundNobody
+	s.Winner = RoundNobody
 	s.updateCamera()
 	return s
 }
@@ -190,6 +228,16 @@ func (s *GameState) Advance(in [2]uint16) {
 	// the network keep moving.
 	if s.Hitstop > 0 {
 		s.Hitstop--
+		s.Frame++
+		return
+	}
+
+	// Between rounds nothing moves. The KO freeze, the result and the intro run
+	// their own clock and nothing else — no input, no movement, no hits — and
+	// the frame still advances, so the checksum and the network keep going
+	// through a round transition exactly as they do through hitstop.
+	if s.Phase != PhaseFight {
+		s.advancePhase()
 		s.Frame++
 		return
 	}
@@ -286,9 +334,9 @@ func (s *GameState) Advance(in [2]uint16) {
 	// order the loop happened to reach them.
 	s.resolveProjectiles(in)
 
-	// 8. Timers, resources, round state — round flow is still to come. The
-	// camera is here because it is derived from positions, which are final by
-	// now, and the resources after the hits that spent and built them.
+	// 8. Timers, resources, round state. The camera is here because it is
+	// derived from positions, which are final by now, and the resources after
+	// the hits that spent and built them.
 	s.updateResources()
 
 	// A combo lasts exactly as long as the hitstun holding it together. The
@@ -302,6 +350,11 @@ func (s *GameState) Advance(in [2]uint16) {
 		}
 	}
 	s.updateCamera()
+
+	// The round is resolved last of all, after the damage that might have ended
+	// it and after the combo bookkeeping: a KO is a fact about the health bar
+	// this frame left behind, not about the hit that was being applied.
+	s.updateRound()
 
 	// 9. Increment frame. The caller takes the checksum; the sim does not
 	// store it, because a stored checksum would be state covering itself.
@@ -353,6 +406,12 @@ func (s *GameState) resolveHit(attacker, defender int, mv *Move, defenderIn uint
 // builds, which is why the index comes along.
 func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16) {
 	ap, dp := &s.Players[attacker], &s.Players[defender]
+
+	// Damage dealt is measured off the health bar at the end of this function
+	// rather than taken from the formula, so the match total the round cap's
+	// tiebreak reads is what actually happened: chip that stopped at 1 health
+	// counts what it removed, and a hit that overkills counts what was left.
+	before := dp.Health
 
 	if s.blocking(defender, defenderIn, mv.Level) {
 		// A blocked hit is not a hit: it ends no combo and starts none, and the
@@ -418,6 +477,10 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 	if mv.Hitstop > s.Hitstop {
 		s.Hitstop = mv.Hitstop
 	}
+
+	// One place, so every source of damage — hits, chip, projectiles, whatever
+	// comes next — is counted without anyone having to remember to.
+	s.Dealt[attacker] += before - dp.Health
 }
 
 // separate pushes overlapping pushboxes apart, half the overlap each, then the

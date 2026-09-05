@@ -18,6 +18,11 @@ func TestSnapshotLayout(t *testing.T) {
 	s.Players[0].X = FromInt(-25)
 	s.Players[0].Y = FromInt(10)
 	s.Players[1].Health = 4321
+	s.Phase = PhaseRoundEnd
+	s.Timer = 1234
+	s.Wins = [2]int32{1, 0}
+	s.RoundWinner = 0
+	s.Winner = RoundNobody
 
 	b := make([]byte, SnapshotSize)
 	s.WriteSnapshot(b)
@@ -32,7 +37,24 @@ func TestSnapshotLayout(t *testing.T) {
 		t.Errorf("hitstop = %d", got)
 	}
 
-	p0 := b[12:]
+	for _, f := range []struct {
+		name string
+		at   int
+		want int32
+	}{
+		{"phase", 12, PhaseRoundEnd},
+		{"timer", 16, 1234},
+		{"wins[0]", 20, 1},
+		{"wins[1]", 24, 0},
+		{"round winner", 28, 0},
+		{"match winner", 32, RoundNobody},
+	} {
+		if got := i32(b[f.at:]); got != f.want {
+			t.Errorf("%s at offset %d = %d, want %d", f.name, f.at, got, f.want)
+		}
+	}
+
+	p0 := b[headerSize:]
 	if got := i32(p0); got != int32(FromInt(-25)) {
 		t.Errorf("p0 X = %d", got)
 	}
@@ -46,7 +68,7 @@ func TestSnapshotLayout(t *testing.T) {
 		t.Errorf("p0 move index = %d, want -1 when not attacking", got)
 	}
 
-	p1 := b[12+PlayerSnapshotSize:]
+	p1 := b[headerSize+PlayerSnapshotSize:]
 	if got := i32(p1[8:]); got != -1 {
 		t.Errorf("p1 facing = %d, want -1", got)
 	}
@@ -75,7 +97,7 @@ func TestSnapshotCarriesTheCollidingBoxes(t *testing.T) {
 	b := make([]byte, SnapshotSize)
 	s.WriteSnapshot(b)
 
-	p0 := b[12:]
+	p0 := b[headerSize:]
 	if got := u32(p0[64:]); got == 0 {
 		t.Error("no hurtboxes in the snapshot")
 	}
@@ -110,7 +132,7 @@ func TestSnapshotLeavesNoStaleBoxes(t *testing.T) {
 	}
 	s.WriteSnapshot(b)
 
-	hitOff := 12 + 68 + MaxBoxes*boxSize
+	hitOff := headerSize + 68 + MaxBoxes*boxSize
 	if u32(b[hitOff:]) == 0 {
 		t.Fatal("setup: expected a hitbox")
 	}

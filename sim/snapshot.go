@@ -11,9 +11,15 @@ package sim
 //	 0  uint32  frame
 //	 4  int32   camera centre X (Fix)
 //	 8  int32   hitstop frames remaining
-//	12  player 0 block
-//	12+PlayerSnapshotSize    player 1 block
-//	12+2*PlayerSnapshotSize  uint32 projectile count, then MaxProjectiles boxes
+//	12  int32   phase — fight, KO, result, intro, match end
+//	16  int32   round timer, in frames
+//	20  int32   round wins, player 0
+//	24  int32   round wins, player 1
+//	28  int32   winner of the round just decided, -1 for a draw
+//	32  int32   match winner, -1 while the match is still live
+//	36  player 0 block
+//	36+PlayerSnapshotSize    player 1 block
+//	36+2*PlayerSnapshotSize  uint32 projectile count, then MaxProjectiles boxes
 //
 // Player block:
 //
@@ -33,9 +39,12 @@ package sim
 // the sim collides — an overlay drawn from separate numbers would confirm the
 // wrong thing.
 const (
-	boxSize            = 4 * 4
+	boxSize = 4 * 4
+	// headerSize covers the match-level fields above: the frame, the camera,
+	// hitstop and the round flow.
+	headerSize         = 9 * 4
 	PlayerSnapshotSize = 12*4 + boxSize + 2*(4+MaxBoxes*boxSize)
-	projOffset         = 3*4 + 2*PlayerSnapshotSize
+	projOffset         = headerSize + 2*PlayerSnapshotSize
 	SnapshotSize       = projOffset + 4 + MaxProjectiles*boxSize
 )
 
@@ -73,10 +82,22 @@ func (s *GameState) WriteSnapshot(b []byte) {
 	putI32(b[4:], int32(s.CamX))
 	putI32(b[8:], s.Hitstop)
 
+	// The round. The timer crosses in frames, not seconds: the view divides,
+	// because the view is the only place allowed a number that is not exact.
+	// The phase crosses because it is what the announcement on screen says, and
+	// a view that inferred the phase from the clock would announce a KO one
+	// frame out from the sim that decided it.
+	putI32(b[12:], s.Phase)
+	putI32(b[16:], s.Timer)
+	putI32(b[20:], s.Wins[0])
+	putI32(b[24:], s.Wins[1])
+	putI32(b[28:], s.RoundWinner)
+	putI32(b[32:], s.Winner)
+
 	var boxes [MaxBoxes]Box
 	for i := range s.Players {
 		p := &s.Players[i]
-		o := b[12+i*PlayerSnapshotSize:]
+		o := b[headerSize+i*PlayerSnapshotSize:]
 
 		putI32(o, int32(p.X))
 		putI32(o[4:], int32(p.Y))

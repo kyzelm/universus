@@ -66,6 +66,17 @@ type Balance struct {
 	CounterHitstun    int32
 	PunishHitstun     int32
 
+	// Round flow (round.go). Frame counts, not seconds: the sim has no clock
+	// but the frame number, so the loader is what turns 99 seconds into 5940
+	// frames. RoundsToWin is best-of-three's 2; MaxRounds is the cap that stops
+	// draws extending the match forever (D54).
+	RoundFrames  int32
+	RoundsToWin  int32
+	MaxRounds    int32
+	KOFreeze     int32
+	RoundEndHold int32
+	IntroFrames  int32
+
 	// Super is built by dealing damage, by taking it, and by landing a special.
 	// The first two are percentages of the damage; the third is flat, because
 	// it is paid for the connect rather than for the numbers behind it.

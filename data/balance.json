@@ -1,5 +1,5 @@
 {
-  "_comment": "Global tunables — 03 Game Design/Resource System.md. Not character data: one set of numbers for the match. Drive and Super are in thousandths of a bar; rates are units per frame; percentages are out of 100.",
+  "_comment": "Global tunables — 03 Game Design/Resource System.md and Round Flow.md. Not character data: one set of numbers for the match. Drive and Super are in thousandths of a bar; rates are units per frame; percentages are out of 100.",
 
   "drive": {
     "regen": 6,
@@ -8,6 +8,15 @@
     "blockCost": 250,
     "burnoutBlockstun": 4,
     "burnoutChipPercent": 12
+  },
+
+  "round": {
+    "seconds": 99,
+    "roundsToWin": 2,
+    "maxRounds": 5,
+    "koFreeze": 60,
+    "roundEndHold": 120,
+    "intro": 90
   },
 
   "damage": {
