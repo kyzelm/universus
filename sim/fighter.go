@@ -30,6 +30,17 @@ const (
 	// side every one of these is a fixed number of frames that accept nothing,
 	// and the difference between them is who is embarrassed.
 	StateThrown
+	// StateKnockdown is lying on the ground after a sweep or a throw, and it is
+	// the state okizeme is played against: the attacker knows exactly which
+	// frame the defender rises on, and that shared knowledge is the mechanic.
+	//
+	// **Invulnerable for the whole of it**, so the defender becomes vulnerable
+	// and actionable on the same frame. Any overlap between the two would be
+	// frames on which they can be hit and cannot block, and an attack timed
+	// into that gap knocks them down again — a loop nobody can escape. A meaty
+	// is an attack whose active frames cover the first *actionable* frame, and
+	// that is exactly the attack this leaves possible.
+	StateKnockdown
 )
 
 // Airborne reports whether the player is off the ground.
@@ -63,6 +74,20 @@ func (p *PlayerState) enter(state int32) {
 	// or a player knocked out of an uppercut would land into recovery frames
 	// they never earned on top of the hitstun they did.
 	p.Landing = 0
+	// The knockdown owed by the hit currently being served, cleared for the
+	// same reason and by the same rule: being hit out of hitstun replaces that
+	// hit's consequences with the new one's, so a sweep that was interrupted
+	// does not still knock down at the end of somebody else's combo.
+	p.Down = 0
+}
+
+// knockdown puts the player on the ground. **One duration for every knockdown
+// in the game** — the design note is explicit that varying wakeup timings are a
+// balance rabbit hole that buys the thesis nothing, so the number is one
+// balance value and not a per-move field.
+func (p *PlayerState) knockdown() {
+	p.enter(StateKnockdown)
+	p.Stun = balance.KnockdownFrames
 }
 
 // land ends an airborne action on touchdown, owing n frames of recovery. Zero
@@ -484,12 +509,21 @@ func (s *GameState) advanceState(i int) {
 			return
 		}
 
-	case StateHitstun, StateBlockstun, StateLanding, StateThrown:
+	case StateHitstun, StateBlockstun, StateLanding, StateThrown, StateKnockdown:
 		if p.Stun > 0 {
 			p.Stun--
 		}
 		if p.Stun == 0 {
-			p.enter(StateIdle)
+			// A hit that knocks down owes the knockdown at the end of its
+			// hitstun, not instead of it: the defender is struck, held for the
+			// move's frames, and only then goes to the floor. Carried as a debt
+			// on the player because the move is gone by then — the same shape
+			// as the landing recovery above it.
+			if p.Down != 0 {
+				p.knockdown()
+			} else {
+				p.enter(StateIdle)
+			}
 			return
 		}
 	}
@@ -514,6 +548,13 @@ func (p *PlayerState) move() *Move {
 func (s *GameState) Hurtboxes(i int, out *[MaxBoxes]Box) int32 {
 	p := &s.Players[i]
 	c := CharacterAt(p.Char)
+
+	// A player on the floor has no hurtboxes at all. See StateKnockdown: the
+	// invulnerability runs to the last frame of it, so vulnerable and
+	// actionable begin together.
+	if p.State == StateKnockdown {
+		return 0
+	}
 
 	if mv := p.move(); mv != nil {
 		// An invulnerable frame has no hurtboxes at all, which is the whole

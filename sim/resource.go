@@ -85,6 +85,12 @@ type Balance struct {
 	ThrowTechRecovery int32
 	ThrowTechPush     int32
 
+	// KnockdownFrames is how long a knocked-down player is on the ground, and
+	// it is deliberately one number: the design note says wakeup timing stays
+	// identical for every knockdown type, because varying it is a balance
+	// rabbit hole that adds nothing the thesis needs.
+	KnockdownFrames int32
+
 	// Super is built by dealing damage, by taking it, and by landing a special.
 	// The first two are percentages of the damage; the third is flat, because
 	// it is paid for the connect rather than for the numbers behind it.

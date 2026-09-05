@@ -69,6 +69,10 @@ func testBalance() Balance {
 		ThrowTechRecovery: 15,
 		ThrowTechPush:     20,
 
+		// A knockdown of 30 frames: long enough to be an oki window, short
+		// enough that a test can sit through one.
+		KnockdownFrames: 30,
+
 		// Round flow in round numbers again, and a round long enough that no
 		// other test in the package can time one out by accident: the longest
 		// of them runs 2000 frames.
@@ -102,7 +106,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 11,
+		NumMoves: 12,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -297,14 +301,32 @@ func testCharacter() Character {
 		Startup: 5, Active: 3, Recovery: 20,
 		Damage: 400, Hitstun: 40, Hitstop: 8,
 		Level: LevelMid, Stance: StanceStand, Button: InLP | InLK,
-		Throw:   1,
-		NumKeys: 2,
+		Throw:     1,
+		Knockdown: 1,
+		NumKeys:   2,
 	}
 	c.Moves[10].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
 	c.Moves[10].Keys[0].Hurt[0] = c.StandHurt
 	c.Moves[10].Keys[1] = Keyframe{Frame: 5, NumHurt: 1, NumHit: 1}
 	c.Moves[10].Keys[1].Hurt[0] = c.StandHurt
 	c.Moves[10].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(10), W: FromInt(22), H: FromInt(30)}
+
+	// A sweep: the fixture's knockdown strike. Same shape as the crouching low
+	// on move 1 — the knockdown is what is under test, so everything else is
+	// deliberately ordinary — on its own button so no other test can select it
+	// by accident.
+	c.Moves[11] = Move{
+		Startup: 5, Active: 2, Recovery: 9,
+		Damage: 80, Hitstun: 12, Blockstun: 9, Hitstop: 5,
+		Level: LevelLow, Stance: StanceCrouch, Button: InHK,
+		Knockdown: 1,
+		NumKeys:   2,
+	}
+	c.Moves[11].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[11].Keys[0].Hurt[0] = c.CrouchHurt
+	c.Moves[11].Keys[1] = Keyframe{Frame: 5, NumHurt: 1, NumHit: 1}
+	c.Moves[11].Keys[1].Hurt[0] = c.CrouchHurt
+	c.Moves[11].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(2), W: FromInt(28), H: FromInt(10)}
 
 	return c
 }

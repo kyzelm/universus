@@ -206,6 +206,13 @@ type jsonBalance struct {
 		TechPush     int `json:"techPush"`
 	} `json:"throw"`
 
+	// Knockdown is one number on purpose — see sim.Balance. Authored in frames
+	// rather than seconds because it is a frame count players learn to time
+	// against, not a duration anyone experiences as a clock.
+	Knockdown struct {
+		Frames int `json:"frames"`
+	} `json:"knockdown"`
+
 	Damage struct {
 		ComboScale        []int `json:"comboScale"`
 		StarterLight      int   `json:"starterLight"`
@@ -247,6 +254,7 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 		{"throw.techFrames", jb.Throw.TechFrames, &b.ThrowTechFrames},
 		{"throw.techRecovery", jb.Throw.TechRecovery, &b.ThrowTechRecovery},
 		{"throw.techPush", jb.Throw.TechPush, &b.ThrowTechPush},
+		{"knockdown.frames", jb.Knockdown.Frames, &b.KnockdownFrames},
 		{"damage.starterLight", jb.Damage.StarterLight, &b.StarterLight},
 		{"damage.starterMedium", jb.Damage.StarterMedium, &b.StarterMedium},
 		{"damage.starterHeavy", jb.Damage.StarterHeavy, &b.StarterHeavy},
@@ -288,6 +296,13 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 	// the throw existed.
 	if b.ThrowTechFrames <= 0 || b.ThrowTechFrames > 20 {
 		return b, fmt.Errorf("throw.techFrames is %d, want 1..20", b.ThrowTechFrames)
+	}
+
+	// A knockdown of zero frames is a sweep that leaves the defender standing,
+	// which reads as a bug in the state machine rather than as a balance value
+	// somebody chose.
+	if b.KnockdownFrames <= 0 {
+		return b, fmt.Errorf("knockdown.frames must be positive, or nothing is ever knocked down")
 	}
 
 	// Chip is a fraction of the move's damage, so a value over 100 makes
@@ -405,6 +420,11 @@ type jsonMove struct {
 	// Super level, 1 to 3. Absent on everything that is not one, which is the
 	// whole roster bar three moves per character.
 	Super int `json:"super"`
+
+	// Knockdown puts the defender on the floor once the hitstun ends. No
+	// duration here: one wakeup timing for the whole game (see the balance
+	// file), so the per-move question is only whether it knocks down.
+	Knockdown bool `json:"knockdown"`
 
 	// Throw marks the move unblockable, refused against anyone airborne or in
 	// stun, and escapable by a tech. Absent on everything that is not one.
@@ -655,6 +675,10 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 	// silent otherwise: the move works, it is just never not selected.
 	if m.Super > 0 && m.Motion == sim.MotionNone {
 		return m, fmt.Errorf("super %d has no motion", m.Super)
+	}
+
+	if jm.Knockdown {
+		m.Knockdown = 1
 	}
 
 	if jm.Throw {

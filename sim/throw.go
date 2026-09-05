@@ -28,7 +28,7 @@ func (s *GameState) throwable(i int) bool {
 		return false
 	}
 	switch p.State {
-	case StateHitstun, StateBlockstun, StateLanding, StateThrown:
+	case StateHitstun, StateBlockstun, StateLanding, StateThrown, StateKnockdown:
 		return false
 	}
 	return true
@@ -79,6 +79,13 @@ func (s *GameState) applyThrow(attacker, defender int, mv *Move, now uint32) {
 
 	dp.enter(StateThrown)
 	dp.Stun = mv.Hitstun
+	// A throw ends on the floor if its data says so, which is the whole of what
+	// changed when knockdowns arrived: the fixed count of helpless frames a
+	// thrown player used to spend is now the throw's own animation, and the
+	// knockdown after it is the same one a sweep gives.
+	if mv.KnocksDown() {
+		dp.Down = 1
+	}
 
 	// Through the same damage pipeline as everything else, so the scaling order
 	// has one implementation (D79). A throw always opens its own combo — the

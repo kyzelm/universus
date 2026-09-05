@@ -91,6 +91,15 @@ type PlayerState struct {
 	// so being hit out of the fall cancels it.
 	Landing int32
 
+	// Down is 1 while this player owes a knockdown at the end of their current
+	// stun. The same debt shape as Landing and for the same reason: the move
+	// that knocked them down is gone by the time its hitstun runs out, and
+	// nothing else remembers that this hitstun ends on the floor.
+	//
+	// Cleared by every state change, so being hit out of the hitstun replaces
+	// the old hit's consequences with the new one's rather than stacking them.
+	Down int32
+
 	// Eaten is the newest frame whose button presses have already been spent,
 	// or -1. The input buffer keeps a press live for a few frames looking for a
 	// state that can act on it (see moveFor); without a record of which presses
@@ -470,6 +479,13 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 
 		dp.enter(StateHitstun)
 		dp.Stun = mv.Hitstun + counterHitstun(counter)
+
+		// Owed after the hitstun, not instead of it, and set after enter
+		// because entering a state is what clears the previous debt.
+		if mv.KnocksDown() {
+			dp.Down = 1
+		}
+
 		dp.hurt(scaledDamage(mv, dp.ComboStarter, dp.Combo, counter))
 
 		// Super is built from the move's base damage, not the scaled figure.
