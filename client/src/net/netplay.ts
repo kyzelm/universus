@@ -52,6 +52,28 @@ export const SKIP_EVERY = 6
 export const CHECKSUM_EVERY = 30
 
 /**
+ * The rollback visualiser's backing data (01 Thesis/Supervisor Deliverables.md).
+ *
+ * **Rollback is invisible when it works.** A match over a bad connection and a
+ * match over a perfect one look identical, which is a problem at a defense: the
+ * hardest part of the project looks like nothing happened. So the driver keeps
+ * three seconds of per-frame history — what each frame was simulated from, and
+ * where corrections landed — and the view draws it as a strip.
+ *
+ * Instrumentation, so it is not optional and it is not cut (CLAUDE.md): the
+ * same ring answers "what did the last three seconds actually look like" for a
+ * screenshot and for a bug report.
+ */
+export const TIMELINE = 180
+
+/** A frame simulated from the remote input that had already arrived. */
+export const FRAME_CLEAN = 0
+/** …from a guess, which has not been contradicted. */
+export const FRAME_PREDICTED = 1
+/** …from a guess that turned out wrong, and has since been replayed. */
+export const FRAME_CORRECTED = 2
+
+/**
  * The 99th-percentile rollback depth from the histogram — the number worth
  * reporting, since the mean depth of a healthy connection is near zero and
  * hides the frames that actually cost something.
@@ -152,6 +174,15 @@ export interface Netplay {
    * inputs are already known.
    */
   readonly log: readonly number[]
+  /**
+   * What happened on a frame, for the visualiser: `kind | depth << 2`, where
+   * kind is one of the FRAME_* constants and depth is the depth of a rollback
+   * that *landed* on this frame, or zero. -1 for a frame outside the ring.
+   *
+   * Packed rather than an object, because the view asks about 180 frames every
+   * display frame and none of them should allocate.
+   */
+  sample(frame: number): number
   readonly stats: NetplayStats
 }
 
@@ -194,6 +225,32 @@ export function createNetplay(
   /** Frames written to the log so far, so settle only ever appends. */
   let logged = -1
   const log: number[] = []
+
+  // The visualiser's ring. Three parallel arrays rather than 180 objects: this
+  // is written every frame and read 180 times a frame, and neither should
+  // allocate. slotFrame holds the frame each slot belongs to, because the ring
+  // wraps and a slot keyed only by position reports a frame three seconds
+  // stale — a rollback tick drawn where nothing happened.
+  const slotFrame = new Int32Array(TIMELINE).fill(-1)
+  const slotKind = new Int8Array(TIMELINE)
+  const slotDepth = new Int8Array(TIMELINE)
+
+  /**
+   * Records what a frame was simulated from. **A correction is never
+   * downgraded**: the replay that follows one runs with the input now known,
+   * so without this the frame would go back to reporting itself clean and the
+   * strip would show a match in which nothing was ever mispredicted.
+   */
+  function mark(f: number, k: number): void {
+    const i = f % TIMELINE
+    if (slotFrame[i] === f) {
+      if (slotKind[i] !== FRAME_CORRECTED) slotKind[i] = k
+      return
+    }
+    slotFrame[i] = f
+    slotKind[i] = k
+    slotDepth[i] = 0
+  }
 
   const stats: NetplayStats = {
     dataMismatch: false,
@@ -270,6 +327,7 @@ export function createNetplay(
   }
 
   function simulate(f: number, remoteBits: number): void {
+    mark(f, known[f] ? FRAME_CLEAN : FRAME_PREDICTED)
     used[f] = remoteBits
     const mine = local[f] ?? 0
     if (seat === 0) sim.advance(mine, remoteBits)
@@ -343,6 +401,12 @@ export function createNetplay(
 
     stats.rollbacks++
     stats.depths[Math.min(depth, MAX_ROLLBACK)]++
+
+    // Recorded on the frame the rollback *landed* on, which is where the strip
+    // draws the tick: that is the frame the correction was about, and its
+    // height is how much had to be thrown away.
+    mark(to, FRAME_CORRECTED)
+    slotDepth[to % TIMELINE] = Math.min(depth, MAX_ROLLBACK)
   }
 
   return {
@@ -354,6 +418,16 @@ export function createNetplay(
     },
     get confirmed() {
       return settled()
+    },
+
+    sample(f) {
+      // The strip asks about the last three seconds, which at the start of a
+      // match runs off the front of it. A negative frame is not a frame, and
+      // it would otherwise match the empty slots' own sentinel.
+      if (f < 0) return -1
+      const i = f % TIMELINE
+      if (slotFrame[i] !== f) return -1
+      return slotKind[i] | (slotDepth[i] << 2)
     },
     get log() {
       return log
@@ -444,6 +518,7 @@ export function createNetplay(
           // Already simulated this frame on a guess, and the guess was wrong.
           if (f < frame && used[f] !== inputs[i]) {
             stats.mispredicted++
+            mark(f, FRAME_CORRECTED)
             if (earliest < 0 || f < earliest) earliest = f
           }
         }

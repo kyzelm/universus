@@ -1,6 +1,6 @@
 import {Application, Container, Graphics, Text} from 'pixi.js'
 import {CLEAN, createLink, type Impairment, type Link} from '../net/impair'
-import {createNetplay, depthP99, type Netplay} from '../net/netplay'
+import {createNetplay, depthP99, MAX_ROLLBACK, TIMELINE, type Netplay} from '../net/netplay'
 import type {Peer} from '../net/peer'
 import {
   advance,
@@ -77,6 +77,23 @@ const EVENT_COLORS: readonly (readonly [number, number])[] = [
 /** How long a spark lives, in display frames. */
 const SPARK_FRAMES = 10
 const SPARK_RADIUS = 14
+
+/**
+ * The rollback visualiser (01 Thesis/Supervisor Deliverables.md). **Rollback is
+ * invisible when it works** — a match over a bad connection looks exactly like
+ * a match over a perfect one, which means the hardest part of the project looks
+ * like nothing happened. The strip is three seconds of frames, coloured by what
+ * each was simulated from, with a tick where each correction landed and how
+ * deep it went.
+ */
+const STRIP_COL = 2
+const STRIP_H = 12
+const STRIP_DEPTH_H = 22
+const STRIP_X = 10
+const STRIP_Y = VIEW_H - 24
+
+/** Clean, predicted, corrected — indexed by the FRAME_* constants. */
+const STRIP_COLORS = [0x3a7a4a, 0xd8a53a, 0xe0574a]
 
 export interface Game {
   /**
@@ -171,6 +188,16 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   announce.position.set(VIEW_W / 2, 150)
   announce.anchor.set(0.5, 0.5)
   app.stage.addChild(announce)
+
+  const strip = new Graphics()
+  app.stage.addChild(strip)
+
+  const stripKey = new Text({
+    text: '',
+    style: {fill: 0x8a94a6, fontFamily: 'monospace', fontSize: 10},
+  })
+  stripKey.position.set(STRIP_X, STRIP_Y + STRIP_H + 2)
+  app.stage.addChild(stripKey)
 
   const hud = new Text({
     text: '',
@@ -278,6 +305,16 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
       setCombo(combos[1 - i], snap.players[i])
     }
 
+    // Rollback made visible. Locally there is nothing to show — every frame is
+    // clean by construction — so the strip appears with the connection.
+    if (net) {
+      drawTimeline(strip, net)
+      setText(stripKey, 'clean · predicted · corrected   ▏= rollback landed, height = depth')
+    } else {
+      strip.clear()
+      setText(stripKey, '')
+    }
+
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.
     if (snap.frame % HUD_EVERY === 0) {
@@ -340,6 +377,62 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
       // cached, so a remount would have no sim. reset() on start covers it.
       app.destroy(true, {children: true})
     },
+  }
+}
+
+/**
+ * Three seconds of frames, oldest on the left, coloured by what each was
+ * simulated from — and a white tick wherever a correction landed, as tall as
+ * the rollback was deep.
+ *
+ * Runs of the same colour are merged into one rectangle. A healthy match is
+ * 180 clean frames and draws about three: the visualiser measures a frame
+ * budget it must not spend, and 180 rectangles a frame is a real cost in the
+ * one mode where frame time is the thing being reported.
+ */
+function drawTimeline(g: Graphics, net: Netplay): void {
+  g.clear()
+  const end = net.frame - 1
+  const first = end - TIMELINE + 1
+
+  g.rect(STRIP_X, STRIP_Y - STRIP_DEPTH_H, TIMELINE * STRIP_COL, STRIP_DEPTH_H + STRIP_H).fill({
+    color: 0x0e1014,
+    alpha: 0.55,
+  })
+
+  let runStart = 0
+  let runKind = -1
+
+  const flush = (until: number) => {
+    if (runKind < 0) return
+    const x = STRIP_X + runStart * STRIP_COL
+    g.rect(x, STRIP_Y, (until - runStart) * STRIP_COL, STRIP_H).fill(STRIP_COLORS[runKind])
+  }
+
+  for (let i = 0; i < TIMELINE; i++) {
+    const packed = net.sample(first + i)
+    const kind = packed < 0 ? -1 : packed & 3
+    if (kind !== runKind) {
+      flush(i)
+      runStart = i
+      runKind = kind
+    }
+
+    // Ticks are drawn per frame rather than per run: two corrections a frame
+    // apart are two events, and merging them would report one.
+    const depth = packed < 0 ? 0 : packed >> 2
+    if (depth > 0) {
+      const h = (depth / MAX_ROLLBACK) * STRIP_DEPTH_H
+      g.rect(STRIP_X + i * STRIP_COL, STRIP_Y - h, STRIP_COL, h).fill(0xe8ecf2)
+    }
+  }
+  flush(TIMELINE)
+
+  // The confirmed line: everything to its right is a prediction that can still
+  // be taken back, which is also the line effects are fired up to.
+  const c = net.confirmed - first
+  if (c >= 0 && c < TIMELINE) {
+    g.rect(STRIP_X + c * STRIP_COL, STRIP_Y - 3, 1, STRIP_H + 6).fill(0xe8ecf2)
   }
 }
 

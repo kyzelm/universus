@@ -5,6 +5,10 @@ import {
   AHEAD_LIMIT,
   CHECKSUM_EVERY,
   createNetplay,
+  FRAME_CLEAN,
+  FRAME_CORRECTED,
+  FRAME_PREDICTED,
+  TIMELINE,
   depthP99,
   INPUT_DELAY,
   MAX_ROLLBACK,
@@ -506,4 +510,70 @@ test('the driver logs the confirmed inputs, in the replay format', () => {
   for (let f = 0; f < n / 2; f++) {
     expect(simA.applied[f]).toEqual([A.log[f * 2], A.log[f * 2 + 1]])
   }
+})
+
+/**
+ * The visualiser's data (01 Thesis/Supervisor Deliverables.md). Rollback is
+ * invisible when it works, so what the strip draws has to be *recorded* rather
+ * than inferred from a snapshot — by the time anything renders, the correction
+ * has already happened and the state looks like it always did.
+ */
+describe('the rollback timeline', () => {
+  const kindOf = (packed: number) => packed & 3
+  const depthOf = (packed: number) => packed >> 2
+
+  test('a frame simulated from input already in hand is clean', () => {
+    const {net} = harness()
+    net.receive(encodeInputs(0, [7, 7, 7]))
+    net.step(0)
+    net.step(0)
+
+    expect(kindOf(net.sample(0))).toBe(FRAME_CLEAN)
+    expect(kindOf(net.sample(1))).toBe(FRAME_CLEAN)
+  })
+
+  test('a frame simulated from a guess says so', () => {
+    const {net} = harness()
+    net.step(0)
+    expect(kindOf(net.sample(0))).toBe(FRAME_PREDICTED)
+  })
+
+  /**
+   * And it keeps saying so. The replay that follows a correction runs with the
+   * input now known, so a frame that re-recorded itself on the way past would
+   * report itself clean — and the strip would show a match in which nothing
+   * was ever mispredicted, which is exactly the illusion it exists to break.
+   */
+  test('a guess that turned out wrong stays marked, replay and all', () => {
+    const {net} = harness()
+    net.receive(encodeInputs(0, [5]))
+    for (let f = 0; f < 6; f++) net.step(0)
+
+    // Every packet carries eight frames, so one arrival routinely invalidates
+    // several: frames 1 to 4 were all predicted as 5 and were all really 9.
+    net.receive(encodeInputs(1, [9, 9, 9, 9]))
+
+    expect(net.stats.rollbacks).toBe(1)
+    // **All of them stay marked, not just the one the rollback landed on.**
+    // The replay runs with the input now known, so a frame that re-recorded
+    // itself on the way past would report itself clean, and the strip would
+    // show a match in which almost nothing was ever mispredicted.
+    for (const f of [1, 2, 3, 4]) {
+      expect(kindOf(net.sample(f))).toBe(FRAME_CORRECTED)
+    }
+    // The tick is drawn on the frame the rollback landed on, and its height is
+    // how many frames had to be thrown away.
+    expect(depthOf(net.sample(1))).toBe(5)
+    expect(depthOf(net.sample(2))).toBe(0)
+  })
+
+  test('a frame outside the ring reports nothing rather than a stale one', () => {
+    const {net} = harness()
+    net.step(0)
+
+    expect(net.sample(-1)).toBe(-1)
+    expect(net.sample(TIMELINE)).toBe(-1)
+    // One lap on: the slot exists and belongs to another frame.
+    expect(net.sample(0)).not.toBe(-1)
+  })
 })
