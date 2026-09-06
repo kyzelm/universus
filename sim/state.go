@@ -110,6 +110,12 @@ type PlayerState struct {
 	// roll back replays the wrong move.
 	Eaten int32
 
+	// Events is this frame's effect flags — see events.go. In GameState because
+	// that is the whole mechanism: flags that roll back are recomputed by a
+	// replay rather than accumulated by one, which is what stops a hit sound
+	// playing once per rollback.
+	Events int32
+
 	// Juggle is how many times this player has been hit while already in the
 	// air, reset the moment they touch the ground. It is what stops an air
 	// combo being infinite: a move refuses to connect once the count reaches
@@ -231,6 +237,11 @@ func NewMatch(c0, c1 int32) GameState {
 // steps in different orders produce different states from identical inputs,
 // which is a desync with no other symptom.
 func (s *GameState) Advance(in [2]uint16) {
+	// Effect flags describe *this* frame, so they are cleared before anything
+	// can set them — above the hitstop and phase returns below, or a hit's flag
+	// would survive the whole freeze and be fired once per frame of it.
+	s.clearEvents()
+
 	// 1. Resolve inputs. Record history first: motion recognition, the dash
 	// double-tap and the input buffer all read the ring, and all must see this
 	// frame.
@@ -475,6 +486,7 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 		// counter class of the last real hit stands until the next one.
 		dp.enter(StateBlockstun)
 		dp.Stun = mv.Blockstun
+		dp.Events |= EventBlock
 
 		// **Block pushback is its own number and it is the larger one.** It is
 		// what spaces a blockstring out, and therefore what decides whether
@@ -515,6 +527,7 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 
 		dp.enter(StateHitstun)
 		dp.Stun = mv.Hitstun + counterHitstun(counter)
+		dp.Events |= EventHit
 
 		// Owed after the hitstun, not instead of it, and set after enter
 		// because entering a state is what clears the previous debt.

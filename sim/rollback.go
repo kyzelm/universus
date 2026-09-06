@@ -6,6 +6,13 @@ package sim
 const (
 	MaxRollback = 8
 	ringSize    = 12
+
+	// The event ring is longer than the state ring on purpose. A state is only
+	// ever needed inside the rollback window; an *event* is needed until the
+	// view has drawn it, and the view runs on the display's clock — one slow
+	// frame must not lose a hit spark. 64 entries is a second of slack for
+	// 512 bytes.
+	eventRing = 64
 )
 
 // Session drives the sim for rollback. It owns the state, a ring of snapshots
@@ -17,6 +24,19 @@ type Session struct {
 	state  GameState
 	ring   [ringSize]GameState // ring[f%ringSize] is the state at the start of frame f
 	inputs [ringSize][2]uint16 // inputs[f%ringSize] is what advanced frame f
+
+	// events[f%eventRing] is what happened on frame f, packed (see events.go).
+	// A replay overwrites the slot with the corrected value, which is the whole
+	// point: the view reads this only for frames that can no longer change, so
+	// what it reads is what actually happened rather than what was predicted.
+	//
+	// The frame is stored beside the flags because the ring wraps. Without it
+	// a frame that has fallen out returns some *other* frame's events, which
+	// would be a hit spark on a frame nothing happened.
+	events [eventRing]struct {
+		frame uint32
+		bits  uint32
+	}
 }
 
 func NewSession() Session { return Session{state: New()} }
@@ -30,7 +50,26 @@ func (s *Session) Advance(in [2]uint16) {
 	i := s.state.Frame % ringSize
 	s.ring[i] = s.state
 	s.inputs[i] = in
+
+	f := s.state.Frame
 	s.state.Advance(in)
+
+	// Recorded after the frame ran and keyed by the frame it belongs to, so a
+	// replay of frame f writes the same slot again rather than a new one.
+	e := &s.events[f%eventRing]
+	e.frame, e.bits = f, s.state.packEvents()
+}
+
+// EventsAt is what happened on a frame, packed — player 0 in the low 16 bits.
+// Zero for a frame that has fallen out of the ring, which is the right answer:
+// an effect nobody drew in a second of wall-clock time is one nobody should be
+// shown now.
+func (s *Session) EventsAt(frame uint32) uint32 {
+	e := &s.events[frame%eventRing]
+	if e.frame != frame {
+		return 0
+	}
+	return e.bits
 }
 
 // Rewind restores the state at the start of frame. The caller then replays,

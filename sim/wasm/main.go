@@ -66,6 +66,14 @@ func main() {
 		return ok
 	}))
 
+	// eventsAt(frame) is what happened on a frame — hit, block, throw,
+	// knockdown, super — packed with player 0 in the low 16 bits. The view
+	// calls it only for frames the net layer has confirmed, which is what
+	// keeps one hit from being drawn once per rollback replay.
+	api.Set("eventsAt", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		return int(session.EventsAt(uint32(args[0].Int())))
+	}))
+
 	// dataVersion() is the hash of the embedded character files. Both ends
 	// compare it before the first frame: different frame data is a desync that
 	// no amount of checksum exchange can diagnose after the fact.

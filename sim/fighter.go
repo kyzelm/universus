@@ -101,6 +101,7 @@ func (p *PlayerState) enter(state int32) {
 func (p *PlayerState) knockdown() {
 	p.enter(StateKnockdown)
 	p.Stun = balance.KnockdownFrames
+	p.Events |= EventKnockdown
 }
 
 // land ends an airborne action on touchdown, owing n frames of recovery. Zero
@@ -164,6 +165,9 @@ func (p *PlayerState) enterMove(index int32, now uint32) {
 	// a deduction and not a check — one place that can take the bars, which is
 	// what keeps "it came out" and "it was paid for" from ever disagreeing.
 	p.Super -= mv.SuperCost()
+	if mv.Super > 0 {
+		p.Events |= EventSuper
+	}
 
 	if !p.Airborne() || mv.Launches() {
 		p.VX = mv.LaunchVX.Mul(FromInt(int(p.Facing)))

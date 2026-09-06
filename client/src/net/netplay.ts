@@ -128,6 +128,13 @@ export interface Netplay {
   ping(): void
   readonly frame: number
   /**
+   * The newest frame that is both simulated and settled — every input in it is
+   * known, so it cannot be simulated again. **The line effects are fired up
+   * to**: anything past it is a prediction, and firing on a prediction is how
+   * one hit becomes eight sounds.
+   */
+  readonly confirmed: number
+  /**
    * How many frames ahead of the other end we are, with the connection's own
    * latency taken out. Positive means we are leading and will skip a frame;
    * negative means we are behind and they will. Instantaneous, so it is a
@@ -244,8 +251,17 @@ export function createNetplay(
    * and a frame we have not simulated has no local input recorded for it yet —
    * logging it would write a zero the sim never saw.
    */
+  /**
+   * The newest frame that is settled *and* simulated here. Bounded by both,
+   * because the other end can be ahead of us: a frame whose inputs we know but
+   * have not run has produced neither a state nor an event.
+   */
+  function settled(): number {
+    return Math.min(confirmed, frame - 1)
+  }
+
   function record(): void {
-    const upTo = Math.min(confirmed, frame - 1)
+    const upTo = settled()
     for (let f = logged + 1; f <= upTo; f++) {
       const mine = local[f] ?? 0
       log.push(seat === 0 ? mine : remote[f], seat === 0 ? remote[f] : mine)
@@ -335,6 +351,9 @@ export function createNetplay(
     },
     get advantage() {
       return advantage()
+    },
+    get confirmed() {
+      return settled()
     },
     get log() {
       return log

@@ -7,6 +7,12 @@ import {
   dataVersion,
   type Box,
   checksum,
+  EVENT_BLOCK,
+  EVENT_HIT,
+  EVENT_KNOCKDOWN,
+  EVENT_SUPER,
+  EVENT_THROWN,
+  eventsAt,
   loadSim,
   type PlayerSnapshot,
   readSnapshot,
@@ -25,6 +31,7 @@ import {
   STATE_NAMES,
 } from '../sim/wasm'
 import {createClock, STEP_MS} from './clock'
+import {createEvents} from './events'
 import {createInput} from './input'
 import {createSamples} from './stats'
 
@@ -52,6 +59,24 @@ const HIT_COLOR = 0xe0574a
 
 /** Frames between pings. Two a second is plenty to build an RTT distribution. */
 const PING_EVERY = 30
+
+/**
+ * Effect colours, one per event flag. The spark is a placeholder for the sounds
+ * and particles that arrive in M4 — what matters here is that it is fired
+ * through the confirmed-frame path, so everything hung off that path later
+ * inherits a mechanism that has already been proven not to double-fire.
+ */
+const EVENT_COLORS: readonly (readonly [number, number])[] = [
+  [EVENT_HIT, 0xffe08a],
+  [EVENT_BLOCK, 0x8ac8ff],
+  [EVENT_THROWN, 0xffa84a],
+  [EVENT_KNOCKDOWN, 0xff7a4a],
+  [EVENT_SUPER, 0xd08aff],
+]
+
+/** How long a spark lives, in display frames. */
+const SPARK_FRAMES = 10
+const SPARK_RADIUS = 14
 
 export interface Game {
   /**
@@ -105,6 +130,11 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
 
   const boxes = new Graphics()
   world.addChild(boxes)
+
+  // Sparks live in the world, not on the stage: an effect at a fighter's feet
+  // has to scroll with the fighter.
+  const sparkLayer = new Graphics()
+  world.addChild(sparkLayer)
 
   const bars = [new Graphics(), new Graphics()]
   bars.forEach((b) => app.stage.addChild(b))
@@ -173,6 +203,14 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   // it keeps of confirmed frames — see inputLog.
   const recorded: number[] = []
 
+  // **Effects fire from state, on confirmed frames, and never from inside the
+  // sim.** The sim sets flags and fires nothing; this drains them for frames
+  // that can no longer be simulated again. Built in M2 with a placeholder
+  // spark attached, because retrofitting it once there are real sounds means
+  // auditing every effect in the game (02 Architecture/Rollback Netcode.md).
+  const pump = createEvents(eventsAt)
+  const sparks: {x: number; y: number; life: number; color: number}[] = []
+
   app.ticker.add((ticker) => {
     frameCost.push(ticker.deltaMS)
     // A frame that took longer than one and a half steps is one the display
@@ -201,6 +239,29 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     // The camera is sim state, not a view decision — corner position is
     // gameplay, so both machines must agree on where the corner is.
     world.position.x = VIEW_W / 2 - snap.camX * SCALE
+
+    // Under netplay the confirmed line lags the simulated frame by the
+    // rollback window; locally every frame that has run is settled the moment
+    // it has. Either way nothing is drawn for a frame that could still change.
+    pump.drain(net ? net.confirmed : snap.frame - 1, ({seat, bits}) => {
+      const p = snap.players[seat]
+      for (const [bit, color] of EVENT_COLORS) {
+        // ponytail: drawn where the fighter is now, not where they were on the
+        // event's own frame. That is at most eight frames of drift and the
+        // alternative is a position history the view has no other use for.
+        if (bits & bit) sparks.push({x: p.x, y: p.y, life: SPARK_FRAMES, color})
+      }
+    })
+
+    sparkLayer.clear()
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const s = sparks[i]
+      const t = s.life / SPARK_FRAMES
+      sparkLayer
+        .circle(s.x * SCALE, GROUND_PX - (s.y + 24) * SCALE, SPARK_RADIUS * (1.4 - t))
+        .stroke({color: s.color, width: 2, alpha: t})
+      if (--s.life <= 0) sparks.splice(i, 1)
+    }
 
     boxes.clear()
     for (const p of snap.players) drawBoxes(boxes, p)
@@ -243,6 +304,9 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
 
     connect(peer, seat) {
       reset()
+      // The match restarts at frame 0, so what has been fired restarts with it.
+      pump.reset()
+      sparks.length = 0
       ticks = 0
       longFrames = 0
       net = createNetplay({advance, rewind, checksum, dataVersion}, (data) => peer.send(data), seat)

@@ -1,7 +1,17 @@
 import {readFileSync} from 'node:fs'
 import {beforeAll, expect, test} from 'vitest'
 import '../../public/wasm_exec.js'
-import {advance, BAR_UNITS, DRIVE_BARS, initSim, readSnapshot, reset, SUPER_BARS} from './wasm'
+import {
+  advance,
+  BAR_UNITS,
+  DRIVE_BARS,
+  EVENT_HIT,
+  eventsAt,
+  initSim,
+  readSnapshot,
+  reset,
+  SUPER_BARS,
+} from './wasm'
 
 // The Go build and the TypeScript reader agree on a byte layout or they do
 // not. This runs the real module off disk and checks that they do.
@@ -123,6 +133,30 @@ test('a connecting hit costs health and freezes both fighters', () => {
   const s = readSnapshot()
   expect(s.players[1].health).toBeLessThan(full)
   expect(sawHitstop).toBe(true)
+})
+
+/**
+ * The event flags across the real boundary, packed and unpacked. It is the one
+ * call the view makes about a frame that is no longer the current one, so a
+ * mistake in the packing shows up as effects on the wrong fighter rather than
+ * as anything that fails a checksum.
+ */
+test('a hit reports an event on the frame it landed', () => {
+  reset()
+  for (let i = 0; i < 60; i++) advance(RIGHT, LEFT)
+
+  let hitFrame = -1
+  for (let i = 0; i < 40 && hitFrame < 0; i++) {
+    advance(LP, 0)
+    const s = readSnapshot()
+    // The frame that produced this snapshot is the one before its counter.
+    if (eventsAt(s.frame - 1)[1] & EVENT_HIT) hitFrame = s.frame - 1
+  }
+
+  expect(hitFrame).toBeGreaterThan(0)
+  // On the defender and nobody else, and gone the frame after.
+  expect(eventsAt(hitFrame)[0]).toBe(0)
+  expect(eventsAt(hitFrame + 1)[1] & EVENT_HIT).toBe(0)
 })
 
 test('the frame counter tracks advance calls', () => {

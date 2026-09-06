@@ -8,6 +8,7 @@ declare global {
   let sim: {
     advance(p1: number, p2: number): void
     rewind(frame: number): boolean
+    eventsAt(frame: number): number
     reset(): void
     checksum(): number
     dataVersion(): number
@@ -76,6 +77,24 @@ export const BAR_UNITS = 1000
 
 /** Counter-hit classes, mirroring sim/damage.go. Index is the snapshot value. */
 export const COUNTER_NAMES = ['', 'COUNTER', 'PUNISH COUNTER']
+
+/**
+ * Effect flags, mirroring sim/events.go. The sim sets them in state and fires
+ * nothing; the view fires effects for the flags on *confirmed* frames only,
+ * which is what keeps one hit from being drawn once per rollback replay.
+ */
+export const EVENT_HIT = 1 << 0
+export const EVENT_BLOCK = 1 << 1
+export const EVENT_THROWN = 1 << 2
+export const EVENT_KNOCKDOWN = 1 << 3
+export const EVENT_SUPER = 1 << 4
+
+/**
+ * How many frames of events the sim keeps, mirroring sim/rollback.go. Anything
+ * older reads as zero, so it is also how far back the view can usefully catch
+ * up after a slow frame.
+ */
+export const EVENT_RING = 64
 
 export interface Box {
   x: number
@@ -187,6 +206,20 @@ export function advance(p1: number, p2: number): void {
  */
 export function rewind(frame: number): boolean {
   return sim.rewind(frame)
+}
+
+/**
+ * What happened on a frame, per seat. Zero for a frame that has aged out of the
+ * sim's ring, which is the right answer: an effect nobody drew a second ago is
+ * one nobody should be shown now.
+ *
+ * Ask only about frames the net layer has confirmed. A predicted frame can
+ * still be simulated again, and firing on one is the rollback bug this whole
+ * path exists to prevent.
+ */
+export function eventsAt(frame: number): [number, number] {
+  const packed = sim.eventsAt(frame)
+  return [packed & 0xffff, (packed >>> 16) & 0xffff]
 }
 
 export function reset(): void {

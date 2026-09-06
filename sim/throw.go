@@ -72,6 +72,7 @@ func (s *GameState) applyThrow(attacker, defender int, mv *Move, now uint32) {
 
 	dp.enter(StateThrown)
 	dp.Stun = mv.Hitstun
+	dp.Events |= EventThrown
 	// A throw ends on the floor if its data says so, which is the whole of what
 	// changed when knockdowns arrived: the fixed count of helpless frames a
 	// thrown player used to spend is now the throw's own animation, and the
