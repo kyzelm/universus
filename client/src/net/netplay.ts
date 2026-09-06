@@ -1,3 +1,4 @@
+import {STEP_MS} from '../game/clock'
 import {createSamples, type Samples} from '../game/stats'
 import {
   decodeChecksum,
@@ -24,6 +25,24 @@ import {
  */
 export const INPUT_DELAY = 2
 export const MAX_ROLLBACK = 8
+
+/**
+ * Time synchronisation (02 Architecture/Rollback Netcode.md). Two clients on
+ * two 60 Hz clocks do not stay on the same frame number: they start a few
+ * frames apart and their clocks drift, and the end that is ahead spends the
+ * difference predicting frames the other has not reached.
+ *
+ * **The leading end slows down; nobody ever speeds up.** Speeding up is visible
+ * and unpleasant, and dropping one frame occasionally is not — so an end that
+ * is more than AHEAD_LIMIT frames ahead skips a frame, at most one every
+ * SKIP_EVERY, which is the note's "briefly runs at 59 fps".
+ *
+ * The hard stall at the rollback window is the backstop, not the mechanism: by
+ * the time it fires the frame has already been lost. This keeps the advantage
+ * under the window so it does not.
+ */
+export const AHEAD_LIMIT = 2
+export const SKIP_EVERY = 6
 
 /**
  * Frames between checksum exchanges. Only frames whose inputs are all known
@@ -70,6 +89,11 @@ export interface NetplayStats {
   mispredicted: number
   /** Frames we refused to simulate because the remote was too far behind. */
   stalls: number
+  /**
+   * Frames deliberately dropped to let the other end catch up. Distinct from a
+   * stall: a stall is the window running out, a skip is what stops it doing so.
+   */
+  skipped: number
   /** Corrections that arrived too late to apply — a desync, if it ever fires. */
   dropped: number
   malformed: number
@@ -103,6 +127,24 @@ export interface Netplay {
   receive(data: ArrayBuffer): void
   ping(): void
   readonly frame: number
+  /**
+   * How many frames ahead of the other end we are, with the connection's own
+   * latency taken out. Positive means we are leading and will skip a frame;
+   * negative means we are behind and they will. Instantaneous, so it is a
+   * reading rather than a statistic.
+   */
+  readonly advantage: number
+  /**
+   * The confirmed inputs so far, in the replay log's order: p1 then p2, one
+   * pair per frame, seat-independent. **Every netplay session is a regression
+   * log** — a desync that cannot be replayed offline is one that has to be
+   * reproduced live, which is the expensive way to find anything.
+   *
+   * Only frames that are both simulated and confirmed appear, so what is here
+   * is final: a rollback corrects state, never the inputs of a frame whose
+   * inputs are already known.
+   */
+  readonly log: readonly number[]
   readonly stats: NetplayStats
 }
 
@@ -133,6 +175,19 @@ export function createNetplay(
   /** Highest frame with remote input known contiguously from the start. */
   let confirmed = -1
 
+  /**
+   * The frame the other end was on when it sent the newest inputs we have.
+   * Read off the packet rather than exchanged separately: a packet's newest
+   * input is the sender's frame plus INPUT_DELAY, so their frame is already in
+   * the format and needs no field of its own.
+   */
+  let theirFrame = -1
+  let lastSkip = -SKIP_EVERY
+
+  /** Frames written to the log so far, so settle only ever appends. */
+  let logged = -1
+  const log: number[] = []
+
   const stats: NetplayStats = {
     dataMismatch: false,
     frames: 0,
@@ -141,6 +196,7 @@ export function createNetplay(
     predicted: 0,
     mispredicted: 0,
     stalls: 0,
+    skipped: 0,
     dropped: 0,
     malformed: 0,
     verified: 0,
@@ -163,6 +219,40 @@ export function createNetplay(
     return 0
   }
 
+  /**
+   * Frames we are ahead, corrected for the flight time of what we are reading.
+   *
+   * The correction is the point. Their newest input is one one-way trip old,
+   * so on a healthy 100 ms connection we look three frames ahead of them while
+   * being perfectly in sync — and an uncorrected comparison would have the
+   * leading end skipping frames forever at every latency worth measuring. The
+   * RTT is already sampled twice a second for the results chapter; half of it
+   * is the trip, and this is the second thing it pays for.
+   *
+   * Zero until the first ping comes back: with no measurement, the honest
+   * answer is that we do not know yet, and a guess here is a skipped frame.
+   */
+  function advantage(): number {
+    if (theirFrame < 0 || stats.rtt.count === 0) return 0
+    const flight = Math.round(stats.rtt.percentile(50) / 2 / STEP_MS)
+    return frame - theirFrame - flight
+  }
+
+  /**
+   * Appends every frame that is both simulated and confirmed. Bounded by
+   * `frame - 1` and not by `confirmed` alone: the other end can be ahead of us,
+   * and a frame we have not simulated has no local input recorded for it yet —
+   * logging it would write a zero the sim never saw.
+   */
+  function record(): void {
+    const upTo = Math.min(confirmed, frame - 1)
+    for (let f = logged + 1; f <= upTo; f++) {
+      const mine = local[f] ?? 0
+      log.push(seat === 0 ? mine : remote[f], seat === 0 ? remote[f] : mine)
+      logged = f
+    }
+  }
+
   function simulate(f: number, remoteBits: number): void {
     used[f] = remoteBits
     const mine = local[f] ?? 0
@@ -182,6 +272,7 @@ export function createNetplay(
    * `confirmed + 1` is the newest frame worth hashing.
    */
   function settle(): void {
+    record()
     const settled = confirmed + 1
 
     for (let f = sentThrough + CHECKSUM_EVERY; f <= settled; f += CHECKSUM_EVERY) {
@@ -242,6 +333,12 @@ export function createNetplay(
     get frame() {
       return frame
     },
+    get advantage() {
+      return advantage()
+    },
+    get log() {
+      return log
+    },
     get stats() {
       return stats
     },
@@ -259,6 +356,18 @@ export function createNetplay(
       // frequency is one of the numbers worth reporting.
       if (frame - confirmed > MAX_ROLLBACK) {
         stats.stalls++
+        return false
+      }
+
+      // Time synchronisation: drop this frame if we are the end that is ahead.
+      // Only one end can be, since the two readings are the same difference
+      // with opposite signs, so this cannot turn into both sides waiting for
+      // each other. The cooldown is what keeps it a slowdown rather than a
+      // freeze — one frame in six while correcting, and nothing at all once
+      // the two are level.
+      if (advantage() > AHEAD_LIMIT && frame - lastSkip >= SKIP_EVERY) {
+        lastSkip = frame
+        stats.skipped++
         return false
       }
 
@@ -299,6 +408,14 @@ export function createNetplay(
         }
 
         const {startFrame, inputs} = decodeInputs(data)
+
+        // The newest input in the packet is the sender's own frame plus the
+        // input delay, which is what they were on when they sent it. Monotone,
+        // because the channel is unordered and an older packet arriving later
+        // must not walk the reading backwards.
+        const theirs = startFrame + inputs.length - 1 - INPUT_DELAY
+        if (theirs > theirFrame) theirFrame = theirs
+
         for (let i = 0; i < inputs.length; i++) {
           const f = startFrame + i
           if (known[f]) continue // redundancy: already had it, or it was resent
@@ -329,6 +446,7 @@ export function createNetplay(
         predicted: 0,
         mispredicted: 0,
         stalls: 0,
+        skipped: 0,
         dropped: 0,
         malformed: 0,
         verified: 0,

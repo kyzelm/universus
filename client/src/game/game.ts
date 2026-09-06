@@ -168,8 +168,9 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   // any single test in here — but only if it is actually recorded. Growth is
   // ~864 KB an hour, which is not worth a ring buffer.
   //
-  // Local play only: under netplay the driver decides what the sim is fed,
-  // including on replays, so the honest log lives there rather than here.
+  // Local play only. Under netplay the driver decides what the sim is fed,
+  // including on replays, so the log that is honest about a match is the one
+  // it keeps of confirmed frames — see inputLog.
   const recorded: number[] = []
 
   app.ticker.add((ticker) => {
@@ -226,11 +227,17 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
 
   return {
     inputLog() {
-      const buf = new ArrayBuffer(recorded.length * 2)
+      // Under netplay the driver's log is the authority: it holds the inputs
+      // that were *confirmed*, which is what the match actually simulated once
+      // every rollback had been applied. A log kept out here would record the
+      // predictions instead, and replay a match nobody played.
+      const src = net ? net.log : recorded
+
+      const buf = new ArrayBuffer(src.length * 2)
       const v = new DataView(buf)
       // Explicit little-endian rather than a Uint16Array, which would use the
       // platform's byte order and silently produce a different file elsewhere.
-      for (let i = 0; i < recorded.length; i++) v.setUint16(i * 2, recorded[i], true)
+      for (let i = 0; i < src.length; i++) v.setUint16(i * 2, src[i], true)
       return new Blob([buf], {type: 'application/octet-stream'})
     },
 
@@ -480,7 +487,12 @@ function netHud(net: Netplay, link: Link | null): string {
     `rtt p50 ${rtt(50)}ms p99 ${rtt(99)}ms`,
     `rollback ${pct(s.rollbacks)}% depth p99 ${depthP99(s.depths)}`,
     `mispredict ${pct(s.mispredicted)}%`,
+    // Ahead and behind read differently and both matter: the leading end is
+    // the one that skips, and a skip count that never moves on a laggy link
+    // means time synchronisation is not doing its job.
+    `ahead ${net.advantage > 0 ? '+' : ''}${net.advantage}`,
     `stalls ${s.stalls}`,
+    `skips ${s.skipped}`,
     `checked ${s.verified}`,
     s.desyncs ? `DESYNC at frame ${s.desyncFrame}` : `desync 0`,
     conditions(link),

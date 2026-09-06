@@ -1,6 +1,8 @@
-import {afterEach, describe, expect, test, vi} from 'vitest'
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest'
 import {createLink} from './impair'
+import {STEP_MS} from '../game/clock'
 import {
+  AHEAD_LIMIT,
   CHECKSUM_EVERY,
   createNetplay,
   depthP99,
@@ -400,4 +402,108 @@ describe('under artificial network conditions', () => {
     expect(A.stats.dropped).toBe(0)
     expect(B.stats.dropped).toBe(0)
   })
+})
+
+/**
+ * Two ends on their own 60 Hz clocks, exchanging inputs and pings over a fixed
+ * delay. Timers are faked including `performance`, so the ping measures the
+ * simulated wire rather than the few microseconds a headless loop really takes
+ * — which is the whole point: the flight correction is computed from the RTT.
+ *
+ * @param headStart frames the first end runs before the second one starts,
+ * which is how two machines actually begin a match: whoever's channel opened
+ * first is already simulating.
+ */
+function linked(frames: number, lagFrames: number, headStart = 0) {
+  const simA = stubSim()
+  const simB = stubSim()
+  const flight: {at: number; toA: boolean; data: ArrayBuffer}[] = []
+  let now = 0
+
+  const A = createNetplay(simA, (d) => flight.push({at: now + lagFrames, toA: false, data: d}), 0)
+  const B = createNetplay(simB, (d) => flight.push({at: now + lagFrames, toA: true, data: d}), 1)
+
+  for (now = -headStart; now < frames; now++) {
+    for (const p of flight.filter((p) => p.at === now)) (p.toA ? A : B).receive(p.data)
+
+    A.step(now & 0xf)
+    if (now >= 0) B.step((now * 3) & 0xf)
+    if (now % 30 === 0) {
+      A.ping()
+      if (now >= 0) B.ping()
+    }
+    vi.advanceTimersByTime(STEP_MS)
+  }
+  return {A, B, simA, simB}
+}
+
+/**
+ * Time synchronisation (02 Architecture/Rollback Netcode.md). Without it the
+ * end that started first predicts frames the other has not reached for the rest
+ * of the match, and pays for it in mispredictions and eventually in stalls.
+ */
+describe('time synchronisation', () => {
+  afterEach(() => vi.useRealTimers())
+  beforeEach(() => vi.useFakeTimers({toFake: ['performance', 'setTimeout', 'clearTimeout']}))
+
+  test('the end that is ahead is the one that slows down', () => {
+    const HEAD_START = 8
+    const {A, B, simA, simB} = linked(400, 3, HEAD_START)
+
+    expect(A.stats.skipped).toBeGreaterThan(0)
+    // **Never both.** The two readings are the same difference with opposite
+    // signs, so an end that is behind cannot decide to wait as well — that
+    // would be two clients politely deadlocking each other.
+    expect(B.stats.skipped).toBe(0)
+
+    // The claim, measured on the frame counters rather than on the instrument:
+    // the head start is gone. Without this it stays for the whole match, and
+    // the leading end predicts frames the other has not reached forever.
+    expect(simA.frame - simB.frame).toBeLessThanOrEqual(AHEAD_LIMIT)
+
+    // And it stopped once level, over 400 frames in which it could have
+    // skipped sixty.
+    expect(A.stats.skipped).toBeLessThanOrEqual(HEAD_START)
+  })
+
+  test('a healthy connection never skips, however long the wire is', () => {
+    // 200 ms round trip. Their newest input is six frames old at all times, so
+    // an uncorrected comparison reads six frames of advantage that do not
+    // exist and skips forever.
+    const {A, B, simA, simB} = linked(400, 6)
+
+    expect(A.stats.skipped).toBe(0)
+    expect(B.stats.skipped).toBe(0)
+    expect(Math.abs(simA.frame - simB.frame)).toBeLessThanOrEqual(1)
+  })
+
+  test('nothing is skipped before the first ping comes back', () => {
+    const {net} = harness()
+    // Ahead by a mile as far as the frame numbers go, and no RTT measured.
+    net.receive(encodeInputs(0, [0]))
+    for (let f = 0; f < 20; f++) net.step(0)
+
+    expect(net.advantage).toBe(0)
+    expect(net.stats.skipped).toBe(0)
+  })
+})
+
+/**
+ * **Every netplay session is a regression log.** A desync that cannot be
+ * replayed offline has to be reproduced live, which is the expensive way to
+ * find anything — and the corpus is worth more than any single test.
+ */
+test('the driver logs the confirmed inputs, in the replay format', () => {
+  const {A, B, simA} = match(200)
+
+  const n = Math.min(A.log.length, B.log.length)
+  expect(n).toBeGreaterThan(300) // ~150 frames of a 200-frame match, confirmed
+  // Both ends log the same pairs in the same order: the log is a fact about
+  // the match, not about which seat recorded it.
+  expect(A.log.slice(0, n)).toEqual(B.log.slice(0, n))
+
+  // And it is what the sim was actually fed, p1 first.
+  for (let f = 0; f < n / 2; f++) {
+    expect(simA.applied[f]).toEqual([A.log[f * 2], A.log[f * 2 + 1]])
+  }
 })
