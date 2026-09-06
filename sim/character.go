@@ -152,6 +152,22 @@ type Move struct {
 	// change velocity partway is a keyframe field away, and none does yet.
 	LaunchVX, LaunchVY Fix
 
+	// KnockbackVX and KnockbackVY are the velocity the move gives the
+	// *defender* on a clean hit, directed away from the attacker. A vertical
+	// component launches them and gravity supplies the arc; a purely
+	// horizontal one is ordinary pushback, which is what spaces a blockstring
+	// out and what the corner reverses.
+	//
+	// Zero means the balance file's default — every move that is not a
+	// launcher wants the same push, and authoring it 24 times would be 24
+	// chances to author it differently by accident. See Knockback.
+	KnockbackVX, KnockbackVY Fix
+
+	// JuggleLimit is the juggle count at or above which this move refuses to
+	// connect with an airborne defender: the knob that designates a move a
+	// combo ender. Zero means the balance file's default.
+	JuggleLimit int32
+
 	// Landing is the recovery owed on touchdown by a move that was still in
 	// the air when it ended. Without it an air normal or an uppercut that runs
 	// out above the ground makes the character actionable the instant they

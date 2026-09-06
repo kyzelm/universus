@@ -110,6 +110,12 @@ type PlayerState struct {
 	// roll back replays the wrong move.
 	Eaten int32
 
+	// Juggle is how many times this player has been hit while already in the
+	// air, reset the moment they touch the ground. It is what stops an air
+	// combo being infinite: a move refuses to connect once the count reaches
+	// its limit, and gravity rises with it so the fall outruns the follow-up.
+	Juggle int32
+
 	// JumpVX is the horizontal velocity committed at pre-jump. There is no air
 	// control, so the whole arc follows from this and gravity.
 	JumpVX Fix
@@ -270,7 +276,7 @@ func (s *GameState) Advance(in [2]uint16) {
 		// answer. Asking again afterwards would ask about a different frame.
 		air := p.Airborne()
 		if air {
-			p.VY += CharacterAt(p.Char).Gravity
+			p.VY += p.gravity()
 		}
 		p.X += p.VX
 		p.Y += p.VY
@@ -285,6 +291,10 @@ func (s *GameState) Advance(in [2]uint16) {
 				// ground every frame and must keep the velocity its data gave
 				// it.
 				p.VX = 0
+
+				// The floor is what ends a juggle, whoever was juggled and
+				// however they got up there.
+				p.Juggle = 0
 
 				// Landing ends a jump, and it ends an air normal with it: an
 				// air move's recovery is the fall, and it has no business
@@ -303,6 +313,14 @@ func (s *GameState) Advance(in [2]uint16) {
 					p.land(mv.Landing)
 				case p.State == StateAir:
 					p.land(p.Landing)
+				case p.State == StateHitstun:
+					// **A juggle ends on the floor.** Hitstun does not expire
+					// in mid-air (see advanceState), so anyone still in it when
+					// they touch down was launched or hit out of a jump, and
+					// they land in the same knockdown a sweep gives — which is
+					// also what resets the juggle counter's other half, the
+					// okizeme the attacker gets for the combo.
+					p.knockdown()
 				}
 			}
 		}
@@ -386,6 +404,12 @@ func (s *GameState) connects(attacker, defender int) bool {
 		return false
 	}
 
+	// The juggle limit refuses the connect rather than softening it: a move
+	// that has run out of juggles whiffs, and whiffing is what ends the combo.
+	if s.juggled(defender, s.Players[attacker].move()) {
+		return false
+	}
+
 	var hits, hurts [MaxBoxes]Box
 	nh := s.Hitboxes(attacker, &hits)
 	if nh == 0 {
@@ -434,6 +458,12 @@ func (s *GameState) resolveHit(attacker, defender int, mv *Move, defenderIn uint
 func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16) {
 	ap, dp := &s.Players[attacker], &s.Players[defender]
 
+	// Whether the defender was already off the ground, read before anything
+	// here changes their state: entering hitstun ends StateAir, and the answer
+	// decides both whether this hit counts as a juggle and whether it is
+	// allowed to launch them again.
+	airborne := dp.Airborne()
+
 	// Damage dealt is measured off the health bar at the end of this function
 	// rather than taken from the formula, so the match total the round cap's
 	// tiebreak reads is what actually happened: chip that stopped at 1 health
@@ -445,6 +475,12 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 		// counter class of the last real hit stands until the next one.
 		dp.enter(StateBlockstun)
 		dp.Stun = mv.Blockstun
+
+		// **Block pushback is its own number and it is the larger one.** It is
+		// what spaces a blockstring out, and therefore what decides whether
+		// pressure continues or ends — a value worth authoring rather than
+		// scaling off the hit push by a guess.
+		s.applyKnockback(attacker, defender, mv, true)
 
 		if dp.Burnout != 0 {
 			// The Burnout penalties, and the only place in the game where
@@ -495,9 +531,17 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 		ap.gainSuper(mv.Damage * balance.SuperDealtPercent / 100)
 		dp.gainSuper(mv.Damage * balance.SuperTakenPercent / 100)
 
-		// ponytail: no juggles. A juggle counter needs something that puts the
-		// defender in the air, and no move launches anyone but its own owner —
-		// juggles arrive with knockdowns and launchers, not before.
+		// A hit taken in the air is a juggle hit. The launcher itself is not
+		// one: it is what put the defender up there, and counting it would
+		// spend a juggle on the hit that started the combo.
+		if airborne {
+			dp.Juggle++
+		}
+
+		// Pushback, and the launcher with it: one field family, two behaviours.
+		// After the stun above, because entering a state is what resets the
+		// velocity of everything that is not being pushed.
+		s.applyKnockback(attacker, defender, mv, false)
 	}
 
 	// A special that connects pays a flat bonus whether it hit or was blocked.
@@ -546,17 +590,44 @@ func (s *GameState) separate() {
 }
 
 // clampToStage keeps both pushboxes inside the walls.
+//
+// **The corner rule lives here.** When the wall eats a defender's pushback, the
+// leftover moves the attacker back instead — without it the clamp silently
+// swallows every unit of pushback in the corner, which is precisely where
+// pushback decides whether pressure continues, and corner pressure is a core
+// mechanic rather than a side effect (03 Game Design/Movement and Defense.md).
 func (s *GameState) clampToStage() {
 	for i := range s.Players {
-		p := &s.Players[i]
-		box := s.Pushbox(i)
-		if d := -StageHalfWidth - box.X; d > 0 {
-			p.X += d
+		d := s.wallCorrection(i)
+		if d == 0 {
+			continue
 		}
-		if d := (box.X + box.W) - StageHalfWidth; d > 0 {
-			p.X -= d
+		s.Players[i].X += d
+		if !pushedIntoWall(&s.Players[i], d) {
+			continue
 		}
+
+		// The push has to go somewhere and the wall does not move, so the
+		// attacker takes it — and is clamped in turn, because a stage narrower
+		// than two fighters plus a push is a reason to stop, not a reason to
+		// leave someone outside the walls.
+		o := 1 - i
+		s.Players[o].X += d
+		s.Players[o].X += s.wallCorrection(o)
 	}
+}
+
+// wallCorrection is how far player i has to move to be inside the walls, or
+// zero if they already are.
+func (s *GameState) wallCorrection(i int) Fix {
+	box := s.Pushbox(i)
+	if d := -StageHalfWidth - box.X; d > 0 {
+		return d
+	}
+	if d := (box.X + box.W) - StageHalfWidth; d > 0 {
+		return -d
+	}
+	return 0
 }
 
 // updateFacing turns each player toward the other.

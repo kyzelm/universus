@@ -145,7 +145,15 @@ func (s *GameState) resolveProjectiles(in [2]uint16) {
 				continue
 			}
 			c := CharacterAt(s.Players[pr.Owner].Char)
-			s.applyHit(int(pr.Owner), defender, &c.Moves[pr.Move], in[defender])
+			mv := &c.Moves[pr.Move]
+			// A fireball obeys the juggle limit like anything else, and obeys
+			// it *before* it is spent: a projectile that has run out of juggles
+			// passes through and stays in flight, the same whiff the move
+			// itself would have.
+			if s.juggled(defender, mv) {
+				break
+			}
+			s.applyHit(int(pr.Owner), defender, mv, in[defender])
 			pr.Active = 0
 			break
 		}

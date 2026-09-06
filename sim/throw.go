@@ -24,14 +24,7 @@ package sim
 // thrown either — one window, as that decision says.
 func (s *GameState) throwable(i int) bool {
 	p := &s.Players[i]
-	if p.Airborne() {
-		return false
-	}
-	switch p.State {
-	case StateHitstun, StateBlockstun, StateLanding, StateThrown, StateKnockdown:
-		return false
-	}
-	return true
+	return !p.Airborne() && !stunned(p.State)
 }
 
 // techFrame is the frame on which the defender pressed throw inside the tech

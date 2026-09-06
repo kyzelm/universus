@@ -85,6 +85,24 @@ type Balance struct {
 	ThrowTechRecovery int32
 	ThrowTechPush     int32
 
+	// Knockback (knockback.go). KnockbackHit and KnockbackBlock are the default
+	// push a connect gives the defender, in units per frame; a move that wants
+	// its own — a launcher — authors it. **The block value is the larger one**:
+	// it is what spaces a blockstring out and therefore what decides whether
+	// pressure continues. KnockbackDecay is the percentage of the push kept per
+	// grounded frame, which is the friction that ends the slide.
+	KnockbackHit   Fix
+	KnockbackBlock Fix
+	KnockbackDecay int32
+
+	// Juggles. JuggleLimit is how many hits an airborne defender takes before
+	// moves stop connecting, standing in for every move that does not name its
+	// own; JuggleGravityPercent is how much heavier each juggle hit makes them
+	// fall, which is what makes an air combo self-terminate rather than merely
+	// hit a cap.
+	JuggleLimit          int32
+	JuggleGravityPercent int32
+
 	// KnockdownFrames is how long a knocked-down player is on the ground, and
 	// it is deliberately one number: the design note says wakeup timing stays
 	// identical for every knockdown type, because varying it is a balance

@@ -73,6 +73,18 @@ func testBalance() Balance {
 		// enough that a test can sit through one.
 		KnockdownFrames: 30,
 
+		// Knockback in round numbers: a unit a frame on hit, two on block, and
+		// half of it left every frame, so the whole slide is exactly twice the
+		// initial push and the arithmetic is checkable by hand.
+		KnockbackHit:   One,
+		KnockbackBlock: FromInt(2),
+		KnockbackDecay: 50,
+
+		// Two juggle hits, and half as much gravity again for each of them:
+		// the fixture's 0.5 becomes 0.75 after one juggle hit.
+		JuggleLimit:          2,
+		JuggleGravityPercent: 50,
+
 		// Round flow in round numbers again, and a round long enough that no
 		// other test in the package can time one out by accident: the longest
 		// of them runs 2000 frames.
@@ -106,7 +118,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 12,
+		NumMoves: 13,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -327,6 +339,33 @@ func testCharacter() Character {
 	c.Moves[11].Keys[1] = Keyframe{Frame: 5, NumHurt: 1, NumHit: 1}
 	c.Moves[11].Keys[1].Hurt[0] = c.CrouchHurt
 	c.Moves[11].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(2), W: FromInt(28), H: FromInt(10)}
+
+	// The anti-air launcher: it throws the *defender* into the air and stays on
+	// the ground itself, which is the only shape a juggle can be tested from —
+	// a move that launches its own owner (move 3) leaves nobody in a position
+	// to follow up. Six up against the fixture's half a unit of gravity is 24
+	// frames of hang time, long enough to juggle in.
+	//
+	// Straight up, with no horizontal component: an anti-air that carried the
+	// defender away would carry them out of range of the follow-up, and the
+	// horizontal half of knockback is what every other move in the fixture
+	// already tests.
+	c.Moves[12] = Move{
+		Startup: 4, Active: 3, Recovery: 8,
+		Damage: 200, Hitstun: 16, Blockstun: 12, Hitstop: 6,
+		Level: LevelMid, Stance: StanceStand, Button: InLK,
+		KnockbackVY: FromInt(6),
+		NumKeys:     3,
+	}
+	c.Moves[12].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[12].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[12].Keys[1] = Keyframe{Frame: 4, NumHurt: 1, NumHit: 1}
+	c.Moves[12].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[12].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(10), W: FromInt(28), H: FromInt(40)}
+	// The hitbox ends with the active window: a keyframe persists until the
+	// next one, so a move without this keeps swinging through its recovery.
+	c.Moves[12].Keys[2] = Keyframe{Frame: 7, NumHurt: 1}
+	c.Moves[12].Keys[2].Hurt[0] = c.StandHurt
 
 	return c
 }

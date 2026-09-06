@@ -153,6 +153,8 @@
       "cancel": ["super2", "super3"],
       "invuln": [0, 5],
       "launch": [2.0, 8.0],
+      "knockback": [1.5, 4.0],
+      "juggleLimit": 1,
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 3, "hurt": [[-12, 4, 24, 40]], "hit": [[4, -4, 26, 68]] },
@@ -173,6 +175,8 @@
       "cancel": ["super2", "super3"],
       "invuln": [0, 4],
       "launch": [2.0, 9.0],
+      "knockback": [1.5, 4.5],
+      "juggleLimit": 1,
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 4, "hurt": [[-12, 4, 24, 40]], "hit": [[4, -4, 26, 72]] },
@@ -193,6 +197,8 @@
       "cancel": ["super2", "super3"],
       "invuln": [0, 3],
       "launch": [2.0, 10.0],
+      "knockback": [1.5, 5.0],
+      "juggleLimit": 1,
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 5, "hurt": [[-12, 4, 24, 40]], "hit": [[4, -4, 26, 76]] },
@@ -394,6 +400,7 @@
       "blockstun": 15,
       "hitstop": 10,
       "attackLevel": "mid",
+      "knockback": [1.0, 4.5],
       "cancel": ["super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },

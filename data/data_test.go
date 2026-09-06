@@ -186,6 +186,18 @@ func TestValidationRejectsBadData(t *testing.T) {
 		{"invuln with one value", func(c *jsonCharacter) { c.Moves[0].Invuln = []int{0} }},
 		{"invuln past the end of the move", func(c *jsonCharacter) { c.Moves[0].Invuln = []int{0, 999} }},
 		{"negative landing recovery", func(c *jsonCharacter) { c.Moves[0].Landing = -1 }},
+		{"knockback with one value", func(c *jsonCharacter) {
+			c.Moves[0].Knockback = []json.Number{"2"}
+		}},
+		{"knockback that is not a number", func(c *jsonCharacter) {
+			c.Moves[0].Knockback = []json.Number{"2", "away"}
+		}},
+		// [0, 0] is the balance default written in a way that reads as "this
+		// move pushes nobody", and the two are not the same claim.
+		{"a knockback of nothing", func(c *jsonCharacter) {
+			c.Moves[0].Knockback = []json.Number{"0", "0"}
+		}},
+		{"a negative juggle limit", func(c *jsonCharacter) { c.Moves[0].JuggleLimit = -1 }},
 		{"unknown cancel category", func(c *jsonCharacter) { c.Moves[0].Cancel = []string{"super4"} }},
 
 		{"a fourth super level", func(c *jsonCharacter) { c.Moves[0].Super = 4 }},
@@ -223,7 +235,7 @@ func TestTheShippedRosterUsesThePerMoveProperties(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	var invuln, landing, cancel int
+	var invuln, landing, cancel, launcher, ender int
 	for i := range cs {
 		for m := int32(0); m < cs[i].NumMoves; m++ {
 			mv := &cs[i].Moves[m]
@@ -236,11 +248,24 @@ func TestTheShippedRosterUsesThePerMoveProperties(t *testing.T) {
 			if mv.CancelInto != 0 {
 				cancel++
 			}
+			if mv.Launcher() {
+				launcher++
+			}
+			if mv.JuggleLimit != 0 {
+				ender++
+			}
 		}
 	}
 	if invuln == 0 || landing == 0 || cancel == 0 {
 		t.Errorf("roster has %d invulnerable, %d landing-recovery and %d cancelable moves, want some of each",
 			invuln, landing, cancel)
+	}
+	// A roster with no launcher is a roster in which the juggle system, the
+	// airborne hitstun and the knockdown that ends a juggle are all unreachable
+	// — shipped, tested, and dead in play.
+	if launcher == 0 || ender == 0 {
+		t.Errorf("roster has %d launchers and %d moves with their own juggle limit, want some of each",
+			launcher, ender)
 	}
 }
 
@@ -339,6 +364,17 @@ func TestBalanceValidationRejectsBadData(t *testing.T) {
 		}},
 		{"Burnout that never ends", func(b *jsonBalance) { b.Drive.RegenBurnout = 0 }},
 		{"Burnout over in a blink", func(b *jsonBalance) { b.Drive.RegenBurnout = sim.DriveMax }},
+
+		{"a hit that pushes nobody", func(b *jsonBalance) { b.Knockback.Hit = "0" }},
+		{"a block that pushes nobody", func(b *jsonBalance) { b.Knockback.Block = "0" }},
+		{"a push that is not a number", func(b *jsonBalance) { b.Knockback.Hit = "hard" }},
+		// At 100 the push never decays and the defender slides for the whole of
+		// their stun, which is friction meaning none.
+		{"pushback that never decays", func(b *jsonBalance) { b.Knockback.DecayPercent = 100 }},
+		// A limit of zero refuses every hit against an airborne opponent, since
+		// the counter starts there: anti-airs would stop working and the cause
+		// would be one field in this file.
+		{"a juggle limit nothing can be hit under", func(b *jsonBalance) { b.Juggle.Limit = 0 }},
 
 		{"a throw nobody can escape", func(b *jsonBalance) { b.Throw.TechFrames = 0 }},
 		{"a tech window longer than a throw", func(b *jsonBalance) { b.Throw.TechFrames = 21 }},

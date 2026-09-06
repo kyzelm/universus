@@ -213,6 +213,22 @@ type jsonBalance struct {
 		Frames int `json:"frames"`
 	} `json:"knockdown"`
 
+	// Knockback and juggles (sim/knockback.go). The hit and block pushes are
+	// velocities in units per frame, so they are decimals like every other
+	// speed in the data; decayPercent is the friction that ends the slide, and
+	// the juggle pair is the cap that ends an air combo and the extra gravity
+	// that ends it sooner.
+	Knockback struct {
+		Hit          json.Number `json:"hit"`
+		Block        json.Number `json:"block"`
+		DecayPercent int         `json:"decayPercent"`
+	} `json:"knockback"`
+
+	Juggle struct {
+		Limit          int `json:"limit"`
+		GravityPercent int `json:"gravityPercent"`
+	} `json:"juggle"`
+
 	Damage struct {
 		ComboScale        []int `json:"comboScale"`
 		StarterLight      int   `json:"starterLight"`
@@ -255,6 +271,9 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 		{"throw.techRecovery", jb.Throw.TechRecovery, &b.ThrowTechRecovery},
 		{"throw.techPush", jb.Throw.TechPush, &b.ThrowTechPush},
 		{"knockdown.frames", jb.Knockdown.Frames, &b.KnockdownFrames},
+		{"knockback.decayPercent", jb.Knockback.DecayPercent, &b.KnockbackDecay},
+		{"juggle.limit", jb.Juggle.Limit, &b.JuggleLimit},
+		{"juggle.gravityPercent", jb.Juggle.GravityPercent, &b.JuggleGravityPercent},
 		{"damage.starterLight", jb.Damage.StarterLight, &b.StarterLight},
 		{"damage.starterMedium", jb.Damage.StarterMedium, &b.StarterMedium},
 		{"damage.starterHeavy", jb.Damage.StarterHeavy, &b.StarterHeavy},
@@ -303,6 +322,32 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 	// somebody chose.
 	if b.KnockdownFrames <= 0 {
 		return b, fmt.Errorf("knockdown.frames must be positive, or nothing is ever knocked down")
+	}
+
+	var err error
+	if b.KnockbackHit, err = parseFix(jb.Knockback.Hit); err != nil {
+		return b, fmt.Errorf("knockback.hit: %w", err)
+	}
+	if b.KnockbackBlock, err = parseFix(jb.Knockback.Block); err != nil {
+		return b, fmt.Errorf("knockback.block: %w", err)
+	}
+	// Zero is a hit that moves nobody, which is the state of the game before
+	// pushback existed: a blockstring that never spaces itself out and a corner
+	// that does nothing.
+	if b.KnockbackHit <= 0 || b.KnockbackBlock <= 0 {
+		return b, fmt.Errorf("knockback.hit and knockback.block must be positive")
+	}
+	// The push is multiplied by this every grounded frame. At 100 it never
+	// decays and the defender slides for the whole of their stun; the check is
+	// what keeps "friction" from meaning "none".
+	if b.KnockbackDecay >= 100 {
+		return b, fmt.Errorf("knockback.decayPercent is %d, want 0..99", b.KnockbackDecay)
+	}
+	// A limit of zero refuses every hit against an airborne opponent, since the
+	// counter starts there — anti-airs would stop working and the cause would
+	// be one field in the balance file.
+	if b.JuggleLimit <= 0 {
+		return b, fmt.Errorf("juggle.limit must be positive, or nothing may be hit in the air")
 	}
 
 	// Chip is a fraction of the move's damage, so a value over 100 makes
@@ -433,6 +478,17 @@ type jsonMove struct {
 	// Velocity the move gives the character on its first frame, [vx, vy],
 	// forward-relative. Absent for the moves that do not move anyone.
 	Launch []json.Number `json:"launch"`
+
+	// Velocity the move gives the *defender* on a clean hit, [vx, vy], away
+	// from the attacker. A positive vy is what makes the move a launcher.
+	// Absent means the balance file's default push, which is what every move
+	// that is not one wants.
+	Knockback []json.Number `json:"knockback"`
+
+	// The juggle count at which this move stops connecting with an airborne
+	// defender — a low one designates a combo ender. Absent means the balance
+	// default.
+	JuggleLimit int `json:"juggleLimit"`
 
 	Boxes []jsonKeyframe `json:"boxes"`
 
@@ -742,6 +798,31 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 		}
 		m.LaunchVX, m.LaunchVY = vx, vy
 	}
+
+	if len(jm.Knockback) != 0 {
+		if len(jm.Knockback) != 2 {
+			return m, fmt.Errorf("knockback wants [vx, vy], got %d values", len(jm.Knockback))
+		}
+		vx, err := parseFix(jm.Knockback[0])
+		if err != nil {
+			return m, fmt.Errorf("knockback vx: %w", err)
+		}
+		vy, err := parseFix(jm.Knockback[1])
+		if err != nil {
+			return m, fmt.Errorf("knockback vy: %w", err)
+		}
+		// An authored [0, 0] is the balance default spelled in a way that reads
+		// as "this move pushes nobody", and the two are not the same claim.
+		if vx == 0 && vy == 0 {
+			return m, fmt.Errorf("knockback [0, 0] is the balance default; omit it instead")
+		}
+		m.KnockbackVX, m.KnockbackVY = vx, vy
+	}
+
+	if jm.JuggleLimit < 0 {
+		return m, fmt.Errorf("juggleLimit must not be negative, got %d", jm.JuggleLimit)
+	}
+	m.JuggleLimit = int32(jm.JuggleLimit)
 
 	if jm.Projectile != nil {
 		p, err := jm.Projectile.convert()

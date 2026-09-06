@@ -62,6 +62,19 @@ func Actionable(state int32) bool {
 	return false
 }
 
+// stunned reports the states that are a fixed count of frames accepting no
+// input — hitstun, blockstun, landing recovery, a throw and its tech, and lying
+// on the floor. One list, because three places ask the same question: what may
+// be thrown, what keeps its pushback rather than having its velocity reset, and
+// what the corner rule counts as being pushed.
+func stunned(state int32) bool {
+	switch state {
+	case StateHitstun, StateBlockstun, StateLanding, StateThrown, StateKnockdown:
+		return true
+	}
+	return false
+}
+
 // enter puts the player into a state, resetting its frame counter. Everything
 // that changes state goes through here, so "state changed but the counter did
 // not" cannot happen.
@@ -445,9 +458,27 @@ func (s *GameState) advanceState(i int) {
 	c := CharacterAt(p.Char)
 
 	// Every state below sets its velocity from scratch each frame — except an
-	// attack, which was handed its velocity when it started and keeps it. That
-	// is what makes a launch an arc rather than a single frame of movement.
-	if p.State != StateAttack {
+	// attack, which was handed its velocity when it started and keeps it (that
+	// is what makes a launch an arc rather than one frame of movement), and
+	// stun, which keeps the pushback the hit gave it.
+	switch {
+	case p.State == StateAttack:
+		// Keeps whatever enterMove handed it.
+
+	case stunned(p.State):
+		// Pushback bleeds off on the ground and not in the air: friction is
+		// what ends a slide, and a launched defender has none until they land.
+		// Integer decay reaches exactly zero — Go truncates toward it — so the
+		// slide terminates rather than creeping by one unit forever.
+		//
+		// Not on the frame the push was given (StateFrame 0, which hitstop
+		// holds there until the freeze ends): friction bleeds a slide off, it
+		// does not take a bite out of the impulse before it has moved anyone.
+		if !p.Airborne() && p.StateFrame > 0 {
+			p.VX = Fix(int64(p.VX) * int64(balance.KnockbackDecay) / 100)
+		}
+
+	default:
 		p.VX = 0
 	}
 
@@ -510,6 +541,15 @@ func (s *GameState) advanceState(i int) {
 		}
 
 	case StateHitstun, StateBlockstun, StateLanding, StateThrown, StateKnockdown:
+		// **Hitstun taken in the air does not run out in the air.** A launched
+		// defender stays helpless until they touch the floor, where the landing
+		// turns it into a knockdown; the alternative is a juggle that ends with
+		// an opponent who becomes actionable in mid-air, which is a different
+		// game and was reachable by any air-to-air hit before launchers
+		// existed.
+		if p.State == StateHitstun && p.Airborne() {
+			break
+		}
 		if p.Stun > 0 {
 			p.Stun--
 		}
