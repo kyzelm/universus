@@ -79,8 +79,10 @@ export default function NetPanel({game}: {game: Game | null}) {
   if (role === 'idle') {
     return (
       <section className="net">
-        <button onClick={() => void connect('host')}>host</button>
-        <button onClick={() => setRole('guest')}>join</button>
+        <div className="row">
+          <button onClick={() => void connect('host')}>host</button>
+          <button onClick={() => setRole('guest')}>join</button>
+        </div>
         <p className="keys">{status}</p>
       </section>
     )

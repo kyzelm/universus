@@ -15,6 +15,52 @@ function saveLog(game: Game) {
   URL.revokeObjectURL(url)
 }
 
+/**
+ * The key list, folded away in a <details>. It is read once and then never
+ * again, and left open it is a wall of text wider than the game it explains.
+ */
+function Controls() {
+  return (
+    <details className="controls">
+      <summary>controls</summary>
+      <dl>
+        <dt>move</dt>
+        <dd>
+          P1 <b>W A S D</b> · P2 <b>← ↓ ↑ →</b>
+        </dd>
+
+        <dt>punch</dt>
+        <dd>
+          <b>U I O</b> / <b>Num 7 8 9</b> — light, medium, heavy
+        </dd>
+
+        <dt>kick</dt>
+        <dd>
+          <b>J K L</b> / <b>Num 4 5 6</b> — all six work standing, crouching and in the air
+        </dd>
+
+        <dt>fireball</dt>
+        <dd>↓ ↘ → + punch, three strengths</dd>
+
+        <dt>uppercut</dt>
+        <dd>→ ↓ ↘ + punch, three strengths</dd>
+
+        <dt>supers</dt>
+        <dd>
+          ↓↘→ ×2 + <b>LP</b> (level 1) · ↓↘→ ×2 + <b>LK</b> (level 2) · ↓↙← ×2 + <b>LP</b>{' '}
+          (level 3), once the meter has the bars
+        </dd>
+
+        <dt>throw</dt>
+        <dd>
+          <b>LP+LK</b> on the same frame — beats blocking, misses anyone airborne, escaped by
+          pressing throw back within five frames
+        </dd>
+      </dl>
+    </details>
+  )
+}
+
 export default function App() {
   const host = useRef<HTMLDivElement>(null)
   const [game, setGame] = useState<Game | null>(null)
@@ -45,18 +91,17 @@ export default function App() {
   return (
     <main>
       <div ref={host} />
-      <p className="keys">
-        P1 WASD · P2 arrows. Punches <b>U I O</b> / <b>Num7 8 9</b>, kicks <b>J K L</b> /{' '}
-        <b>Num4 5 6</b> — all six work standing, crouching and in the air. Specials:{' '}
-        <b>fireball</b> ↓ ↘ → + punch and <b>uppercut</b> → ↓ ↘ + punch, three strengths
-        each. Supers, once the meter has the bars: <b>L1</b> ↓ ↘ → ↓ ↘ → + LP,{' '}
-        <b>L2</b> ↓ ↘ → ↓ ↘ → + LK, <b>L3</b> ↓ ↙ ← ↓ ↙ ← + LP. <b>Throw</b> is LP+LK on
-        the same frame — it beats blocking, misses anyone airborne, and is escaped by
-        pressing throw back within five frames.{' '}
+
+      <div className="bar">
+        <span className="keys">
+          P1 <b>WASD</b> · P2 <b>arrows</b>
+        </span>
         <button type="button" onClick={() => game && saveLog(game)} disabled={!game}>
           save input log
         </button>
-      </p>
+      </div>
+
+      <Controls />
       <NetPanel game={game} />
     </main>
   )
