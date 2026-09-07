@@ -42,6 +42,12 @@ const VIEW_H = 450
 const SCALE = 2
 const GROUND_PX = 380
 
+/**
+ * Displayed frames between HUD refreshes, **counted off the display and not
+ * off the sim frame.** A stalled sim holds its frame number still, so gating
+ * on `frame % HUD_EVERY` freezes the HUD on whatever text it last drew — and
+ * a stall is exactly when the stall, skip and RTT counters are worth reading.
+ */
 const HUD_EVERY = 30
 
 /**
@@ -90,7 +96,7 @@ const STRIP_COL = 2
 const STRIP_H = 12
 const STRIP_DEPTH_H = 22
 const STRIP_X = 10
-const STRIP_Y = VIEW_H - 24
+const STRIP_Y = VIEW_H - 32
 
 /** Clean, predicted, corrected — indexed by the FRAME_* constants. */
 const STRIP_COLORS = [0x3a7a4a, 0xd8a53a, 0xe0574a]
@@ -203,7 +209,7 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     text: '',
     style: {fill: 0x8a94a6, fontFamily: 'monospace', fontSize: 12},
   })
-  hud.position.set(8, 52)
+  hud.position.set(8, 66)
   app.stage.addChild(hud)
 
   const input = createInput()
@@ -220,6 +226,7 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   let net: Netplay | null = null
   let link: Link | null = null
   let ticks = 0
+  let hudTicks = 0
 
   // Every playtest is a free regression log, and the corpus is worth more than
   // any single test in here — but only if it is actually recorded. Growth is
@@ -317,7 +324,7 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
 
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.
-    if (snap.frame % HUD_EVERY === 0) {
+    if (hudTicks++ % HUD_EVERY === 0) {
       const top = net ? netHud(net, link) : localHud(snap)
       hud.text = `${top}\n${costHud(stepCost, frameCost, longFrames)}`
     }
@@ -584,6 +591,11 @@ function setCombo(t: Text, defender: PlayerSnapshot): void {
   setText(t, parts.join(' · '))
 }
 
+/**
+ * One line per player. The HUD is 12px monospace on an 800-wide canvas, which
+ * is about 110 characters: both players on one line runs off the right edge,
+ * and what falls off is not drawn anywhere else.
+ */
 function localHud(snap: Snapshot): string {
   const who = (i: number) => {
     const p = snap.players[i]
@@ -596,13 +608,10 @@ function localHud(snap: Snapshot): string {
     )
   }
   return [
-    `frame ${snap.frame}`,
-    snap.hitstop ? `HITSTOP ${snap.hitstop}` : '',
+    `frame ${snap.frame}${snap.hitstop ? `  HITSTOP ${snap.hitstop}` : ''}`,
     who(0),
     who(1),
-  ]
-    .filter(Boolean)
-    .join('  ')
+  ].join('\n')
 }
 
 /**
@@ -630,32 +639,35 @@ function costHud(
 /**
  * The numbers this project exists to report. Percentiles, never means, and
  * stalls and desyncs shown as raw counts because one of either matters.
+ *
+ * **Grouped onto short lines, not joined into one.** All of this on a single
+ * line is roughly 200 characters against the ~110 the canvas holds, so the
+ * back half — the stall, skip and desync counts — was being drawn past the
+ * right edge. This is the readout the M0 numbers are screenshotted from, so
+ * every field has to be on screen at once.
  */
 function netHud(net: Netplay, link: Link | null): string {
   const s = net.stats
   if (s.dataMismatch) {
-    return 'REFUSED: the peer has different character data. Rebuild both ends from the same commit.'
+    return 'REFUSED: the peer has different character data.\nRebuild both ends from the same commit.'
   }
   const pct = (n: number) => ((n / Math.max(1, s.frames)) * 100).toFixed(1)
   const rtt = (p: number) => (s.rtt.count ? s.rtt.percentile(p).toFixed(1) : '—')
 
   return [
-    `frame ${net.frame}`,
-    `rtt p50 ${rtt(50)}ms p99 ${rtt(99)}ms`,
-    `rollback ${pct(s.rollbacks)}% depth p99 ${depthP99(s.depths)}`,
-    `mispredict ${pct(s.mispredicted)}%`,
     // Ahead and behind read differently and both matter: the leading end is
     // the one that skips, and a skip count that never moves on a laggy link
     // means time synchronisation is not doing its job.
-    `ahead ${net.advantage > 0 ? '+' : ''}${net.advantage}`,
-    `stalls ${s.stalls}`,
-    `skips ${s.skipped}`,
-    `checked ${s.verified}`,
-    s.desyncs ? `DESYNC at frame ${s.desyncFrame}` : `desync 0`,
+    `frame ${net.frame}  ahead ${net.advantage > 0 ? '+' : ''}${net.advantage}  ` +
+      `rtt p50 ${rtt(50)}ms p99 ${rtt(99)}ms`,
+    `rollback ${pct(s.rollbacks)}% depth p99 ${depthP99(s.depths)}  ` +
+      `mispredict ${pct(s.mispredicted)}%`,
+    `stalls ${s.stalls}  skips ${s.skipped}  checked ${s.verified}  ` +
+      (s.desyncs ? `DESYNC at frame ${s.desyncFrame}` : 'desync 0'),
     conditions(link),
   ]
     .filter(Boolean)
-    .join('  ')
+    .join('\n')
 }
 
 /**
