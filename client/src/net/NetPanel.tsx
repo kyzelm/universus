@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import type {Game} from '../game/game'
 import {CLEAN, type Impairment} from './impair'
 import {guest, host, type Connection} from './peer'
+import {joinRoom, type Kind, type Session} from './room'
 
 /**
  * The measurement matrix, as buttons (01 Thesis/Measurement Methodology.md,
@@ -18,8 +19,11 @@ const RTT_PRESETS = [0, 50, 100, 150, 200]
 const LOSS_PRESETS = [0, 2, 5]
 
 /**
- * Manual signalling for the M0 spike: copy the blob to the other end, paste the
- * one that comes back. The signalling server is M3.
+ * Two ways in. **A room code** goes through our own server, which pairs the two
+ * ends, carries the blobs for them and becomes the transport if WebRTC cannot
+ * connect (Decision Log D15). **Manual signalling** — copy the blob across,
+ * paste the one that comes back — needs no server at all, which is why it stays:
+ * a playtest should not be blocked on the backend being up.
  *
  * Once the channel opens this hands the peer to the game and gets out of the
  * way — the netplay numbers live in the HUD, next to the frame they describe.
@@ -29,11 +33,41 @@ export default function NetPanel({game}: {game: Game | null}) {
   const [localBlob, setLocalBlob] = useState('')
   const [remoteBlob, setRemoteBlob] = useState('')
   const [status, setStatus] = useState('not connected')
+  const [kind, setKind] = useState<Kind | null>(null)
+  const [code, setCode] = useState('')
   const [cfg, setCfg] = useState<Impairment>(CLEAN)
 
   const conn = useRef<Connection | null>(null)
+  const room = useRef<Session | null>(null)
 
-  useEffect(() => () => conn.current?.close(), [])
+  useEffect(
+    () => () => {
+      conn.current?.close()
+      room.current?.close()
+    },
+    [],
+  )
+
+  /**
+   * The room does the whole negotiation, so there is nothing to paste and
+   * nothing to time: it comes back with a peer and which seat this end has.
+   */
+  async function connectRoom() {
+    if (!game) return setStatus('the sim is still loading')
+
+    try {
+      setStatus('waiting for the other end…')
+      const s = await joinRoom(code, (data) => game.receive(data))
+
+      room.current = s
+      setRole(s.seat === 0 ? 'host' : 'guest')
+      setKind(s.kind)
+      game.connect(s.peer, s.seat)
+      setStatus('connected')
+    } catch (e) {
+      setStatus(`failed: ${(e as Error).message}`)
+    }
+  }
 
   async function connect(as: 'host' | 'guest') {
     if (!game) return setStatus('the sim is still loading')
@@ -80,10 +114,26 @@ export default function NetPanel({game}: {game: Game | null}) {
     return (
       <section className="net">
         <div className="row">
+          <input
+            placeholder="room code"
+            value={code}
+            // The server takes [A-Za-z0-9-]{1,32} and refuses the rest, so a
+            // typed space becomes no character rather than a failed connection.
+            onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9-]/g, '').slice(0, 32))}
+          />
+          <button disabled={!code} onClick={() => void connectRoom()}>
+            connect
+          </button>
+        </div>
+
+        <div className="row">
           <button onClick={() => void connect('host')}>host</button>
           <button onClick={() => setRole('guest')}>join</button>
         </div>
-        <p className="keys">{status}</p>
+
+        <p className="keys">
+          {status} — same room code on both ends, or <b>host</b>/<b>join</b> to signal by hand
+        </p>
       </section>
     )
   }
@@ -92,10 +142,10 @@ export default function NetPanel({game}: {game: Game | null}) {
   return (
     <section className="net">
       <p className="keys">
-        {role} · {status} {connected && '· WASD moves you'}
+        {role} · {status} {kind && `· ${kind}`} {connected && '· WASD moves you'}
       </p>
 
-      {role === 'guest' && !localBlob && (
+      {role === 'guest' && !localBlob && !kind && (
         <>
           <textarea
             placeholder="paste the host's offer"

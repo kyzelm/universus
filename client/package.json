@@ -6,6 +6,7 @@
   "scripts": {
     "wasm": "GOOS=js GOARCH=wasm go build -o public/main.wasm ../sim/wasm && cp \"$(go env GOROOT)/lib/wasm/wasm_exec.js\" public/",
     "dev": "pnpm wasm && vite",
+    "relay": "go run ../server",
     "build": "pnpm wasm && tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest",
