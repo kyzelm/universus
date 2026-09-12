@@ -207,3 +207,20 @@ test('attack keys are bound for both seats', () => {
 
   input.dispose()
 })
+
+// The throw macro. One key has to arrive as both bits on one frame: a frame
+// apart is a jab, and then a light kick the player never asked for, because by
+// the time the second button lands the jab has already started.
+test('the throw key presses both buttons on the same frame', () => {
+  const target = new EventTarget()
+  const input = createInput(target)
+
+  press(target, 'KeyH')
+  expect(input.poll()).toEqual([IN_LP | IN_LK, 0])
+
+  release(target, 'KeyH')
+  press(target, 'Numpad0')
+  expect(input.poll()).toEqual([0, IN_LP | IN_LK])
+
+  input.dispose()
+})

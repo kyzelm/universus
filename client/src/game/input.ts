@@ -16,7 +16,23 @@ export const IN_LK = 1 << 8
 export const IN_MK = 1 << 9
 export const IN_HK = 1 << 10
 
-/** KeyboardEvent.code to bit. */
+/**
+ * Two buttons on one key, which is how throws are played everywhere.
+ *
+ * A throw is LP+LK *on the same frame*, and the sim's press edge is generous
+ * about which frame that is — the pair completing is the press. What it cannot
+ * help with is the frame before: LP alone is a jab, the jab starts, and the LK
+ * arriving a frame later finds a player who is no longer actionable. Pressing
+ * both keys in the same 16.6 ms is the hard part, and one key does it exactly.
+ *
+ * This belongs here and nowhere else: a macro is a per-user binding, and the
+ * invariant is that every local setting resolves before the bitfield is built
+ * (CLAUDE.md). The sim sees LP+LK and cannot tell which key produced them, so
+ * a player who prefers the two keys is playing the same game.
+ */
+const THROW = IN_LP | IN_LK
+
+/** KeyboardEvent.code to bit — or to a mask, for the macro. */
 const P1_KEYS: Record<string, number> = {
   KeyW: IN_UP,
   KeyS: IN_DOWN,
@@ -28,6 +44,7 @@ const P1_KEYS: Record<string, number> = {
   KeyJ: IN_LK,
   KeyK: IN_MK,
   KeyL: IN_HK,
+  KeyH: THROW,
 }
 
 const P2_KEYS: Record<string, number> = {
@@ -41,6 +58,7 @@ const P2_KEYS: Record<string, number> = {
   Numpad4: IN_LK,
   Numpad5: IN_MK,
   Numpad6: IN_HK,
+  Numpad0: THROW,
 }
 
 /**
@@ -62,6 +80,7 @@ const PAD_BUTTONS: Record<number, number> = {
   0: IN_LK, // cross / A
   1: IN_MK, // circle / B
   7: IN_HK, // R2 / RT
+  4: THROW, // L1 / LB — where every fighting game puts throw
 }
 
 /**

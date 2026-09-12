@@ -43,7 +43,10 @@ function Controls() {
         <dd>↓ ↘ → + punch, three strengths</dd>
 
         <dt>uppercut</dt>
-        <dd>→ ↓ ↘ + punch, three strengths</dd>
+        <dd>
+          → ↓ ↘ + punch, three strengths — or <b>→ ↓ →</b>, the same move without the
+          diagonal
+        </dd>
 
         <dt>supers</dt>
         <dd>
@@ -53,8 +56,8 @@ function Controls() {
 
         <dt>throw</dt>
         <dd>
-          <b>LP+LK</b> on the same frame — beats blocking, misses anyone airborne, escaped by
-          pressing throw back within five frames
+          <b>H</b> / <b>Num 0</b> / pad <b>L1</b>, or <b>LP+LK</b> on the same frame — beats
+          blocking, misses anyone airborne, escaped by pressing throw back within five frames
         </dd>
       </dl>
     </details>

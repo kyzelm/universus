@@ -107,6 +107,68 @@ func TestDPBeatsQCF(t *testing.T) {
 	}
 }
 
+// The dragon punch people actually make on a keyboard: forward, down, forward,
+// with the final diagonal missing because it needs two keys held at once (D89).
+// It is a table row, not a looser scanner — D73's rule.
+func TestDPShortcut(t *testing.T) {
+	s := New()
+	feed(&s, 6, 2, 6)
+	if got := s.Motion(0); got != MotionDP {
+		t.Errorf("→↓→ recognised as %d, want DP (%d)", got, MotionDP)
+	}
+
+	// Holding each element for a few frames is how anyone actually plays, and
+	// the tight rule has to allow a hold of what it has already taken.
+	s = New()
+	feed(&s, 6, 6, 2, 2, 2, 6, 6)
+	if got := s.Motion(0); got != MotionDP {
+		t.Errorf("→→↓↓↓→→ recognised as %d, want DP (%d)", got, MotionDP)
+	}
+}
+
+// The shortcut must not widen the overlap between DP and QCF at all, so the
+// input it leaves alone is the one worth asserting: a fireball from a standing
+// start is a fireball before the shortcut and after it.
+func TestShortcutLeavesTheFireballAlone(t *testing.T) {
+	s := New()
+	feed(&s, 2, 3, 6)
+	if got := s.Motion(0); got != MotionQCF {
+		t.Errorf("↓↘→ recognised as %d, want QCF (%d)", got, MotionQCF)
+	}
+}
+
+// **Walking into a fireball comes out as a dragon punch, and it always has.**
+// Not the shortcut's doing and not a bug in the scanner: → ↓ ↘ → contains → ↓ ↘,
+// DP is scanned first (TestDPBeatsQCF), and "walk forward, then quarter-circle"
+// *is* that input. The two are indistinguishable by the time they reach the
+// recogniser — the player who finishes a dragon punch still holding toward the
+// opponent and the player who advances and then throws a fireball have pressed
+// the same keys in the same order.
+//
+// Pinned rather than fixed, because changing it is a decision and not a repair:
+// the DP row would have to require its diagonal to be the newest direction,
+// which buys the advancing fireball at the price of every dragon punch thrown
+// with forward still held — and that trade is TestDPBeatsQCF's whole subject.
+func TestWalkingIntoAFireballIsADP(t *testing.T) {
+	s := New()
+	feed(&s, 6, 6, 6, 2, 3, 6)
+	if got := s.Motion(0); got != MotionDP {
+		t.Errorf("walk forward then ↓↘→ recognised as %d, want DP (%d) — if this "+
+			"has changed, the priority rule has changed with it", got, MotionDP)
+	}
+}
+
+// A direction that is neither neutral nor a hold breaks a tight row, and the
+// break is the point: →↓↙→ is a player who rolled through down-back, which is
+// not the shortcut and must not be read as one.
+func TestShortcutRejectsAnInterveningDirection(t *testing.T) {
+	s := New()
+	feed(&s, 6, 2, 1, 6)
+	if got := s.Motion(0); got != MotionNone {
+		t.Errorf("→↓↙→ recognised as %d, want none (%d)", got, MotionNone)
+	}
+}
+
 // By value, not by index: the point is which motion wins, not where it sits.
 func seqOf(t *testing.T, m Motion) []uint8 {
 	t.Helper()

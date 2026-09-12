@@ -101,16 +101,29 @@ func (m Motion) satisfies(want Motion) bool {
 //
 // The doubles take a wider window, because they are twice the input. Still
 // inside InputHistory, which every window must be.
+//
+// **Shortcut rows are tight** (D73, D89). D73 makes shortcuts the supported way
+// to loosen an input — one explicit row per move, priority-ordered — rather than
+// a more forgiving scanner, because scanner leniency changes every motion at
+// once and cannot be tested per-motion. The DP shortcut is why the tight flag
+// exists: → ↓ → is the dragon punch people actually make on a keyboard, with the
+// final diagonal missing, but as a *lenient* row it also matches "walk forward,
+// then throw a fireball" — the scan skips the ↘ and reads the walking → as the
+// start of a DP. Tight means the scan may step over neutral frames and over a
+// hold of a direction it has already taken, and over nothing else, which is the
+// difference between those two inputs and is the whole of TestShortcutLeavesTheFireballAlone.
 var motions = []struct {
 	motion Motion
 	seq    []uint8
 	window uint32
+	tight  bool
 }{
-	{MotionQCFx2, []uint8{DirDown, DirDownFwd, DirFwd, DirDown, DirDownFwd, DirFwd}, 26},
-	{MotionQCBx2, []uint8{DirDown, DirDownBack, DirBack, DirDown, DirDownBack, DirBack}, 26},
-	{MotionDP, []uint8{DirFwd, DirDown, DirDownFwd}, 13},
-	{MotionQCB, []uint8{DirDown, DirDownBack, DirBack}, 13},
-	{MotionQCF, []uint8{DirDown, DirDownFwd, DirFwd}, 13},
+	{MotionQCFx2, []uint8{DirDown, DirDownFwd, DirFwd, DirDown, DirDownFwd, DirFwd}, 26, false},
+	{MotionQCBx2, []uint8{DirDown, DirDownBack, DirBack, DirDown, DirDownBack, DirBack}, 26, false},
+	{MotionDP, []uint8{DirFwd, DirDown, DirDownFwd}, 13, false},
+	{MotionDP, []uint8{DirFwd, DirDown, DirFwd}, 13, true}, // the shortcut: no diagonal
+	{MotionQCB, []uint8{DirDown, DirDownBack, DirBack}, 13, false},
+	{MotionQCF, []uint8{DirDown, DirDownFwd, DirFwd}, 13, false},
 }
 
 // direction converts a bitfield to facing-relative numpad.
@@ -188,7 +201,7 @@ func (s *GameState) Motion(player int) Motion {
 func (s *GameState) MotionAt(player int, now uint32) Motion {
 	p := &s.Players[player]
 	for _, m := range motions {
-		if p.matches(now, m.seq, m.window) {
+		if p.scan(now, m.seq, m.window, m.tight) {
 			return m.motion
 		}
 	}
@@ -196,13 +209,35 @@ func (s *GameState) MotionAt(player int, now uint32) Motion {
 }
 
 func (p *PlayerState) matches(now uint32, seq []uint8, window uint32) bool {
+	return p.scan(now, seq, window, false)
+}
+
+// scan walks the history backward looking for seq's elements in reverse order.
+//
+// Lenient (tight false) is the genre's ordinary rule: a real player rolls
+// through extra directions and holds each for several frames, and none of that
+// matters as long as the elements land in order inside the window.
+//
+// Tight refuses to step over a direction that is neither neutral nor a hold of
+// the element it has just taken. It exists for shortcut rows, where leniency
+// would make the shortcut match inputs that are not the move — see the table.
+func (p *PlayerState) scan(now uint32, seq []uint8, window uint32, tight bool) bool {
 	k := len(seq) - 1
 	for back := uint32(0); back < window && back <= now; back++ {
-		if direction(p.at(now, back), p.Facing) == seq[k] {
+		dir := direction(p.at(now, back), p.Facing)
+		if dir == seq[k] {
 			k--
 			if k < 0 {
 				return true
 			}
+			continue
+		}
+
+		// k+1 == len(seq) is "nothing taken yet", so the element the row ends on
+		// has to be the newest input that is not neutral: a tight shortcut reads
+		// the motion the player just made, not one they made and then left.
+		if tight && dir != DirNeutral && (k+1 == len(seq) || dir != seq[k+1]) {
+			return false
 		}
 	}
 	return false
