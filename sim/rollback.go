@@ -41,6 +41,11 @@ type Session struct {
 
 func NewSession() Session { return Session{state: New()} }
 
+// NewTrainingSession is NewSession in training mode (03 Game Design/Game
+// Modes.md). Offline only, and the mode is in the state, so a client that
+// brought one of these to a match would disagree on the first checksum.
+func NewTrainingSession() Session { return Session{state: NewTraining()} }
+
 func (s *Session) State() *GameState { return &s.state }
 func (s *Session) Frame() uint32     { return s.state.Frame }
 func (s *Session) Checksum() uint32  { return s.state.Checksum() }

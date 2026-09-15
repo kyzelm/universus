@@ -38,6 +38,14 @@ func (s *GameState) updateRound() {
 	if s.Phase != PhaseFight {
 		return
 	}
+	// The lab has no clock and no end. Everything else about the round still
+	// runs — the phase machine, the intro, the transitions — so what is being
+	// practised is the same game, just one that does not stop to declare a
+	// winner mid-combo.
+	if s.Training != 0 {
+		return
+	}
+
 	if s.Timer > 0 {
 		s.Timer--
 	}

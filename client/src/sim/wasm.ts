@@ -9,7 +9,7 @@ declare global {
     advance(p1: number, p2: number): void
     rewind(frame: number): boolean
     eventsAt(frame: number): number
-    reset(): void
+    reset(training?: boolean): void
     checksum(): number
     dataVersion(): number
     snapshotPtr(): number
@@ -224,8 +224,13 @@ export function eventsAt(frame: number): [number, number] {
   return [packed & 0xffff, (packed >>> 16) & 0xffff]
 }
 
-export function reset(): void {
-  sim.reset()
+/**
+ * Starts a fresh match. `training` picks the mode — the lab is a different
+ * match, not a different way of drawing one, so the flag goes to the sim rather
+ * than being kept out here.
+ */
+export function reset(training = false): void {
+  sim.reset(training)
 }
 
 /** FNV-1a over the packed state. The number both machines must agree on. */

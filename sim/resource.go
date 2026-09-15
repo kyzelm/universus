@@ -165,6 +165,20 @@ func BalanceOf() Balance { return balance }
 // updateResources is the resource half of step 8. Drive only: Super never
 // regenerates, which is what makes it strategic.
 func (s *GameState) updateResources() {
+	// Training mode keeps both fighters topped up — infinite resources, per the
+	// mode's own list. Not while anybody is being hit: a gauge that refilled
+	// through a combo would hide the damage the combo did, which is the one
+	// thing the person practising is looking at.
+	if s.Training != 0 && !s.anyoneStunned() {
+		for i := range s.Players {
+			p := &s.Players[i]
+			p.Health = CharacterAt(p.Char).Health
+			p.Drive, p.Super = DriveMax, SuperMax
+			p.Burnout = 0
+		}
+		return
+	}
+
 	for i := range s.Players {
 		p := &s.Players[i]
 
@@ -185,6 +199,13 @@ func (s *GameState) updateResources() {
 			p.Burnout = 0
 		}
 	}
+}
+
+// anyoneStunned reports whether either fighter is mid-consequence: hitstun,
+// blockstun, a knockdown or a throw. Training's refill waits for it to end.
+func (s *GameState) anyoneStunned() bool {
+	return stunned(s.Players[0].State) || stunned(s.Players[1].State) ||
+		s.Players[0].Combo > 0 || s.Players[1].Combo > 0
 }
 
 // driveRegen is this frame's regeneration rate.

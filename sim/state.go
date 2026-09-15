@@ -174,6 +174,18 @@ type GameState struct {
 	// clock and is never allowed one.
 	Timer int32
 
+	// Training is 1 in training mode (03 Game Design/Game Modes.md): resources
+	// refill, the clock does not run and the round never ends, so the lab stays
+	// a lab.
+	//
+	// **In GameState rather than beside it**, even though nothing changes it
+	// mid-match. It is a property of the match, like the characters, and
+	// putting it here means the checksum covers it: two clients that disagreed
+	// about the mode would desync on frame 0 with an obvious cause, rather than
+	// playing a match in which one of them has infinite meter. Training is
+	// offline by design and the client refuses to connect in it; this is the
+	// belt to that pair of braces.
+	Training int32
 
 	// Round is the 1-based number of the round being played and Wins the rounds
 	// each player has taken. A draw awards neither of them (D53).
@@ -208,6 +220,14 @@ type GameState struct {
 
 // New returns the starting state with both players on character 0.
 func New() GameState { return NewMatch(0, 0) }
+
+// NewTraining is New in training mode: the same match, with the clock stopped,
+// the round never ending and both fighters kept topped up.
+func NewTraining() GameState {
+	s := New()
+	s.Training = 1
+	return s
+}
 
 // NewMatch starts a match between two roster entries: players apart, on the
 // ground, facing each other, at full health.

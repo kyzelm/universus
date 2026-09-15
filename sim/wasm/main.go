@@ -50,8 +50,15 @@ func main() {
 		return nil
 	}))
 
-	api.Set("reset", js.FuncOf(func(js.Value, []js.Value) any {
-		session = sim.NewSession()
+	// reset(training) starts a fresh match. The flag picks the mode, because
+	// the mode is part of the state rather than a switch the view holds: the
+	// lab is a different match, not a different way of drawing one.
+	api.Set("reset", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) > 0 && args[0].Truthy() {
+			session = sim.NewTrainingSession()
+		} else {
+			session = sim.NewSession()
+		}
 		session.State().WriteSnapshot(snap[:])
 		return nil
 	}))
