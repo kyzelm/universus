@@ -35,6 +35,9 @@ function simWasm(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), simWasm()],
+  // The relay lives at the page's own origin now (src/net/room.ts), which in dev is
+  // vite rather than the Go server — so dev forwards the socket to `pnpm relay`.
+  server: {proxy: {'/ws': {target: 'ws://localhost:8080', ws: true}}},
   test: {
     environment: 'jsdom',
     setupFiles: './tests/setup.ts',

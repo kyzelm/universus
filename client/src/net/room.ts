@@ -4,7 +4,7 @@ import {guest, host, type Connection, type Peer} from './peer'
  * Signalling and the relay fallback over one socket to our own server
  * (02 Architecture/Transport and Connectivity.md).
  *
- *   ws://host:8080/ws?room=CODE
+ *   ws://host/ws?room=CODE
  *
  * Both ends ask for the same code; the server pairs them, tells each which it
  * is, and from then on copies whatever one sends to the other. The pair trade
@@ -54,15 +54,26 @@ export async function joinRoom(
   return negotiate(await openRoom(relayURL(code)), onMessage)
 }
 
+/** Where the page came from — `location`, or a stand-in in a test. */
+export interface Origin {
+  readonly protocol: string
+  readonly host: string
+  readonly search: string
+}
+
 /**
- * The signalling server, defaulting to one on the machine serving the page —
- * which is what makes a two-machine test work: the guest opens the host's IP,
- * so the relay is found at the host's IP too. `?relay=ws://…` overrides it, at
- * runtime rather than at build time, because the deployed address is not known
- * when the bundle is built.
+ * The signalling server, defaulting to the origin that served the page: the
+ * guest opens the host's address and the relay is found at the same one. It is
+ * the *same origin* rather than a fixed port because a remote session is served
+ * over https through a tunnel, and a page on https may not open a `ws://`
+ * socket at all — the scheme has to follow the page's. `?relay=wss://…`
+ * overrides it, at runtime rather than at build time, because the deployed
+ * address is not known when the bundle is built.
  */
-export function relayURL(code: string): string {
-  const base = new URLSearchParams(location.search).get('relay') ?? `ws://${location.hostname}:8080`
+export function relayURL(code: string, origin: Origin = location): string {
+  const scheme = origin.protocol === 'https:' ? 'wss:' : 'ws:'
+  const base =
+    new URLSearchParams(origin.search).get('relay') ?? `${scheme}//${origin.host}`
   return `${base}/ws?room=${encodeURIComponent(code)}`
 }
 

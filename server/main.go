@@ -178,11 +178,20 @@ func write(conn *websocket.Conn, typ websocket.MessageType, data []byte) error {
 
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
+	static := flag.String("static", "", "directory of built client to serve at /; empty serves signalling only")
 	flag.Parse()
 
 	r := &rooms{waiting: map[string]*client{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", r.serve)
+	if *static != "" {
+		// One origin for the page and the socket, which is what a remote session needs: a
+		// guest on https cannot open a ws:// socket to a separate port, and a tunnel or a
+		// host publishes one port. ponytail: a plain FileServer, no SPA fallback — the
+		// client is one page and carries its state in query parameters.
+		mux.Handle("/", http.FileServer(http.Dir(*static)))
+		log.Printf("serving %s at /", *static)
+	}
 
 	log.Printf("relay listening on %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux))

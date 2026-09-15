@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
-import {FALLBACK_MS, negotiate, type Connectors, type Signal} from './room'
+import {FALLBACK_MS, negotiate, relayURL, type Connectors, type Signal} from './room'
 import type {Connection, Peer} from './peer'
 
 /** Drains pending microtasks and any timer due now. */
@@ -190,5 +190,17 @@ describe('room negotiation', () => {
 
     sig.arrive('room full')
     await expect(session).rejects.toThrow(/where a role belongs/)
+  })
+})
+
+describe('relayURL', () => {
+  // A page on https may not open a ws:// socket, which is exactly the case a remote
+  // session runs in — so the scheme follows the page's rather than being written down.
+  it('takes scheme and address from the page, and lets ?relay override', () => {
+    expect(relayURL('AB', new URL('http://box:5173/'))).toBe('ws://box:5173/ws?room=AB')
+    expect(relayURL('AB', new URL('https://tunnel.test/'))).toBe('wss://tunnel.test/ws?room=AB')
+    expect(relayURL('A B', new URL('https://tunnel.test/?relay=ws://localhost:8080'))).toBe(
+      'ws://localhost:8080/ws?room=A%20B',
+    )
   })
 })
