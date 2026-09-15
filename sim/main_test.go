@@ -59,6 +59,24 @@ func testBalance() Balance {
 		CounterHitstun:    5,
 		PunishHitstun:     10,
 
+		// Half: a 200-damage move absorbed deals exactly 100, which is checkable
+		// without running the formula the code runs.
+		ArmorDamagePercent: 50,
+
+		// A tenth of a bar a frame, so five frames of parry is exactly half of
+		// one and the arithmetic is checkable by hand; a whole bar back for
+		// reading the attack right.
+		DriveParryDrain: BarUnits / 10,
+		DriveParryGain:  BarUnits,
+
+		// One bar out of the stance, three out of a cancel, four units a frame
+		// for ten frames: 40 units of travel, the same distance as the
+		// fixture's dash, so a test can tell a rush from a walk by speed alone.
+		DriveRushCost:       BarUnits,
+		DriveRushCancelCost: 3 * BarUnits,
+		DriveRushSpeed:      FromInt(4),
+		DriveRushFrames:     10,
+
 		SuperDealtPercent: 50,
 		SuperTakenPercent: 25,
 		SuperOnSpecial:    200,
@@ -118,7 +136,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 13,
+		NumMoves: 16,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -133,7 +151,7 @@ func testCharacter() Character {
 		Startup: 4, Active: 3, Recovery: 6,
 		Damage: 100, Hitstun: 14, Blockstun: 11, Hitstop: 6,
 		Level: LevelMid, Stance: StanceStand, Button: InLP,
-		CancelInto: CancelSpecial | CancelSuper1 | CancelSuper3,
+		CancelInto: CancelSpecial | CancelSuper1 | CancelSuper3 | CancelDrive,
 		NumKeys:    3,
 	}
 	c.Moves[0].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
@@ -366,6 +384,69 @@ func testCharacter() Character {
 	// next one, so a move without this keeps swinging through its recovery.
 	c.Moves[12].Keys[2] = Keyframe{Frame: 7, NumHurt: 1}
 	c.Moves[12].Keys[2].Hurt[0] = c.StandHurt
+
+	// The armoured move — the fixture's Drive Impact. One bar, one hit of
+	// armour, on two buttons of its own so nothing else can select it. Slow
+	// enough that a jab thrown at it lands during the startup, which is the
+	// window armour is about.
+	c.Moves[13] = Move{
+		Startup: 12, Active: 3, Recovery: 20,
+		Damage: 200, Hitstun: 20, Blockstun: 12, Hitstop: 6,
+		Level: LevelMid, Stance: StanceStand, Button: InHP | InHK,
+		Drive:     1,
+		Armor:     1,
+		Knockdown: 1,
+		NumKeys:   3,
+	}
+	c.Moves[13].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[13].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[13].Keys[1] = Keyframe{Frame: 12, NumHurt: 1, NumHit: 1}
+	c.Moves[13].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[13].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(0), W: FromInt(34), H: FromInt(46)}
+	c.Moves[13].Keys[2] = Keyframe{Frame: 15, NumHurt: 1}
+	c.Moves[13].Keys[2].Hurt[0] = c.StandHurt
+
+	// The EX special: the fixture's two-bar version of move 2, sharing its
+	// motion and one of its buttons. That sharing is the whole test — the
+	// cheaper special is what the same input produces when the gauge cannot
+	// pay, and only the tier and the price tell them apart.
+	c.Moves[14] = Move{
+		Startup: 4, Active: 3, Recovery: 8,
+		Damage: 300, Hitstun: 18, Blockstun: 12, Hitstop: 8,
+		Level: LevelMid, Stance: StanceStand, Button: InLP | InMP,
+		Motion:  MotionQCF,
+		Drive:   2,
+		NumKeys: 3,
+	}
+	c.Moves[14].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[14].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[14].Keys[1] = Keyframe{Frame: 4, NumHurt: 1, NumHit: 1}
+	c.Moves[14].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[14].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(0), W: FromInt(34), H: FromInt(46)}
+	c.Moves[14].Keys[2] = Keyframe{Frame: 7, NumHurt: 1}
+	c.Moves[14].Keys[2].Hurt[0] = c.StandHurt
+
+	// The Drive Reversal: two bars, invincible, and the only move in the
+	// fixture that can be pressed while blocking. Same buttons as the armoured
+	// move on purpose — the state is what tells them apart, which is how the
+	// design describes both.
+	c.Moves[15] = Move{
+		Startup: 5, Active: 3, Recovery: 24,
+		Damage: 150, Hitstun: 18, Blockstun: 12, Hitstop: 6,
+		Level: LevelMid, Stance: StanceStand, Button: InHP | InHK,
+		Reversal:    1,
+		Drive:       2,
+		InvulnStart: 0, InvulnEnd: 8,
+		Knockdown: 1,
+		NumKeys:   3,
+	}
+	c.Moves[15].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[15].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[15].Keys[1] = Keyframe{Frame: 5, NumHurt: 1, NumHit: 1}
+	c.Moves[15].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[15].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(0), W: FromInt(34), H: FromInt(46)}
+	c.Moves[15].Keys[2] = Keyframe{Frame: 8, NumHurt: 1}
+	c.Moves[15].Keys[2].Hurt[0] = c.StandHurt
 
 	return c
 }

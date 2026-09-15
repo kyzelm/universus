@@ -63,9 +63,12 @@ func TestEmbeddedRosterLoads(t *testing.T) {
 
 	// The strength variants are the data-driven claim in miniature: three moves
 	// that differ only in numbers, sharing one motion and one code path.
+	// The EX version is not one of them: it shares the motion but it is a
+	// different move at a different price, and counting it would say the claim
+	// holds for four strengths when the character has three.
 	strengths := map[uint16]bool{}
 	for m := int32(0); m < cs[0].NumMoves; m++ {
-		if mv := &cs[0].Moves[m]; mv.Motion == sim.MotionQCF {
+		if mv := &cs[0].Moves[m]; mv.Motion == sim.MotionQCF && mv.Drive == 0 {
 			strengths[mv.Button] = true
 		}
 	}

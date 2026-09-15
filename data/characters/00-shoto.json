@@ -84,6 +84,99 @@
       ]
     },
     {
+      "_comment": "Drive Impact. One bar, HP+HK, and the first armoured move in the game: it absorbs one hit on the way out and keeps coming, which is what the bar buys. Slow enough to react to (26 frames) and negative enough to be punished if it is blocked, because an armoured advancing attack that is also safe is the only move anyone would press. It walks forward on its own launch velocity and knocks down, so winning with it is worth the gauge.",
+      "id": "DI",
+      "input": { "stance": "stand", "button": "HP+HK" },
+      "drive": 1,
+      "armor": 1,
+      "startup": 26,
+      "active": 2,
+      "recovery": 34,
+      "damage": 800,
+      "hitstun": 26,
+      "blockstun": 16,
+      "hitstop": 12,
+      "attackLevel": "mid",
+      "knockdown": true,
+      "launch": [2.0, 0],
+      "knockback": [3.0, 0],
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 26, "hurt": [[-12, 0, 34, 48]], "hit": [[10, 4, 40, 44]] },
+        { "frame": 28, "hurt": [[-12, 0, 24, 48]] }
+      ]
+    },
+    {
+      "_comment": "Drive Reversal. Two bars, HP+HK — the same buttons as Drive Impact, told apart by the state it is pressed in: this one only exists while blocking. Invincible through its startup and into the active frames, so it beats the next hit of a blockstring rather than trading with it, and slow on recovery so escaping is a decision rather than a habit.",
+      "id": "DR",
+      "input": { "stance": "stand", "button": "HP+HK" },
+      "reversal": true,
+      "drive": 2,
+      "startup": 7,
+      "active": 3,
+      "recovery": 30,
+      "damage": 600,
+      "hitstun": 20,
+      "blockstun": 14,
+      "hitstop": 10,
+      "attackLevel": "mid",
+      "knockdown": true,
+      "invuln": [0, 10],
+      "launch": [1.5, 0],
+      "knockback": [3.0, 0],
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 7, "hurt": [[-12, 0, 30, 48]], "hit": [[10, 2, 36, 44]] },
+        { "frame": 10, "hurt": [[-12, 0, 24, 48]] }
+      ]
+    },
+    {
+      "_comment": "EX fireball. Two bars, two punches, the same quarter-circle: faster than any of the three strengths and it hurts more. Nothing new in code — an EX special is a special with a Drive cost, and the cost is what puts it above the light version that shares its button.",
+      "id": "236EX",
+      "input": { "stance": "stand", "button": "LP+MP", "motion": "qcf" },
+      "drive": 2,
+      "startup": 11,
+      "active": 3,
+      "recovery": 24,
+      "damage": 900,
+      "hitstun": 22,
+      "blockstun": 15,
+      "hitstop": 10,
+      "attackLevel": "mid",
+      "cancel": ["super2", "super3"],
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 11, "hurt": [[-12, 0, 30, 48]] },
+        { "frame": 14, "hurt": [[-12, 0, 24, 48]] }
+      ],
+      "projectile": { "speed": 4.5, "life": 120, "spawn": [22, 20], "box": [0, 0, 24, 16] }
+    },
+    {
+      "_comment": "EX uppercut. Two bars for the reversal that actually beats a meaty: invincible through the startup and into the active frames, where the heavy version is invincible for three frames of five. The anti-air that costs a resource is the one the design wants pressed at the right moment rather than every wakeup.",
+      "id": "623EX",
+      "input": { "stance": "stand", "button": "LP+MP", "motion": "dp" },
+      "drive": 2,
+      "startup": 3,
+      "active": 14,
+      "recovery": 40,
+      "damage": 1000,
+      "hitstun": 22,
+      "blockstun": 15,
+      "hitstop": 12,
+      "attackLevel": "mid",
+      "knockdown": true,
+      "cancel": ["super3"],
+      "invuln": [0, 10],
+      "launch": [2.0, 9.5],
+      "knockback": [1.5, 5.0],
+      "juggleLimit": 1,
+      "boxes": [
+        { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
+        { "frame": 3, "hurt": [[-12, 4, 24, 40]], "hit": [[4, -4, 28, 76]] },
+        { "frame": 17, "hurt": [[-12, 4, 24, 40]] }
+      ]
+    },
+    {
       "_comment": "Fireball. QCF+P per the roster plan, three strength variants that are the same entry with different numbers — the data-driven claim, cheaply. The strengths differ in travel speed, light slowest, per the roster plan: a slow fireball is a wall to walk behind, a fast one is a poke. The move itself has no hitbox; everything that hits is the projectile.",
       "id": "236LP",
       "input": { "stance": "stand", "button": "LP", "motion": "qcf" },
@@ -236,7 +329,7 @@
       "blockstun": 11,
       "hitstop": 6,
       "attackLevel": "mid",
-      "cancel": ["special", "super1", "super2", "super3"],
+      "cancel": ["special", "drive", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 4, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 30, 22, 12]] },
@@ -254,7 +347,7 @@
       "blockstun": 9,
       "hitstop": 5,
       "attackLevel": "low",
-      "cancel": ["special", "super1", "super2", "super3"],
+      "cancel": ["special", "drive", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 5, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 2, 24, 10]] },
@@ -272,7 +365,7 @@
       "blockstun": 13,
       "hitstop": 8,
       "attackLevel": "mid",
-      "cancel": ["special", "super1", "super2", "super3"],
+      "cancel": ["special", "drive", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 6, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 28, 26, 16]] },
@@ -308,7 +401,7 @@
       "blockstun": 11,
       "hitstop": 6,
       "attackLevel": "mid",
-      "cancel": ["special", "super1", "super2", "super3"],
+      "cancel": ["special", "drive", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 5, "hurt": [[-12, 0, 30, 48]], "hit": [[12, 18, 24, 14]] },
@@ -326,7 +419,7 @@
       "blockstun": 13,
       "hitstop": 8,
       "attackLevel": "mid",
-      "cancel": ["special", "super1", "super2", "super3"],
+      "cancel": ["special", "drive", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 48]] },
         { "frame": 7, "hurt": [[-12, 0, 32, 48]], "hit": [[12, 16, 30, 16]] },
@@ -363,7 +456,7 @@
       "blockstun": 10,
       "hitstop": 6,
       "attackLevel": "mid",
-      "cancel": ["special", "super1", "super2", "super3"],
+      "cancel": ["special", "drive", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 4, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 18, 22, 12]] },
@@ -381,7 +474,7 @@
       "blockstun": 12,
       "hitstop": 8,
       "attackLevel": "mid",
-      "cancel": ["special", "super1", "super2", "super3"],
+      "cancel": ["special", "drive", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 6, "hurt": [[-12, 0, 30, 32]], "hit": [[12, 22, 26, 18]] },
@@ -419,7 +512,7 @@
       "blockstun": 12,
       "hitstop": 8,
       "attackLevel": "low",
-      "cancel": ["special", "super1", "super2", "super3"],
+      "cancel": ["special", "drive", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-12, 0, 24, 32]] },
         { "frame": 7, "hurt": [[-12, 0, 32, 32]], "hit": [[12, 2, 30, 12]] },

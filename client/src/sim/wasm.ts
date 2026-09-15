@@ -50,6 +50,8 @@ export const STATE_NAMES = [
   'landing',
   'thrown',
   'knockdown',
+  'parry',
+  'rush',
 ]
 
 /**

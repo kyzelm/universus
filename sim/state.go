@@ -80,6 +80,13 @@ type PlayerState struct {
 	// cannot hit twice. Cleared when the move starts.
 	HasHit int32
 
+	// Armor is how many hits the current move has already absorbed. Counted
+	// here rather than derived, because "one hit of armour" is a property of
+	// this performance of the move and not of the move itself — and it rolls
+	// back with everything else, or a Drive Impact that ate a jab on one
+	// machine eats a second one on the other.
+	Armor int32
+
 	// Stun is the remaining hitstun, blockstun or landing recovery. One
 	// counter, because all three are the same thing to the state machine: a
 	// fixed number of frames that accept no input.
@@ -166,6 +173,7 @@ type GameState struct {
 	// Timer is the round clock, counted in frames because the sim has no other
 	// clock and is never allowed one.
 	Timer int32
+
 
 	// Round is the 1-based number of the round being played and Wins the rounds
 	// each player has taken. A draw awards neither of them (D53).
@@ -481,7 +489,41 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 	// counts what it removed, and a hit that overkills counts what was left.
 	before := dp.Health
 
-	if s.blocking(defender, defenderIn, mv.Level) {
+	if dp.State == StateParry {
+		// **Drive Parry.** No damage, no blockstun, no pushback: the attack is
+		// absorbed and the defender is free on the next frame, which is what
+		// makes the parry an answer to pressure rather than a cheaper block.
+		// It pays the gauge back, so reading the opponent correctly is what
+		// refills the resource defence spends.
+		//
+		// A throw still goes through it — throws are resolved before this and a
+		// parrying player is throwable — so the stance has an answer, and the
+		// answer is the same one blocking has.
+		dp.gainDrive(balance.DriveParryGain)
+		dp.Events |= EventBlock
+	} else if dp.absorbs() {
+		// **Armour.** The defender is mid-Drive-Impact and this hit is one it
+		// eats: no hitstun, no knockback, no combo, no counter — their move
+		// carries on, which is the bar they spent. The damage is reduced and
+		// cannot kill, because a mechanic that trades a bar for a KO is one
+		// nobody spends a bar on.
+		//
+		// Checked before blocking, not inside it: an armoured player is in an
+		// attack and can never be holding back, so the block test would say no
+		// and the hit branch would take their armour away with hitstun.
+		//
+		// A throw still beats it. Throws are resolved before this is reached
+		// and an attacking player is throwable, so armour answers strikes and
+		// projectiles and leaves the throw as the counter to it.
+		dp.Armor++
+		dp.chip(mv.Damage * balance.ArmorDamagePercent / 100)
+		dp.Events |= EventBlock
+
+		// Meter still moves: a hit that was absorbed is a hit that landed, and
+		// both sides felt it.
+		ap.gainSuper(mv.Damage * balance.SuperDealtPercent / 100)
+		dp.gainSuper(mv.Damage * balance.SuperTakenPercent / 100)
+	} else if s.blocking(defender, defenderIn, mv.Level) {
 		// A blocked hit is not a hit: it ends no combo and starts none, and the
 		// counter class of the last real hit stands until the next one.
 		dp.enter(StateBlockstun)

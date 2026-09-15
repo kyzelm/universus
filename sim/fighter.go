@@ -41,7 +41,40 @@ const (
 	// is an attack whose active frames cover the first *actionable* frame, and
 	// that is exactly the attack this leaves possible.
 	StateKnockdown
+	// StateParry is the Drive Parry stance: held rather than pressed, draining
+	// Drive for as long as it is, and absorbing what lands on it **without
+	// blockstun** — which is the whole mechanic. Blocking keeps the defender
+	// frozen for the attacker's next hit; parrying gives the frames back, so
+	// the pressure ends rather than continuing.
+	//
+	// It is a state and not a flag because it is exclusive: a parrying player
+	// is not walking, blocking or attacking, and the thing that ends it is
+	// letting go.
+	StateParry
+	// StateRush is Drive Rush: a forward dash the player can act out of. That
+	// is the whole mechanic — an ordinary dash commits and a rush does not, so
+	// it converts a poke into a combo and a blocked normal into pressure.
+	//
+	// It is a commitment for *directions* and not for buttons, exactly like
+	// StateAir: there is no steering a rush, and cancelling it into an attack
+	// is what it is for.
+	StateRush
 )
+
+// ParryButtons is the Drive Parry input: medium punch and medium kick together,
+// where the genre puts it. Held, not pressed — there is no edge here, because
+// the mechanic is the holding.
+const ParryButtons = InMP | InMK
+
+// absorbs reports whether this player's current move eats the hit about to
+// land on them: it has armour left, and it is still on the frames that carry
+// it. The recovery is deliberately exposed — armour that lasted the whole move
+// would make the move safe as well as strong.
+func (p *PlayerState) absorbs() bool {
+	mv := p.move()
+	return mv != nil && mv.Armored() && p.Armor < mv.Armor &&
+		p.StateFrame < mv.Startup+mv.Active
+}
 
 // Airborne reports whether the player is off the ground.
 //
@@ -169,6 +202,18 @@ func (p *PlayerState) enterMove(index int32, now uint32) {
 		p.Events |= EventSuper
 	}
 
+	// Drive is spent here for the same reason and in the same place. Spending
+	// the last of it enters Burnout — spendDrive is what decides that — so a
+	// mechanic can be paid for with the bar that burns the player out, which is
+	// the gamble the gauge is supposed to offer.
+	if cost := mv.DriveCost(); cost > 0 {
+		p.spendDrive(cost)
+	}
+
+	// Armour is counted per move, so the count resets with the move rather than
+	// carrying absorbed hits into the next one.
+	p.Armor = 0
+
 	if !p.Airborne() || mv.Launches() {
 		p.VX = mv.LaunchVX.Mul(FromInt(int(p.Facing)))
 		p.VY = mv.LaunchVY
@@ -190,11 +235,58 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 	// cancel and every state that is not an attack.
 	cancel := s.cancelMask(i)
 
+	// **Drive Parry is a hold, so it is resolved before any button can be read
+	// as a move.** MP+MK would otherwise select the medium punch on the frame
+	// it is pressed and the parry would never come out, the same way LP+LK
+	// would be a jab if the throw did not outrank it.
+	if p.State == StateParry {
+		// Forward, forward, out of the parry: the cheap way into a Drive Rush,
+		// and the reason the stance is worth holding when nothing is coming —
+		// a parry that only ever absorbed would be purely defensive.
+		if s.startRush(i, now, balance.DriveRushCost) {
+			return
+		}
+		// Nothing else comes out of a parry but letting go of it. Burnout ends
+		// it too: the gauge emptying is what stops the stance, and the frame it
+		// empties on is this one.
+		if in&ParryButtons != ParryButtons || p.Burnout != 0 {
+			p.enter(StateIdle)
+		}
+		return
+	}
+	if in&ParryButtons == ParryButtons && Actionable(p.State) && !p.Airborne() &&
+		p.Burnout == 0 && p.Drive > 0 {
+		p.enter(StateParry)
+		// Spent for the same reason: the buttons that entered the stance must
+		// not still be waiting in the buffer to become a medium punch on the
+		// frame the parry is released.
+		p.Eaten = int32(now)
+		return
+	}
+
+	// Blockstun accepts exactly one thing: the Drive Reversal, two bars for an
+	// invincible counter-attack out of the pressure (03 Game Design/Resource
+	// System.md). Handled before the gate below rather than by making blockstun
+	// actionable — actionable blockstun is no blockstun at all.
+	if p.State == StateBlockstun {
+		if m := s.moveFor(i, StanceStand, now, 0, true); m >= 0 {
+			// The blockstun it is escaping is over. Nothing else in the game
+			// leaves stun early, so the counter is cleared here rather than in
+			// enter, where it would silently change every other transition.
+			p.Stun = 0
+			p.enterMove(m, now)
+		}
+		return
+	}
+
 	// Stun and commitment states tick down elsewhere; they accept no input.
 	// StateAir is the exception, and only for buttons: an air normal is the one
 	// thing a jump accepts. There is no air walking, no double jump and no air
 	// dash, so the direction half below is unreachable from up there.
-	if !Actionable(p.State) && p.State != StateAir && cancel == 0 {
+	// StateRush joins StateAir as the state that takes buttons and no
+	// directions: cancelling the rush into an attack is the mechanic, steering
+	// it is not.
+	if !Actionable(p.State) && p.State != StateAir && p.State != StateRush && cancel == 0 {
 		return
 	}
 
@@ -215,15 +307,23 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 
 	// Attacks first: a button beats a direction on the same frame, which is
 	// what lets a crouching attack come out of a walk without a spare frame.
-	if m := s.moveFor(i, stance, now, cancel); m >= 0 {
+	if m := s.moveFor(i, stance, now, cancel, false); m >= 0 {
 		p.enterMove(m, now)
 		return
 	}
 
 	// A cancel window is not an actionable state. Nothing below this line — no
 	// dash, no jump, no walk — comes out of the middle of an attack; the window
-	// exists for the one move the data named and for nothing else.
+	// exists for the one move the data named, for the Drive Rush the move named
+	// with it, and for nothing else.
 	if p.State == StateAttack {
+		// **Three bars from a cancel against one from the parry.** The design
+		// prices them apart because they buy different things: out of a
+		// connected normal a rush is a combo, out of the stance it is
+		// approach.
+		if cancel&CancelDrive != 0 {
+			s.startRush(i, now, balance.DriveRushCancelCost)
+		}
 		return
 	}
 
@@ -238,7 +338,7 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 		return
 	}
 
-	if p.State == StateAir {
+	if p.State == StateAir || p.State == StateRush {
 		return
 	}
 
@@ -353,7 +453,12 @@ func (s *GameState) cancelMask(i int) uint16 {
 //
 // cancel restricts the search to the categories a cancel allows; zero is the
 // ordinary path and allows every move.
-func (s *GameState) moveFor(i int, stance int32, now uint32, cancel uint16) int32 {
+//
+// reversal swaps the search over to the moves that come out of blockstun and
+// away from every move that does not. It is a swap rather than an addition in
+// both directions: a Drive Reversal is not something to press in neutral, and
+// nothing else may be pressed while blocking.
+func (s *GameState) moveFor(i int, stance int32, now uint32, cancel uint16, reversal bool) int32 {
 	p := &s.Players[i]
 	c := CharacterAt(p.Char)
 
@@ -371,6 +476,10 @@ func (s *GameState) moveFor(i int, stance int32, now uint32, cancel uint16) int3
 		mv := &c.Moves[m]
 		special := mv.Motion != MotionNone
 
+		if mv.IsReversal() != reversal {
+			continue
+		}
+
 		// A cancel takes only what the move being cancelled named. The category
 		// is the move's own nature — a level makes it a super, a motion makes
 		// it a special, neither makes it a chain — so the target needs no field
@@ -385,6 +494,17 @@ func (s *GameState) moveFor(i int, stance int32, now uint32, cancel uint16) int3
 		// shared the button. Refusing it in the search is what lets the fireball
 		// come out of the same input instead.
 		if cost := mv.SuperCost(); cost > p.Super {
+			continue
+		}
+
+		// The Drive gauge gates its own moves the same way, and Burnout refuses
+		// them outright: **no Drive mechanics at all while the gauge is
+		// refilling** is the design's own rule, and it is what makes running
+		// out of Drive a state worth avoiding rather than a slower meter. An EX
+		// fireball the player cannot pay for therefore comes out as the plain
+		// fireball sharing its motion, which is the same courtesy the super
+		// gets.
+		if cost := mv.DriveCost(); cost > 0 && (p.Burnout != 0 || cost > p.Drive) {
 			continue
 		}
 
@@ -432,19 +552,27 @@ func (s *GameState) moveFor(i int, stance int32, now uint32, cancel uint16) int3
 	return best
 }
 
-// The selection tiers. A super outranks a special outranks a throw outranks a
-// normal on the same press, which is what puts the level 3 ahead of the
-// fireball when one input describes both.
+// The selection tiers. A super outranks a Drive move outranks a special
+// outranks a throw outranks a normal on the same press, which is what puts the
+// level 3 ahead of the fireball when one input describes both.
 //
 // The throw's tier is what makes LP+LK a throw rather than a jab. Both moves
 // see a fresh press on that frame — the jab's button is a subset of the
 // throw's — and the more specific input has to win, or a character with a
 // throw cannot press two buttons at once for anything else again.
-const tiers = 4
+//
+// A Drive move sits above the special for exactly that reason: an EX fireball
+// is the same motion on two buttons, one of which is the light version's, so
+// the cheaper move would win every press if the tiers were equal. The gauge
+// check above is what keeps it honest — a Drive move the player cannot afford
+// never reaches the comparison at all.
+const tiers = 5
 
 func tierOf(m *Move) int32 {
 	switch {
 	case m.Super > 0:
+		return 4
+	case m.Drive > 0:
 		return 3
 	case m.Motion != MotionNone:
 		return 2
@@ -453,6 +581,29 @@ func tierOf(m *Move) int32 {
 	default:
 		return 0
 	}
+}
+
+// startRush enters a Drive Rush if the player asked for one and can pay for it:
+// forward tapped twice, the gauge able to cover cost, and not burnt out.
+// Reports whether it started.
+//
+// The double tap is read off the input history like every other dash, so it
+// rolls back with the rest of the state.
+func (s *GameState) startRush(i int, now uint32, cost int32) bool {
+	p := &s.Players[i]
+	if p.Burnout != 0 || p.Drive < cost || !p.doubleTapped(now, DirFwd) {
+		return false
+	}
+
+	p.spendDrive(cost)
+	p.enter(StateRush)
+	// **The presses that bought the rush are spent**, exactly as a move spends
+	// the press that started it. Without this the parry's own MP+MK is still
+	// live in the buffer, and the rush — which takes buttons — turns it into a
+	// medium punch on its second frame. Every Drive Rush would come with a free
+	// attack nobody asked for.
+	p.Eaten = int32(now)
+	return true
 }
 
 // advanceState is step 2: run the current state's clock and decide what the
@@ -492,6 +643,15 @@ func (s *GameState) advanceState(i int) {
 
 	case StateWalkB:
 		p.VX = -c.WalkBack.Mul(FromInt(int(p.Facing)))
+
+	case StateRush:
+		// Exit before applying velocity, like the dash above: a state that
+		// lasts N frames must move on exactly N of them.
+		if p.StateFrame >= balance.DriveRushFrames {
+			p.enter(StateIdle)
+			break
+		}
+		p.VX = balance.DriveRushSpeed.Mul(FromInt(int(p.Facing)))
 
 	case StateDash, StateBackdash:
 		frames, dist := c.DashFrames, c.DashDistance
