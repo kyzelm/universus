@@ -222,6 +222,9 @@ export function createNetplay(
   let theirFrame = -1
   let lastSkip = -SKIP_EVERY
 
+  /** The newest frame we have put on the wire, for the resend on a held tick. */
+  let sentInputsThrough = -1
+
   /** Frames written to the log so far, so settle only ever appends. */
   let logged = -1
   const log: number[] = []
@@ -377,7 +380,17 @@ export function createNetplay(
     }
   }
 
+  /**
+   * The window we last sent, sent again. Used by the ticks that decide not to
+   * simulate: they have no new input to add, but silence would leave the other
+   * end reading our frame number off a packet that is getting older.
+   */
+  function resendInputs(): void {
+    if (sentInputsThrough >= 0) sendInputs(sentInputsThrough)
+  }
+
   function sendInputs(through: number): void {
+    sentInputsThrough = through
     const start = Math.max(0, through - REDUNDANCY + 1)
     const window = new Uint16Array(through - start + 1)
     for (let f = start; f <= through; f++) window[f - start] = local[f] ?? 0
@@ -437,11 +450,19 @@ export function createNetplay(
     },
 
     step(localBits) {
-      // Our own input lands INPUT_DELAY frames from now, so it has time to
-      // reach the other end before the frame it belongs to is simulated.
-      const at = frame + INPUT_DELAY
-      local[at] = localBits
-      sendInputs(at)
+      // **Nothing is recorded or sent before the guards below.** A frame's
+      // input is decided once, on the tick that frame is actually simulated.
+      // Recording it first means a stalled or skipped tick writes a second
+      // value into a slot already on the wire, and the peer keeps the first
+      // copy it saw — the two ends then simulate that frame from different
+      // inputs. It shows up as an intermittent checksum mismatch rather than a
+      // broken match, because a difference that lands mid-animation changes
+      // nothing and the states converge again.
+      //
+      // Resending instead keeps us audible while we are not moving: the other
+      // end reads our frame number off our input packets, so an end that goes
+      // quiet during a stall makes *their* time synchronisation act on a stale
+      // reading.
 
       // Never outrun the window: a misprediction older than MAX_ROLLBACK
       // cannot be corrected, so wait rather than desync. This is the stall
@@ -449,6 +470,7 @@ export function createNetplay(
       // frequency is one of the numbers worth reporting.
       if (frame - confirmed > MAX_ROLLBACK) {
         stats.stalls++
+        resendInputs()
         return false
       }
 
@@ -461,6 +483,7 @@ export function createNetplay(
       if (advantage() > AHEAD_LIMIT && frame - lastSkip >= SKIP_EVERY) {
         lastSkip = frame
         stats.skipped++
+        resendInputs()
         return false
       }
 
@@ -468,6 +491,12 @@ export function createNetplay(
       // every frame would diverge and the checksums would report it without
       // ever saying why.
       if (stats.dataMismatch) return false
+
+      // Our own input lands INPUT_DELAY frames from now, so it has time to
+      // reach the other end before the frame it belongs to is simulated.
+      const at = frame + INPUT_DELAY
+      local[at] = localBits
+      sendInputs(at)
 
       if (!known[frame]) stats.predicted++
       simulate(frame, remoteAt(frame))

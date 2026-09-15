@@ -354,6 +354,48 @@ test('a peer with matching character data plays normally', () => {
 })
 
 /**
+ * The invariant the whole wire format rests on: the same bytes go to the sim,
+ * the network and the replay (CLAUDE.md). A frame's input is therefore decided
+ * exactly once — the moment that frame is simulated — and nothing may rewrite
+ * it afterwards.
+ *
+ * The way to break it is to record the input *before* the guards that decide
+ * whether the frame runs at all. A stalled or skipped tick then writes a second
+ * value into a slot already on the wire, and the peer keeps the first copy it
+ * saw (its redundancy check ignores a frame it already knows). The two ends
+ * simulate the same frame from different inputs and the checksums disagree —
+ * intermittently, because a difference that lands during an animation changes
+ * nothing and the states silently converge again.
+ *
+ * Found by running two browsers at 100 ms: 73 mismatches in 60 seconds, never
+ * sticky. testdata/ has no log of it because it is not reachable from a replay
+ * — only a live stall can produce it.
+ */
+test('a frame\'s input is decided once — a stall never rewrites what was sent', () => {
+  const sent: ArrayBuffer[] = []
+  const net = createNetplay(stubSim(), (d) => sent.push(d), 0)
+
+  // Nothing ever arrives, so the window runs out and every tick after that
+  // stalls — while the local input keeps changing, as a held stick does not.
+  for (let f = 0; f < 40; f++) net.step((f * 7) & 0xff)
+  expect(net.stats.stalls).toBeGreaterThan(0)
+
+  const seen = new Map<number, number>()
+  for (const data of sent) {
+    if (packetType(data) !== PacketType.inputs) continue
+    const {startFrame, inputs} = decodeInputs(data)
+
+    inputs.forEach((bits, i) => {
+      const f = startFrame + i
+      const first = seen.get(f)
+      if (first === undefined) return void seen.set(f, bits)
+      // Reported as a pair so a failure names the frame, not just the bits.
+      expect([f, bits]).toEqual([f, first])
+    })
+  }
+})
+
+/**
  * The netcode driven through the real impairment layer, which is the condition
  * it exists for: localhost produces one-frame rollbacks and never exercises the
  * window. 100 ms round trip, 15 ms of jitter and 5% loss is a cell of the
