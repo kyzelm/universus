@@ -19,6 +19,25 @@ const RTT_PRESETS = [0, 50, 100, 150, 200]
 const LOSS_PRESETS = [0, 2, 5]
 
 /**
+ * A whole run out of the URL: `?room=CODE&bot&rtt=200&loss=5&jitter=15`.
+ *
+ * This is what makes a measurement cell repeatable and a two-machine test one
+ * link to send rather than a list of instructions — both ends open the same
+ * address and are in the same condition by construction. Setting one end by
+ * hand is how a cell gets measured with the impairment on one side only, which
+ * is not the condition on the label.
+ */
+function urlImpairment(): Impairment | null {
+  const p = new URLSearchParams(location.search)
+  if (!p.has('rtt') && !p.has('loss') && !p.has('jitter')) return null
+
+  const num = (key: string) => Math.max(0, Number(p.get(key) ?? 0) || 0)
+  // The presets are round-trip figures and the layer delays arrivals in one
+  // direction, so it is given half — the same halving the buttons do.
+  return {delayMs: num('rtt') / 2, jitterMs: num('jitter'), lossPercent: num('loss')}
+}
+
+/**
  * Two ways in. **A room code** goes through our own server, which pairs the two
  * ends, carries the blobs for them and becomes the transport if WebRTC cannot
  * connect (Decision Log D15). **Manual signalling** — copy the blob across,
@@ -39,6 +58,7 @@ export default function NetPanel({game}: {game: Game | null}) {
 
   const conn = useRef<Connection | null>(null)
   const room = useRef<Session | null>(null)
+  const autoJoined = useRef(false)
 
   useEffect(
     () => () => {
@@ -52,18 +72,23 @@ export default function NetPanel({game}: {game: Game | null}) {
    * The room does the whole negotiation, so there is nothing to paste and
    * nothing to time: it comes back with a peer and which seat this end has.
    */
-  async function connectRoom() {
+  async function connectRoom(joining = code) {
     if (!game) return setStatus('the sim is still loading')
 
     try {
       setStatus('waiting for the other end…')
-      const s = await joinRoom(code, (data) => game.receive(data))
+      const s = await joinRoom(joining, (data) => game.receive(data))
 
       room.current = s
       setRole(s.seat === 0 ? 'host' : 'guest')
       setKind(s.kind)
       game.connect(s.peer, s.seat)
       setStatus('connected')
+
+      // Applied after connecting, not before: connect() builds the link, so a
+      // condition set earlier would be replaced by the clean one.
+      const condition = urlImpairment()
+      if (condition) impair(condition)
     } catch (e) {
       setStatus(`failed: ${(e as Error).message}`)
     }
@@ -90,6 +115,18 @@ export default function NetPanel({game}: {game: Game | null}) {
     }
   }
 
+  // ?room=CODE joins on load. Same link on both ends, nothing typed, which is
+  // the only way a two-machine run is set up identically on both sides.
+  useEffect(() => {
+    const joining = new URLSearchParams(location.search).get('room')
+    if (!game || !joining || autoJoined.current) return
+
+    autoJoined.current = true
+    setCode(joining)
+    void connectRoom(joining)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game])
+
   /**
    * Conditions are pushed into the game rather than held there: the panel is
    * the only thing that knows what was asked for, and the game is the only
@@ -108,6 +145,20 @@ export default function NetPanel({game}: {game: Game | null}) {
     } catch (e) {
       setStatus(`failed: ${(e as Error).message}`)
     }
+  }
+
+  // Training is offline by construction: the mode is sim state, so two ends
+  // that disagreed about it would desync on the first checksum. Refused here
+  // rather than explained after the fact.
+  if (game?.training) {
+    return (
+      <section className="net">
+        <p className="keys">
+          training — infinite resources, no clock, no rounds. <b>R</b> resets. Reload without{' '}
+          <b>?training</b> to play online
+        </p>
+      </section>
+    )
   }
 
   if (role === 'idle') {

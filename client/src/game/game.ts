@@ -30,6 +30,7 @@ import {
   type Snapshot,
   STATE_NAMES,
 } from '../sim/wasm'
+import type {Bot} from './bot'
 import {createClock, STEP_MS} from './clock'
 import {createEvents} from './events'
 import {createInput} from './input'
@@ -116,6 +117,19 @@ export interface Game {
   connect(peer: Peer, seat: 0 | 1): void
   /** Feed a packet in. The panel owns the channel, so it forwards them here. */
   receive(data: ArrayBuffer): void
+  /** True in the lab. The net panel reads it and refuses to connect. */
+  readonly training: boolean
+  /** Starts the match over, in the same mode. The training reset key. */
+  restart(): void
+  /**
+   * The figures the HUD draws, as plain numbers, for the measurement harness
+   * (01 Thesis/Measurement Methodology.md). A run whose numbers were read off
+   * a screenshot by eye cannot be re-read, checked or plotted later.
+   *
+   * Read-only and one-way: nothing in the game reads this back, and no sim
+   * state is exposed through it, so it can never become a path into the sim.
+   */
+  measure(): Record<string, unknown>
   /**
    * Sets the artificial network conditions applied to arriving packets. The
    * measurement matrix is run by calling this, not by rebuilding anything.
@@ -129,10 +143,19 @@ export interface Game {
  *
  * The view is read-only by construction: it advances the sim, reads a snapshot,
  * and draws. There is no path from here back into sim state.
+ *
+ * `bot` replaces the local player's device for a measurement run. It sits
+ * where the keyboard sits, so the sim cannot tell the difference and neither
+ * can the replay log.
+ *
+ * `training` starts the match in the lab (03 Game Design/Game Modes.md):
+ * resources refill, the clock stops, the round never ends. It is a mode of the
+ * *match* and lives in sim state, so it is offline by construction — the panel
+ * refuses to connect in it.
  */
-export async function startGame(parent: HTMLElement): Promise<Game> {
+export async function startGame(parent: HTMLElement, bot?: Bot, training = false): Promise<Game> {
   await loadSim()
-  reset()
+  reset(training)
 
   const app = new Application()
   await app.init({width: VIEW_W, height: VIEW_H, background: 0x14161a, antialias: false})
@@ -253,7 +276,10 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     if (ticker.deltaMS > STEP_MS * 1.5) longFrames++
 
     for (let i = clock.tick(ticker.deltaMS); i > 0; i--) {
-      const [p1, p2] = input.poll()
+      const [keys, p2] = input.poll()
+      // The bot is a device: it stands in for the local player's keyboard and
+      // is read once per fixed step, exactly where the keyboard is read.
+      const p1 = bot ? bot.poll() : keys
 
       const t0 = performance.now()
       if (net) {
@@ -331,6 +357,15 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
   })
 
   return {
+    training,
+
+    restart() {
+      reset(training)
+      pump.reset()
+      sparks.length = 0
+      recorded.length = 0
+    },
+
     inputLog() {
       // Under netplay the driver's log is the authority: it holds the inputs
       // that were *confirmed*, which is what the match actually simulated once
@@ -347,12 +382,19 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
     },
 
     connect(peer, seat) {
-      reset()
+      // Never into a training match: the mode is in the state, so two ends that
+      // disagreed about it would desync on frame 0. The panel refuses the
+      // connection before this, and this is the second lock on the same door.
+      reset(false)
       // The match restarts at frame 0, so what has been fired restarts with it.
       pump.reset()
       sparks.length = 0
       ticks = 0
       longFrames = 0
+      // Both ends of a measured run open the same URL, so the seat is the only
+      // thing that can make the two input streams differ. Without this they
+      // mirror each other and every prediction is right for the wrong reason.
+      bot?.reseed(seat + 1)
       net = createNetplay({advance, rewind, checksum, dataVersion}, (data) => peer.send(data), seat)
       // Every arriving packet goes through the impairment layer, whatever it
       // is set to — the clean setting passes straight through, so a real match
@@ -365,6 +407,31 @@ export async function startGame(parent: HTMLElement): Promise<Game> {
       if (link) link.receive(data)
       else net?.receive(data)
     },
+
+    measure: () => ({
+      connected: net !== null,
+      frame: net ? net.frame : readSnapshot().frame,
+      advantage: net?.advantage ?? 0,
+      rttP50: net?.stats.rtt.percentile(50) ?? NaN,
+      rttP99: net?.stats.rtt.percentile(99) ?? NaN,
+      rollbacks: net?.stats.rollbacks ?? 0,
+      mispredicted: net?.stats.mispredicted ?? 0,
+      depthP99: net ? depthP99(net.stats.depths) : 0,
+      frames: net?.stats.frames ?? 0,
+      stalls: net?.stats.stalls ?? 0,
+      skipped: net?.stats.skipped ?? 0,
+      verified: net?.stats.verified ?? 0,
+      desyncs: net?.stats.desyncs ?? 0,
+      desyncFrame: net?.stats.desyncFrame ?? -1,
+      dropped: net?.stats.dropped ?? 0,
+      simP50: stepCost.percentile(50),
+      simP99: stepCost.percentile(99),
+      displayP50: frameCost.percentile(50),
+      displayP99: frameCost.percentile(99),
+      longFrames,
+      impaired: link ? link.cfg : null,
+      lost: link?.stats.dropped ?? 0,
+    }),
 
     impair(cfg) {
       link?.set(cfg)

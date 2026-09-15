@@ -28,6 +28,25 @@ const CHANNEL_INIT: RTCDataChannelInit = {ordered: false, maxRetransmits: 0}
  */
 const ICE: RTCConfiguration = {iceServers: [{urls: 'stun:stun.l.google.com:19302'}]}
 
+/**
+ * `?ice=off` makes ICE genuinely unable to connect, so the relay fallback can
+ * be exercised (Decision Log D15, D88). A relay-only policy with no TURN server
+ * gathers no candidates at all — this is the browser refusing to connect, not a
+ * flag the code reads to take a different path, which is the only version of
+ * this switch worth having: the fallback has to be reached the way a blocked
+ * network reaches it.
+ *
+ * It exists because 15-20% of networks cannot hole-punch and one of them may be
+ * the one the defense happens on. There is no other way to meet that case on
+ * demand from a desk.
+ */
+function iceConfig(): RTCConfiguration {
+  if (new URLSearchParams(location.search).get('ice') === 'off') {
+    return {iceServers: [], iceTransportPolicy: 'relay'}
+  }
+  return ICE
+}
+
 export interface Peer {
   send(data: ArrayBuffer): void
   close(): void
@@ -45,7 +64,7 @@ export interface Connection {
 }
 
 export async function host(onMessage: (data: ArrayBuffer) => void): Promise<Connection> {
-  const pc = new RTCPeerConnection(ICE)
+  const pc = new RTCPeerConnection(iceConfig())
   const ready = wire(pc.createDataChannel(CHANNEL, CHANNEL_INIT), onMessage)
 
   await pc.setLocalDescription(await pc.createOffer())
@@ -63,7 +82,7 @@ export async function guest(
   offerBlob: string,
   onMessage: (data: ArrayBuffer) => void,
 ): Promise<Connection> {
-  const pc = new RTCPeerConnection(ICE)
+  const pc = new RTCPeerConnection(iceConfig())
 
   // The guest does not create the channel, it receives the host's.
   const ready = new Promise<Peer>((resolve, reject) => {
