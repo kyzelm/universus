@@ -330,3 +330,74 @@ func TestInputQueriesAreDeterministic(t *testing.T) {
 		t.Error("states diverged")
 	}
 }
+
+// ---- The pair window -------------------------------------------------------
+
+// Nothing makes a human press two keys on one frame, and a throw, a parry and
+// a Drive Impact are all a punch and a kick. Without a window the faster finger
+// decides: the single button selects its own normal, the state stops being
+// actionable, and the pair the player was making never happens.
+func TestASecondButtonLandingLateStillMakesThePair(t *testing.T) {
+	window := BalanceOf().PairFrames
+
+	for skew := int32(1); skew < window; skew++ {
+		s := New()
+		for f := int32(0); f < skew; f++ {
+			s.Advance([2]uint16{InMP, 0})
+		}
+		s.Advance([2]uint16{ParryButtons, 0})
+
+		if s.Players[0].State != StateParry {
+			t.Errorf("MK %d frames after MP: state %d, want the parry", skew, s.Players[0].State)
+		}
+	}
+
+	for skew := int32(1); skew < window; skew++ {
+		s := New()
+		for f := int32(0); f < skew; f++ {
+			s.Advance([2]uint16{InLP, 0})
+		}
+		s.Advance([2]uint16{throwInput, 0})
+
+		if mv := s.Players[0].move(); mv == nil || !mv.IsThrow() {
+			t.Errorf("LK %d frames after LP: the jab came out, want the throw", skew)
+		}
+	}
+}
+
+// The ceiling, and what makes the rule room rather than a retraction: once the
+// move is past its startup it is a commitment, whatever the window says.
+func TestAnActiveMoveIsNeverTakenBackByAPair(t *testing.T) {
+	s := New()
+	s.Advance([2]uint16{InMP, 0})
+
+	mv := s.Players[0].move()
+	if mv == nil {
+		t.Fatal("MP produced no move at all")
+	}
+
+	for f := int32(0); f < mv.Startup; f++ {
+		s.Advance([2]uint16{InMP, 0})
+	}
+	s.Advance([2]uint16{ParryButtons, 0})
+
+	if s.Players[0].State == StateParry {
+		t.Error("a parry came out of a move that was already active")
+	}
+}
+
+// A window that took any second button would be a free cancel out of every
+// light into anything with two buttons. The pair has to be one the move already
+// running is part of.
+func TestAPairSharingNoButtonDoesNotOverride(t *testing.T) {
+	s := New()
+	s.Advance([2]uint16{InMP, 0})
+	state := s.Players[0].State
+	move := s.Players[0].MoveIndex
+
+	s.Advance([2]uint16{InMP | throwInput, 0})
+
+	if s.Players[0].State != state || s.Players[0].MoveIndex != move {
+		t.Error("LP+LK during a medium punch changed a move it shares no button with")
+	}
+}

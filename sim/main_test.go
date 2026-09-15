@@ -42,6 +42,11 @@ func testBalance() Balance {
 		DriveRegenBurnout: DriveMax / 20,
 		DriveBlockCost:    BarUnits,
 
+		// The pair window, in frames. Round, like everything else here; the
+		// shipped value is tuned for a keyboard and the tests only need a
+		// window that exists.
+		PairFrames: 4,
+
 		BurnoutBlockstun:   5,
 		BurnoutChipPercent: 10,
 

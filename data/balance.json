@@ -26,6 +26,10 @@
     "intro": 90
   },
 
+  "input": {
+    "pairFrames": 4
+  },
+
   "throw": {
     "techFrames": 5,
     "techRecovery": 20,

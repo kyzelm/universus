@@ -64,13 +64,15 @@ function Controls() {
 
         <dt>drive impact</dt>
         <dd>
-          <b>O+L</b> / <b>Num 9+6</b> — one bar, armoured: it eats one hit on the way out
+          <b>B</b> / <b>Num 2</b> / pad <b>L3</b>, or <b>O+L</b> / <b>Num 9+6</b> on the same
+          frame — one bar, armoured: it eats one hit on the way out
         </dd>
 
         <dt>drive parry</dt>
         <dd>
-          hold <b>I+K</b> / <b>Num 8+5</b> — drains the gauge while held, absorbs with no
-          blockstun, and pays back for reading the attack right
+          hold <b>G</b> / <b>Num 1</b> / pad <b>L2</b>, or <b>I+K</b> / <b>Num 8+5</b> — drains
+          the gauge while held, absorbs with no blockstun, and pays back for reading the attack
+          right
         </dd>
 
         <dt>drive rush</dt>
@@ -81,7 +83,8 @@ function Controls() {
 
         <dt>drive reversal</dt>
         <dd>
-          <b>O+L</b> while blocking — two bars for an invincible way out of the pressure
+          <b>B</b> (or <b>O+L</b>) while blocking — two bars for an invincible way out of the
+          pressure
         </dd>
 
         <dt>EX special</dt>

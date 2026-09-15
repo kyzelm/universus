@@ -40,6 +40,10 @@ type Balance struct {
 	// how long Burnout lasts: DriveMax divided by this, in frames.
 	DriveRegenBurnout int32
 
+	// PairFrames is how late the second button of a two-button input may land
+	// and still be read as the pair. See fighter.go's pairLate.
+	PairFrames int32
+
 	// DriveBlockCost is spent per blocked hit. **Blocking spends Drive** — this
 	// is the pressure loop, and the reason defence has a resource cost.
 	DriveBlockCost int32

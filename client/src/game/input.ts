@@ -32,6 +32,17 @@ export const IN_HK = 1 << 10
  */
 const THROW = IN_LP | IN_LK
 
+/**
+ * The same fix for the other two pairs, which D89 predates: Drive Parry is
+ * MP+MK and Drive Impact is HP+HK, and both lose to the frame before exactly
+ * as the throw does — MP alone is a medium punch, the medium punch starts, and
+ * the MK a frame later arrives at a player who is no longer actionable. The
+ * parry is the worse of the two, because failing it also costs the Drive Rush
+ * that comes out of the stance.
+ */
+const PARRY = IN_MP | IN_MK
+const IMPACT = IN_HP | IN_HK
+
 /** KeyboardEvent.code to bit — or to a mask, for the macro. */
 const P1_KEYS: Record<string, number> = {
   KeyW: IN_UP,
@@ -45,6 +56,8 @@ const P1_KEYS: Record<string, number> = {
   KeyK: IN_MK,
   KeyL: IN_HK,
   KeyH: THROW,
+  KeyG: PARRY,
+  KeyB: IMPACT,
 }
 
 const P2_KEYS: Record<string, number> = {
@@ -59,6 +72,8 @@ const P2_KEYS: Record<string, number> = {
   Numpad5: IN_MK,
   Numpad6: IN_HK,
   Numpad0: THROW,
+  Numpad1: PARRY,
+  Numpad2: IMPACT,
 }
 
 /**
@@ -80,7 +95,9 @@ const PAD_BUTTONS: Record<number, number> = {
   0: IN_LK, // cross / A
   1: IN_MK, // circle / B
   7: IN_HK, // R2 / RT
-  4: THROW, // L1 / LB — where every fighting game puts throw
+  4: THROW,  // L1 / LB — where every fighting game puts throw
+  6: PARRY,  // L2 / LT — the stance, on the other shoulder
+  10: IMPACT, // L3 / left stick click
 }
 
 /**

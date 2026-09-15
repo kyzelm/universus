@@ -61,22 +61,25 @@ func TestThrowNeedsBothButtons(t *testing.T) {
 	}
 }
 
-// **Both buttons on one frame, from an actionable state.** Pressing LP and then
-// LK a frame later gives the jab and no throw, which is what the genre does and
-// what one press, one move already requires: the jab came out on the frame it
-// was asked for, and nothing retroactively turns it into something else.
+// **The second button may land late, up to the pair window.** This used to
+// assert the opposite — that LP then LK gave the jab and kept it, because
+// nothing retroactively changes a move that came out on the frame it was asked
+// for. Played on a keyboard, that rule means the throw, the parry and the Drive
+// Impact effectively do not exist, so the window replaces it: the jab is taken
+// back while it is still in startup and has not connected. Past that it is a
+// commitment, which TestAnActiveMoveIsNeverTakenBackByAPair covers.
 //
-// The pair completing *late* still counts when the player could not act on the
-// first button — which is the case the mask rule is really for.
-func TestBothButtonsMustLandOnOneFrame(t *testing.T) {
+// The pair completing *late* has always counted when the player could not act
+// on the first button, and that half is unchanged.
+func TestBothButtonsMayLandAFrameApart(t *testing.T) {
 	late := New()
-	late.Advance([2]uint16{InLP, 0}) // the jab comes out here
+	late.Advance([2]uint16{InLP, 0}) // the jab starts here
 	late.Advance([2]uint16{throwInput, 0})
-	if got := late.Players[0].MoveIndex; got != 0 {
-		t.Errorf("LP then LK gave move %d, want the jab that already started", got)
+	if got := late.Players[0].MoveIndex; got != throwIndex {
+		t.Errorf("LP then LK gave move %d, want the throw the pair completes", got)
 	}
 
-	// Now the same input while the jab is still running: neither button could
+	// The same input while the jab is still running: neither button could
 	// be acted on when it landed, so the pair completes inside the buffer and
 	// the throw is what comes out of it.
 	buffered := New()

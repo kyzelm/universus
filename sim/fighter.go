@@ -254,8 +254,9 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 		}
 		return
 	}
-	if in&ParryButtons == ParryButtons && Actionable(p.State) && !p.Airborne() &&
-		p.Burnout == 0 && p.Drive > 0 {
+	if in&ParryButtons == ParryButtons &&
+		(Actionable(p.State) || s.pairLate(i, in, ParryButtons)) &&
+		!p.Airborne() && p.Burnout == 0 && p.Drive > 0 {
 		p.enter(StateParry)
 		// Spent for the same reason: the buttons that entered the stance must
 		// not still be waiting in the buffer to become a medium punch on the
@@ -279,17 +280,6 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 		return
 	}
 
-	// Stun and commitment states tick down elsewhere; they accept no input.
-	// StateAir is the exception, and only for buttons: an air normal is the one
-	// thing a jump accepts. There is no air walking, no double jump and no air
-	// dash, so the direction half below is unreachable from up there.
-	// StateRush joins StateAir as the state that takes buttons and no
-	// directions: cancelling the rush into an attack is the mechanic, steering
-	// it is not.
-	if !Actionable(p.State) && p.State != StateAir && p.State != StateRush && cancel == 0 {
-		return
-	}
-
 	dir := direction(in, p.Facing)
 	crouching := dir == DirDown || dir == DirDownBack || dir == DirDownFwd
 
@@ -303,6 +293,32 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 		stance = StanceAir
 	case crouching:
 		stance = StanceCrouch
+	}
+
+	// **The second button of a two-button input lands late, and the move it was
+	// meant to be still comes out.** Nothing makes a human press two keys on
+	// one frame; the faster one selects its own normal, the state stops being
+	// actionable, and the throw, parry or Impact the player was making never
+	// happens. Only a multi-button move may take over, only over a
+	// single-button one it shares a button with, and only while that one is
+	// still in startup — see pairLate.
+	if p.State == StateAttack && !Actionable(p.State) {
+		if m := s.moveFor(i, stance, now, 0, false); m >= 0 &&
+			s.pairLate(i, in, CharacterAt(p.Char).Moves[m].Button) {
+			p.enterMove(m, now)
+			return
+		}
+	}
+
+	// Stun and commitment states tick down elsewhere; they accept no input.
+	// StateAir is the exception, and only for buttons: an air normal is the one
+	// thing a jump accepts. There is no air walking, no double jump and no air
+	// dash, so the direction half below is unreachable from up there.
+	// StateRush joins StateAir as the state that takes buttons and no
+	// directions: cancelling the rush into an attack is the mechanic, steering
+	// it is not.
+	if !Actionable(p.State) && p.State != StateAir && p.State != StateRush && cancel == 0 {
+		return
 	}
 
 	// Attacks first: a button beats a direction on the same frame, which is
@@ -581,6 +597,56 @@ func tierOf(m *Move) int32 {
 	default:
 		return 0
 	}
+}
+
+// multiButton reports a button mask with more than one bit — a throw, a parry,
+// a Drive Impact. Kernighan's trick: clearing the lowest set bit leaves nothing
+// behind for a single button.
+func multiButton(mask uint16) bool { return mask&(mask-1) != 0 }
+
+// pairLate reports that the player is a frame or two into a single-button
+// attack and is now completing the two-button input pair, which that attack's
+// button is part of.
+//
+// **This reverses D89's first half.** That decision fixed the throw with a
+// macro key and rejected a sim rule, on the grounds that the macro bought
+// everything the rule would. Two mechanics arrived after it — Drive Parry and
+// Drive Impact, both a punch and a kick — and playing it says otherwise: a
+// stance that is *held* and that gates the Drive Rush is not a keypress, and a
+// player who reaches for the two buttons gets a medium punch every time. The
+// macros stay; this is the same leniency for everyone who does not use them.
+//
+// It is a simulation rule rather than a client one for the usual reason: two
+// machines that disagreed about whether a throw came out have desynced. It
+// reads the input history every other rule reads, so it rolls back with the
+// rest of the state.
+//
+// Four conditions, each load-bearing:
+//
+//   - **Inside the window**, balance.PairFrames — and **still in startup**,
+//     whichever ends first. A move that has reached its active frames is a
+//     commitment; taking one back would be a retraction rather than room, and
+//     the per-move half means the window can be tuned for the slowest hand
+//     without ever reaching past the fastest jab.
+//   - **The move has not connected.** HasHit is set on block as much as on hit,
+//     so a jab that already touched somebody is never rewritten into a throw.
+//   - **The pair contains the running move's button.** Without it this would be
+//     a free cancel out of any light into anything with two buttons, for the
+//     length of the window.
+//   - **The pair is complete this frame.** The press edge for a mask already
+//     says "all of them down now, not all of them down before"; this is the
+//     state half of the same question.
+func (s *GameState) pairLate(i int, in, pair uint16) bool {
+	p := &s.Players[i]
+	if !multiButton(pair) || in&pair != pair {
+		return false
+	}
+	if p.State != StateAttack || p.HasHit != 0 || p.StateFrame >= balance.PairFrames {
+		return false
+	}
+	mv := p.move()
+	return mv != nil && !multiButton(mv.Button) && p.StateFrame < mv.Startup &&
+		pair&mv.Button != 0
 }
 
 // startRush enters a Drive Rush if the player asked for one and can pay for it:

@@ -192,6 +192,13 @@ type jsonBalance struct {
 		BurnoutChip      int         `json:"burnoutChipPercent"`
 	} `json:"drive"`
 
+	// Input. The pair window is how late the second button of a two-button
+	// input may land and still be read as the pair rather than as the single
+	// button that arrived first.
+	Input struct {
+		PairFrames int `json:"pairFrames"`
+	} `json:"input"`
+
 	// Round is authored in seconds, because 99 is the number the design note
 	// and every other fighting game state, and 5940 is not. The conversion
 	// happens here: the sim is given frames and never learns what a second is.
@@ -274,6 +281,7 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 		{"drive.armorDamagePercent", jb.Drive.ArmorDamage, &b.ArmorDamagePercent},
 		{"drive.burnoutBlockstun", jb.Drive.BurnoutBlockstun, &b.BurnoutBlockstun},
 		{"drive.burnoutChipPercent", jb.Drive.BurnoutChip, &b.BurnoutChipPercent},
+		{"input.pairFrames", jb.Input.PairFrames, &b.PairFrames},
 		{"round.seconds", jb.Round.Seconds * framesPerSecond, &b.RoundFrames},
 		{"round.roundsToWin", jb.Round.RoundsToWin, &b.RoundsToWin},
 		{"round.maxRounds", jb.Round.MaxRounds, &b.MaxRounds},
@@ -331,6 +339,16 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 	// lasts no frames is the same thing with extra steps.
 	if b.DriveRushSpeed <= 0 || b.DriveRushFrames <= 0 {
 		return b, fmt.Errorf("drive.rushSpeed and drive.rushFrames must be positive")
+	}
+
+	// A zero window is the behaviour this value exists to replace: the two
+	// buttons of a throw, a parry or a Drive Impact never land on the same
+	// frame on a keyboard, so the first one out selects its own normal and the
+	// pair never happens. The upper bound is a sanity bound only — the real
+	// ceiling is per-move and lives in the sim, which refuses to take back a
+	// move that has left its startup however long the window is.
+	if b.PairFrames <= 0 || b.PairFrames > 8 {
+		return b, fmt.Errorf("input.pairFrames must be 1-8, got %d", b.PairFrames)
 	}
 
 	// A parry that drains nothing is a stance with no cost, which is a stance
