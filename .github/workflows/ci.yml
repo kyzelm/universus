@@ -61,6 +61,13 @@ jobs:
       - run: pnpm lint
         working-directory: client
 
+      # The WASM binary and wasm_exec.js are build output, so they are not in the
+      # repo — and src/sim/wasm.test.ts loads the real one, because a byte layout
+      # agreed with a mock is a layout nobody checked. Built here rather than in
+      # `pnpm build`, which runs after the tests that need it.
+      - run: pnpm wasm
+        working-directory: client
+
       - run: pnpm exec vitest run
         working-directory: client
 
