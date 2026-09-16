@@ -50,13 +50,23 @@ func main() {
 		return nil
 	}))
 
-	// reset(training) starts a fresh match. The flag picks the mode, because
-	// the mode is part of the state rather than a switch the view holds: the
-	// lab is a different match, not a different way of drawing one.
+	// reset(training, ai) starts a fresh match. Both arguments pick a *mode*,
+	// which is part of the state rather than a switch the view holds: the lab
+	// is a different match, not a different way of drawing one, and a seat the
+	// AI is driving is a different match for the same reason — the opponent's
+	// inputs are generated inside the sim, so a client that disagreed about the
+	// tier would disagree about every frame.
 	api.Set("reset", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if len(args) > 0 && args[0].Truthy() {
+		ai := 0
+		if len(args) > 1 {
+			ai = args[1].Int()
+		}
+		switch {
+		case len(args) > 0 && args[0].Truthy():
 			session = sim.NewTrainingSession()
-		} else {
+		case ai > 0:
+			session = sim.NewAISession(int32(ai))
+		default:
 			session = sim.NewSession()
 		}
 		session.State().WriteSnapshot(snap[:])

@@ -140,12 +140,40 @@ type Balance struct {
 	// rabbit hole that adds nothing the thesis needs.
 	KnockdownFrames int32
 
+	// The scripted opponent (ai.go). **Difficulty is reaction delay and
+	// decision randomness only** (D63), which is what AITier holds one of per
+	// tier; everything below it is shared by all three, because a difficulty
+	// that changed the AI's *options* rather than its timing would be giving it
+	// privileges by another name.
+	//
+	// The ranges are distances between the two fighters, and the percentages
+	// are how often a rule that matched is actually taken — an AI that always
+	// took the rule it found would never whiff, and never whiffing is what
+	// makes an opponent read as a machine.
+	AITiers             [aiTierCount]AITier
+	AIDecisionFrames    int32
+	AICloseRange        Fix
+	AIMidRange          Fix
+	AIAntiAirRange      Fix
+	AIThrowPercent      int32
+	AIProjectilePercent int32
+	AIReversalPercent   int32
+
 	// Super is built by dealing damage, by taking it, and by landing a special.
 	// The first two are percentages of the damage; the third is flat, because
 	// it is paid for the connect rather than for the numbers behind it.
 	SuperDealtPercent int32
 	SuperTakenPercent int32
 	SuperOnSpecial    int32
+}
+
+// AITier is one difficulty: how long the AI takes to notice something, how
+// often it blocks what it noticed, and how often it throws the rule list away
+// and does something else.
+type AITier struct {
+	Reaction      int32
+	BlockPercent  int32
+	RandomPercent int32
 }
 
 // The loaded balance. Package-level and mutable-once, exactly like the roster

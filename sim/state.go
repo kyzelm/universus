@@ -133,6 +133,18 @@ type PlayerState struct {
 	// control, so the whole arc follows from this and gravity.
 	JumpVX Fix
 
+	// AI is the difficulty tier driving this seat, AIOff for a human, and
+	// AIPlan the action the last decision picked — see ai.go.
+	//
+	// **In GameState, like every other thing that decides what happens next.**
+	// The AI presses buttons through the same pipeline a keyboard does, but
+	// what it decided is state: a rollback that rewound the match and left the
+	// AI's plan where it was would replay the frame with a different press. It
+	// costs eight bytes a seat and offline modes never roll back, which is
+	// exactly the argument that would leave it out and be wrong once.
+	AI     int32
+	AIPlan int32
+
 	// Inputs is the input history ring: Inputs[f%InputHistory] is the bitfield
 	// that advanced frame f, widened to uint32 to keep GameState padding-free.
 	//
@@ -229,6 +241,16 @@ func NewTraining() GameState {
 	return s
 }
 
+// NewAIMatch is New with seat 2 played by the scripted opponent at the given
+// difficulty (03 Game Design/AI Opponent.md). Vs-AI is the one mode that demos
+// with no network and no second machine, which is why it is worth having a
+// constructor of its own.
+func NewAIMatch(tier int32) GameState {
+	s := New()
+	s.Players[1].AI = tier
+	return s
+}
+
 // NewMatch starts a match between two roster entries: players apart, on the
 // ground, facing each other, at full health.
 func NewMatch(c0, c1 int32) GameState {
@@ -269,6 +291,18 @@ func (s *GameState) Advance(in [2]uint16) {
 	// can set them — above the hitstop and phase returns below, or a hit's flag
 	// would survive the whole freeze and be fired once per frame of it.
 	s.clearEvents()
+
+	// A seat the AI is driving replaces whatever was passed for it, above
+	// everything else so its presses are recorded, buffered and read as motions
+	// exactly like a human's — the AI has no other way into the sim (ai.go).
+	// Whatever the caller passed for that seat is discarded, which is what
+	// makes an AI match reproduce from the match setup rather than from a log
+	// of inputs nobody made.
+	for i := range s.Players {
+		if s.Players[i].AI != AIOff {
+			in[i] = s.aiInput(i)
+		}
+	}
 
 	// 1. Resolve inputs. Record history first: motion recognition, the dash
 	// double-tap and the input buffer all read the ring, and all must see this

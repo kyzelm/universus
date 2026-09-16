@@ -159,10 +159,20 @@ export interface Game {
  * resources refill, the clock stops, the round never ends. It is a mode of the
  * *match* and lives in sim state, so it is offline by construction — the panel
  * refuses to connect in it.
+ *
+ * `ai` hands seat 2 to the scripted opponent at that difficulty tier
+ * (03 Game Design/AI Opponent.md). Also sim state, and for a stronger reason:
+ * the AI's presses are generated inside the sim, so there is nothing out here
+ * that could produce them and nothing out here that may disagree about them.
  */
-export async function startGame(parent: HTMLElement, bot?: Bot, training = false): Promise<Game> {
+export async function startGame(
+  parent: HTMLElement,
+  bot?: Bot,
+  training = false,
+  ai = 0,
+): Promise<Game> {
   await loadSim()
-  reset(training)
+  reset(training, ai)
 
   const app = new Application()
   await app.init({width: VIEW_W, height: VIEW_H, background: 0x14161a, antialias: false})
@@ -419,7 +429,7 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
     training,
 
     restart() {
-      reset(training)
+      reset(training, ai)
       pump.reset()
       lab?.reset()
       sparks.length = 0

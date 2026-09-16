@@ -117,6 +117,23 @@ func testBalance() Balance {
 		KOFreeze:     10,
 		RoundEndHold: 20,
 		IntroFrames:  30,
+
+		// The scripted opponent, at the shipped shape and round distances: the
+		// fixture's fighters start 120 units apart, so they begin outside mid
+		// range and have to walk in, which is the state most of the rule tests
+		// want to start from.
+		AIDecisionFrames:    8,
+		AICloseRange:        FromInt(40),
+		AIMidRange:          FromInt(110),
+		AIAntiAirRange:      FromInt(70),
+		AIThrowPercent:      25,
+		AIProjectilePercent: 50,
+		AIReversalPercent:   30,
+		AITiers: [aiTierCount]AITier{
+			{Reaction: 25, BlockPercent: 40, RandomPercent: 40},
+			{Reaction: 16, BlockPercent: 70, RandomPercent: 20},
+			{Reaction: 10, BlockPercent: 90, RandomPercent: 8},
+		},
 	}
 }
 

@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react'
 import {createBot} from './game/bot'
 import {DUMMY_MODES} from './game/dummy'
+import {AI_TIERS} from './sim/wasm'
 import {startGame, type Game} from './game/game'
 import NetPanel from './net/NetPanel'
 
@@ -104,7 +105,21 @@ function Controls() {
   )
 }
 
+/**
+ * ?ai, or ?ai=easy|normal|hard. Vs-AI is the mode that demos with no network
+ * and no second machine (03 Game Design/AI Opponent.md), so it is reachable
+ * from the URL like everything else a run is set up with. Read in two places —
+ * the match setup and the control hint — so it is one function.
+ */
+function aiFromURL(): number {
+  const params = new URLSearchParams(location.search)
+  if (!params.has('ai')) return 0
+  const tier = AI_TIERS.indexOf((params.get('ai') || 'normal') as (typeof AI_TIERS)[number])
+  return tier > 0 ? tier : AI_TIERS.indexOf('normal')
+}
+
 export default function App() {
+  const ai = aiFromURL()
   const host = useRef<HTMLDivElement>(null)
   const [game, setGame] = useState<Game | null>(null)
 
@@ -122,6 +137,7 @@ export default function App() {
     // no clock, no round end, and no netplay — the mode is sim state, so a
     // match cannot be half in it.
     const training = params.has('training')
+    const ai = aiFromURL()
 
     let started: Game | undefined
     let cancelled = false
@@ -141,7 +157,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
 
-    void startGame(host.current!, bot, training).then((g) => {
+    void startGame(host.current!, bot, training, ai).then((g) => {
       if (cancelled) return g.dispose()
       started = g
       // The measurement harness reads this. It is installed **here** rather
@@ -167,10 +183,23 @@ export default function App() {
 
       <div className="bar">
         <span className="keys">
-          P1 <b>WASD</b> · P2 <b>arrows</b>
+          P1 <b>WASD</b> · P2 <b>{ai ? AI_TIERS[ai] : 'arrows'}</b>
           {game?.training && ' · training: R resets · 0-7 dummy (6 record, 7 play)'}
         </span>
-        <button type="button" onClick={() => game && saveLog(game)} disabled={!game}>
+        {/*
+          Refused in an AI match, and this is not a nicety. The log is the
+          inputs the *caller* fed the sim, and the AI's presses are generated
+          inside it — so a saved AI match replays as one where seat 2 stands
+          still, and it does it silently. An AI match reproduces from its setup
+          (the tier, the seed) rather than from a log, which is what makes it
+          worth having at all.
+        */}
+        <button
+          type="button"
+          onClick={() => game && saveLog(game)}
+          disabled={!game || ai > 0}
+          title={ai > 0 ? 'an AI match reproduces from its setup, not from an input log' : ''}
+        >
           save input log
         </button>
       </div>

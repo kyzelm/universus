@@ -66,5 +66,21 @@
     "dealtPercent": 30,
     "takenPercent": 15,
     "onSpecial": 100
+  },
+
+  "ai": {
+    "_comment": "The scripted opponent. Difficulty is reaction delay and decision randomness only - never extra damage, extra meter or perfect inputs, because an AI with privileges is transparently unfair and teaches the player nothing. Reaction is the honest lever: it models human perception latency directly, and 16 frames is roughly human. Ranges are distances between the two fighters, in whole units, and they are an ordering: close inside anti-air inside mid.",
+    "decisionFrames": 8,
+    "closeRange": 40,
+    "midRange": 110,
+    "antiAirRange": 70,
+    "throwPercent": 25,
+    "projectilePercent": 55,
+    "reversalPercent": 30,
+    "tiers": [
+      {"name": "easy", "reaction": 25, "blockPercent": 40, "randomPercent": 40},
+      {"name": "normal", "reaction": 16, "blockPercent": 70, "randomPercent": 20},
+      {"name": "hard", "reaction": 10, "blockPercent": 90, "randomPercent": 8}
+    ]
   }
 }

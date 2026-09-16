@@ -259,6 +259,95 @@ type jsonBalance struct {
 		TakenPercent int `json:"takenPercent"`
 		OnSpecial    int `json:"onSpecial"`
 	} `json:"super"`
+
+	// The scripted opponent (03 Game Design/AI Opponent.md). Tuning it never
+	// touches sim code, which is the same principle the rest of this file
+	// exists for — and it means a difficulty pass is a data pass.
+	//
+	// The three tiers are authored in order, easy to hard, because that is the
+	// order they are read in and an out-of-order table is a difficulty setting
+	// that does nothing.
+	AI struct {
+		DecisionFrames    int `json:"decisionFrames"`
+		CloseRange        int `json:"closeRange"`
+		MidRange          int `json:"midRange"`
+		AntiAirRange      int `json:"antiAirRange"`
+		ThrowPercent      int `json:"throwPercent"`
+		ProjectilePercent int `json:"projectilePercent"`
+		ReversalPercent   int `json:"reversalPercent"`
+		Tiers             []struct {
+			Name          string `json:"name"`
+			Reaction      int    `json:"reaction"`
+			BlockPercent  int    `json:"blockPercent"`
+			RandomPercent int    `json:"randomPercent"`
+		} `json:"tiers"`
+	} `json:"ai"`
+}
+
+// convertAI fills in the scripted opponent's numbers. Split out because it is
+// its own subsystem and its coupled checks — the ranges are an ordering, the
+// tiers are an ordering — belong next to each other rather than at the end of
+// everything else.
+func (jb *jsonBalance) convertAI(b *sim.Balance) error {
+	// A decision every frame is not a harder opponent, it is a different one:
+	// the design note's whole point is that a human cannot re-decide sixty
+	// times a second. The upper bound is an AI that stands in one plan for a
+	// second at a time, which reads as frozen.
+	if jb.AI.DecisionFrames < 2 || jb.AI.DecisionFrames > 60 {
+		return fmt.Errorf("ai.decisionFrames is %d, want 2..60", jb.AI.DecisionFrames)
+	}
+
+	// The ranges are one ordering, like starter scaling: close inside mid, and
+	// the anti-air window somewhere inside mid too. Authored in whole units,
+	// because a distance between two fighters is not a speed.
+	if jb.AI.CloseRange <= 0 || jb.AI.CloseRange >= jb.AI.MidRange {
+		return fmt.Errorf("ai.closeRange %d must be positive and below ai.midRange %d",
+			jb.AI.CloseRange, jb.AI.MidRange)
+	}
+	if jb.AI.AntiAirRange <= 0 || jb.AI.AntiAirRange > jb.AI.MidRange {
+		return fmt.Errorf("ai.antiAirRange %d must be positive and at most ai.midRange %d",
+			jb.AI.AntiAirRange, jb.AI.MidRange)
+	}
+	b.AICloseRange = sim.FromInt(jb.AI.CloseRange)
+	b.AIMidRange = sim.FromInt(jb.AI.MidRange)
+	b.AIAntiAirRange = sim.FromInt(jb.AI.AntiAirRange)
+
+	if len(jb.AI.Tiers) != len(b.AITiers) {
+		return fmt.Errorf("ai.tiers has %d entries, want %d", len(jb.AI.Tiers), len(b.AITiers))
+	}
+	for i, t := range jb.AI.Tiers {
+		// Zero reaction is an opponent that blocks everything on the frame it
+		// starts, which is the AI nobody enjoys and the one this field exists
+		// to prevent. The ceiling is half a second, past which it is not
+		// playing the game at all.
+		if t.Reaction < 1 || t.Reaction > 30 {
+			return fmt.Errorf("ai.tiers[%d].reaction is %d, want 1..30", i, t.Reaction)
+		}
+		if t.BlockPercent < 0 || t.BlockPercent > 100 {
+			return fmt.Errorf("ai.tiers[%d].blockPercent is %d, want 0..100", i, t.BlockPercent)
+		}
+		if t.RandomPercent < 0 || t.RandomPercent > 100 {
+			return fmt.Errorf("ai.tiers[%d].randomPercent is %d, want 0..100", i, t.RandomPercent)
+		}
+		// The tiers are an ordering and not three independent rows: harder
+		// means noticing sooner, blocking more and improvising less. A table
+		// that is not ordered is a difficulty menu where the labels lie, and
+		// nothing else in the game would report it.
+		if i > 0 {
+			prev := jb.AI.Tiers[i-1]
+			if t.Reaction > prev.Reaction || t.BlockPercent < prev.BlockPercent ||
+				t.RandomPercent > prev.RandomPercent {
+				return fmt.Errorf("ai.tiers[%d] (%s) is not harder than ai.tiers[%d] (%s)",
+					i, t.Name, i-1, prev.Name)
+			}
+		}
+		b.AITiers[i] = sim.AITier{
+			Reaction:      int32(t.Reaction),
+			BlockPercent:  int32(t.BlockPercent),
+			RandomPercent: int32(t.RandomPercent),
+		}
+	}
+	return nil
 }
 
 func (jb *jsonBalance) convert() (sim.Balance, error) {
@@ -305,6 +394,10 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 		{"super.dealtPercent", jb.Super.DealtPercent, &b.SuperDealtPercent},
 		{"super.takenPercent", jb.Super.TakenPercent, &b.SuperTakenPercent},
 		{"super.onSpecial", jb.Super.OnSpecial, &b.SuperOnSpecial},
+		{"ai.decisionFrames", jb.AI.DecisionFrames, &b.AIDecisionFrames},
+		{"ai.throwPercent", jb.AI.ThrowPercent, &b.AIThrowPercent},
+		{"ai.projectilePercent", jb.AI.ProjectilePercent, &b.AIProjectilePercent},
+		{"ai.reversalPercent", jb.AI.ReversalPercent, &b.AIReversalPercent},
 	} {
 		if f.n < 0 {
 			return b, fmt.Errorf("%s must not be negative, got %d", f.name, f.n)
@@ -474,6 +567,10 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 	if b.PunishHitstun < b.CounterHitstun {
 		return b, fmt.Errorf("damage.punishHitstun %d is below damage.counterHitstun %d",
 			b.PunishHitstun, b.CounterHitstun)
+	}
+
+	if err := jb.convertAI(&b); err != nil {
+		return b, err
 	}
 
 	return b, nil

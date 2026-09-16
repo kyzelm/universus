@@ -249,3 +249,32 @@ test('actionability crosses the boundary', () => {
   }
   expect(free).toBeLessThan(60)
 })
+
+/**
+ * Vs-AI is the mode that demos with no network and no second machine, so the
+ * one thing worth checking across the boundary is that asking for it produces
+ * an opponent: the AI's presses are generated inside the sim, and nothing out
+ * here could tell the difference between a quiet opponent and a missing one.
+ */
+test('an AI seat plays without anybody pressing anything', () => {
+  reset(false, 3) // hard
+
+  let attacked = false
+  let moved = false
+  const startX = readSnapshot().players[1].x
+  for (let f = 0; f < 600 && !(attacked && moved); f++) {
+    advance(0, 0)
+    const p2 = readSnapshot().players[1]
+    if (p2.moveIndex >= 0) attacked = true
+    if (p2.x !== startX) moved = true
+  }
+
+  expect(moved).toBe(true)
+  expect(attacked).toBe(true)
+
+  // And a match with no AI stays still, which is what says the two are the
+  // same sim in different modes rather than two behaviours of one.
+  reset()
+  for (let f = 0; f < 600; f++) advance(0, 0)
+  expect(readSnapshot().players[1].moveIndex).toBe(-1)
+})

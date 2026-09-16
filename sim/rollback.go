@@ -46,6 +46,12 @@ func NewSession() Session { return Session{state: New()} }
 // brought one of these to a match would disagree on the first checksum.
 func NewTrainingSession() Session { return Session{state: NewTraining()} }
 
+// NewAISession is NewSession with seat 2 played by the scripted opponent
+// (03 Game Design/AI Opponent.md). The one mode that demos with no network and
+// no second machine, which is also why it is the fallback if the venue blocks
+// WebRTC.
+func NewAISession(tier int32) Session { return Session{state: NewAIMatch(tier)} }
+
 func (s *Session) State() *GameState { return &s.state }
 func (s *Session) Frame() uint32     { return s.state.Frame }
 func (s *Session) Checksum() uint32  { return s.state.Checksum() }
