@@ -151,3 +151,33 @@ button.on {
   gap: 6px;
   justify-items: center;
 }
+
+/* The M-A page (?sweep). Numbers are read in columns and compared down them,
+   so they are monospace and right-aligned; anything else and a 0.5 hides
+   next to a 0.05. */
+.sweep table {
+  border-collapse: collapse;
+  font-family: ui-monospace, monospace;
+}
+
+.sweep th,
+.sweep td {
+  padding: 2px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+
+.sweep th {
+  color: var(--dim);
+  font-weight: normal;
+}
+
+.sweep .note {
+  color: var(--dim);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.sweep .error {
+  color: var(--accent);
+}

@@ -36,7 +36,7 @@ import {createEvents} from './events'
 import {createDummy, type DummyMode} from './dummy'
 import {createInput} from './input'
 import {advantageText, createLab} from './lab'
-import {createSamples} from './stats'
+import {createSamples, type Samples} from './stats'
 
 const VIEW_W = 800
 const VIEW_H = 450
@@ -500,6 +500,7 @@ export async function startGame(
       dropped: net?.stats.dropped ?? 0,
       simP50: stepCost.percentile(50),
       simP99: stepCost.percentile(99),
+      byDepth: costByDepth(stepCost, net),
       displayP50: frameCost.percentile(50),
       displayP99: frameCost.percentile(99),
       longFrames,
@@ -753,6 +754,38 @@ function localHud(snap: Snapshot): string {
     who(0),
     who(1),
   ].join('\n')
+}
+
+/**
+ * M-A as the methodology asks for it: cost **by rollback depth**, one row per
+ * depth (01 Thesis/Measurement Methodology.md).
+ *
+ * Row 0 is the frame's own advance, which every frame pays. Row d is what the
+ * replay at depth d cost *on top of it*, so a frame a correction landed on cost
+ * row 0 plus row d — and a frame with an 8-frame rollback ran the sim nine
+ * times and still had to fit 16.6 ms.
+ *
+ * They are kept apart rather than summed here because the two are timed in
+ * different places: the advance happens inside the fixed step, and the replay
+ * happens whenever the packet that forced it arrives, which is its own task
+ * between two displayed frames. `displayP99` is where their sum shows up.
+ */
+function costByDepth(step: Samples, net: Netplay | null) {
+  // percentile(100) is the maximum: the worst frame is what breaks a fighting
+  // game, so it is reported beside the tail rather than in place of it.
+  const row = (depth: number, s: Samples) => ({
+    depth,
+    count: s.count,
+    p50: s.percentile(50),
+    p99: s.percentile(99),
+    max: s.percentile(100),
+  })
+
+  const rows = [row(0, step)]
+  if (net) {
+    for (let d = 1; d <= MAX_ROLLBACK; d++) rows.push(row(d, net.stats.replayByDepth[d]))
+  }
+  return rows
 }
 
 /**

@@ -90,6 +90,11 @@ export function depthP99(depths: readonly number[]): number {
   return 0
 }
 
+/** One empty sampler per depth, so a reset cell starts with no history. */
+function freshDepths(): Samples[] {
+  return Array.from({length: MAX_ROLLBACK + 1}, () => createSamples())
+}
+
 /** The sim, from the driver's side. Small on purpose: it is stubbed in tests. */
 export interface SimBridge {
   advance(p1: number, p2: number): void
@@ -131,7 +136,17 @@ export interface NetplayStats {
   desyncs: number
   desyncFrame: number
   rtt: Samples
-  replayMs: Samples
+  /**
+   * What a rollback's replay cost, bucketed by the depth that produced it —
+   * index 1..MAX_ROLLBACK, and index 0 is never pushed to.
+   *
+   * M-A is frame time *by rollback depth* (01 Thesis/Measurement Methodology.md)
+   * and one pooled distribution cannot answer it: a run at 150 ms mixes depth-1
+   * replays with depth-6 ones, so the p99 of the blend is a cost no frame ever
+   * actually paid. Bucketing here is what lets a real session — including a
+   * remote one — produce the M-A table rather than only a single blended figure.
+   */
+  replayByDepth: Samples[]
 }
 
 export interface Netplay {
@@ -270,7 +285,7 @@ export function createNetplay(
     desyncs: 0,
     desyncFrame: -1,
     rtt: createSamples(),
-    replayMs: createSamples(),
+    replayByDepth: freshDepths(),
   }
 
   /**
@@ -400,6 +415,9 @@ export function createNetplay(
   /** Rewind to `to` and re-simulate everything since with what we now know. */
   function rollback(to: number): void {
     const depth = frame - to
+    // Deeper than the window is still a rollback of window depth as far as the
+    // cost goes: it replayed that many frames and no more.
+    const bucket = Math.min(depth, MAX_ROLLBACK)
     if (!sim.rewind(to)) {
       // Older than the rollback window. Nothing can fix this frame; the two
       // sims have already diverged and M2 has to resynchronise.
@@ -410,16 +428,16 @@ export function createNetplay(
     const t0 = performance.now()
     const end = frame
     for (let f = to; f < end; f++) simulate(f, remoteAt(f))
-    stats.replayMs.push(performance.now() - t0)
+    stats.replayByDepth[bucket].push(performance.now() - t0)
 
     stats.rollbacks++
-    stats.depths[Math.min(depth, MAX_ROLLBACK)]++
+    stats.depths[bucket]++
 
     // Recorded on the frame the rollback *landed* on, which is where the strip
     // draws the tick: that is the frame the correction was about, and its
     // height is how much had to be thrown away.
     mark(to, FRAME_CORRECTED)
-    slotDepth[to % TIMELINE] = Math.min(depth, MAX_ROLLBACK)
+    slotDepth[to % TIMELINE] = bucket
   }
 
   return {
@@ -572,11 +590,11 @@ export function createNetplay(
         skipped: 0,
         dropped: 0,
         malformed: 0,
+        replayByDepth: freshDepths(),
         verified: 0,
         desyncs: 0,
         desyncFrame: -1,
         rtt: createSamples(),
-        replayMs: createSamples(),
       })
       // dataMismatch is deliberately not cleared: it is a fact about the peer,
       // not a measurement, and it does not stop being true.
