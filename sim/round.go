@@ -197,12 +197,23 @@ func (s *GameState) matchWinner() (int32, bool) {
 // damage the cap's tiebreak reads. Everything else comes from a fresh match,
 // so the reset cannot drift from the way a match starts — there is one
 // definition of a fighter at the start of a round and this borrows it.
+//
+// Borrowing it is also the trap. A fresh player carries the *defaults* for
+// everything, including the fields that are match setup rather than round
+// state, so anything in that group has to be carried back over explicitly:
+// the character, which comes in as an argument, and the AI tier, which was
+// silently dropped here and left the opponent standing still from round 2.
 func (s *GameState) startRound() {
 	fresh := NewMatch(s.Players[0].Char, s.Players[1].Char)
 	for i := range s.Players {
 		super := s.Players[i].Super
+		// The AI tier is match setup, like the character it is playing — not
+		// round state. Dropping it here left the opponent standing still from
+		// round 2 onward, which is the whole match after the first one.
+		ai := s.Players[i].AI
 		s.Players[i] = fresh.Players[i]
 		s.Players[i].Super = super
+		s.Players[i].AI = ai
 	}
 
 	s.Round++

@@ -33,11 +33,16 @@ const CONDITIONS = {delayMs: 50, jitterMs: 15, lossPercent: 5}
 const STEP_MS = 1000 / 60
 
 /**
- * Long enough to cover rounds, knockdowns and corner exchanges. A minute of
- * play costs about half a second here, so the CI run is a soak test that
- * happens to be fast.
+ * **Long enough to cross a round boundary**, which is 99 seconds of play plus
+ * its transitions. That is not a round number picked for coverage: the first
+ * bug found in the scripted opponent after it shipped was the round reset
+ * dropping its difficulty tier, and every test that existed played inside round
+ * one. A transition is also where input stops and restarts on both ends at
+ * once, which is the netcode's turn to be wrong.
+ *
+ * About a second and a half of real time per match.
  */
-const FRAMES = Number(process.env.BOT_FRAMES) || 3600
+const FRAMES = Number(process.env.BOT_FRAMES) || 7200
 
 /**
  * How many seed pairs to play. One in CI; raise it to soak, which is the point
@@ -105,6 +110,10 @@ async function client(seed: number, corruptAt = -1): Promise<End> {
  * `Dealt` is cumulative for exactly that reason — it exists for the round-cap
  * tiebreak — and it is what says the bots fought rather than circled.
  */
+function round(end: End): number {
+  return Number(/^Round = (\d+)$/m.exec(end.dump())?.[1] ?? 0)
+}
+
 function dealt(end: End): number[] {
   return [...end.dump().matchAll(/Dealt\[\d] = (-?\d+)/g)].map((m) => Number(m[1]))
 }
@@ -205,6 +214,9 @@ async function oneMatch(pair: number) {
   expect(A.frame()).toBeGreaterThan(MAX_ROLLBACK)
   expect(netA.log.some((v) => v !== 0)).toBe(true)
   expect(dealt(A).some((d) => d > 0)).toBe(true)
+  // The run covered a round transition rather than merely being long enough to
+  // have covered one — the comment on FRAMES is a claim, and this is the check.
+  expect(round(A)).toBeGreaterThan(1)
 }
 
 /**

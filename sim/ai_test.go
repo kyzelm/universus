@@ -318,3 +318,40 @@ func pressedSomething(in []uint16) bool {
 	}
 	return false
 }
+
+// **A round reset is not a new match.** startRound copies a fresh player over
+// each seat to clear health, position and resources, and it used to take the
+// difficulty tier with it — so the opponent stood still from round 2 onward,
+// which is most of a best-of-three. The tier is match setup, like the character.
+//
+// The tests above all played inside round 1 and every one of them passed while
+// this was broken, which is why this one exists at the round boundary.
+func TestTheAISurvivesARoundReset(t *testing.T) {
+	s := NewAIMatch(AIHard)
+
+	// Time the first round out rather than fighting it out: the round flow is
+	// the same either way and this takes a hundred frames instead of thousands.
+	s.Timer = 1
+	for f := 0; f < 500 && s.Round < 2; f++ {
+		s.Advance([2]uint16{0, 0})
+	}
+	if s.Round < 2 {
+		t.Fatalf("still on round %d, phase %d", s.Round, s.Phase)
+	}
+	if got := s.Players[1].AI; got != AIHard {
+		t.Fatalf("the tier is %d after the round reset, want %d", got, AIHard)
+	}
+
+	// And it is pressing buttons, not merely configured to. Its presses are
+	// recorded in the history ring like anybody's, which is where they show.
+	pressed := false
+	for f := 0; f < 60 && !pressed; f++ {
+		s.Advance([2]uint16{0, 0})
+		if s.Players[1].Inputs[s.Frame%InputHistory] != 0 {
+			pressed = true
+		}
+	}
+	if !pressed {
+		t.Error("the opponent pressed nothing for 60 frames of round 2")
+	}
+}
