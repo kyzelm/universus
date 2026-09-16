@@ -34,6 +34,7 @@ import type {Bot} from './bot'
 import {createClock, STEP_MS} from './clock'
 import {createEvents} from './events'
 import {createInput} from './input'
+import {advantageText, createLab} from './lab'
 import {createSamples} from './stats'
 
 const VIEW_W = 800
@@ -235,6 +236,27 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
   hud.position.set(8, 66)
   app.stage.addChild(hud)
 
+  // The lab overlay. Training only, because both readouts are there to be
+  // studied between attempts and a match is not the place to read a column of
+  // numbers — and because the mode is the one that lets you repeat the same
+  // situation until the number means something.
+  const lab = training ? createLab() : null
+  const labText = (x: number, y: number, anchor: number, size: number) => {
+    const t = new Text({
+      text: '',
+      style: {fill: 0x8a94a6, fontFamily: 'monospace', fontSize: size},
+    })
+    t.position.set(x, y)
+    t.anchor.set(anchor, 0)
+    app.stage.addChild(t)
+    return t
+  }
+  // One column per seat, at the edges the fighters spend least time against.
+  const inputCols = lab ? [labText(8, 190, 0, 11), labText(VIEW_W - 8, 190, 1, 11)] : null
+  // Named for the frame advantage on screen, not the netplay one: net.advantage
+  // is how far ahead of the other machine this one is running.
+  const advText = lab ? labText(VIEW_W / 2, 38, 0.5, 16) : null
+
   const input = createInput()
   const clock = createClock()
   let stepCost = createSamples()
@@ -292,6 +314,11 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
         recorded.push(p1, p2)
       }
       stepCost.push(performance.now() - t0)
+
+      // Per simulated frame, not per displayed one: a display frame that runs
+      // two sim steps would otherwise lose a row of the input display and
+      // could miss the frame a recovery ended on.
+      lab?.step(readSnapshot(), [p1, p2])
     }
 
     const snap = readSnapshot()
@@ -348,6 +375,15 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
       setText(stripKey, '')
     }
 
+    // Every frame, unlike the HUD below: an input display that refreshed twice
+    // a second would not show the input it exists to show.
+    if (lab && inputCols && advText) {
+      for (let seat = 0; seat < inputCols.length; seat++) {
+        setText(inputCols[seat], lab.history(seat).join('\n'))
+      }
+      setText(advText, advantageText(lab.advantage()))
+    }
+
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.
     if (hudTicks++ % HUD_EVERY === 0) {
@@ -362,6 +398,7 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
     restart() {
       reset(training)
       pump.reset()
+      lab?.reset()
       sparks.length = 0
       recorded.length = 0
     },

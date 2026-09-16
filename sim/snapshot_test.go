@@ -77,6 +77,30 @@ func TestSnapshotLayout(t *testing.T) {
 	}
 }
 
+// The lab's frame advantage readout is measured off this field, and it is only
+// worth having if it is the sim's own answer: a view that decided for itself
+// which states accept an action would confirm its own idea of the frame data.
+func TestSnapshotCarriesActionability(t *testing.T) {
+	s := New()
+	b := make([]byte, SnapshotSize)
+
+	s.WriteSnapshot(b)
+	if got := i32(b[headerSize+48:]); got != 1 {
+		t.Fatalf("idle player is actionable = %d, want 1", got)
+	}
+
+	// Mid-jab: startup is a commitment, and the readout counts the frames of
+	// it that the defender does not owe.
+	s.Advance([2]uint16{InLP, 0})
+	s.WriteSnapshot(b)
+	if got := i32(b[headerSize+48:]); got != 0 {
+		t.Errorf("attacking player is actionable = %d, want 0", got)
+	}
+	if got := i32(b[headerSize+PlayerSnapshotSize+48:]); got != 1 {
+		t.Errorf("the other player is actionable = %d, want 1", got)
+	}
+}
+
 // The overlay must show the boxes the sim actually collides. Reading them from
 // anywhere else would let the picture agree with itself and disagree with the
 // game.
@@ -98,11 +122,11 @@ func TestSnapshotCarriesTheCollidingBoxes(t *testing.T) {
 	s.WriteSnapshot(b)
 
 	p0 := b[headerSize:]
-	if got := u32(p0[64:]); got == 0 {
+	if got := u32(p0[68:]); got == 0 {
 		t.Error("no hurtboxes in the snapshot")
 	}
 
-	hitOff := 68 + MaxBoxes*boxSize
+	hitOff := 72 + MaxBoxes*boxSize
 	if got := u32(p0[hitOff:]); int32(got) != nHit {
 		t.Fatalf("hit count = %d, want %d", got, nHit)
 	}
@@ -113,7 +137,7 @@ func TestSnapshotCarriesTheCollidingBoxes(t *testing.T) {
 	}
 
 	// The pushbox is always present.
-	push := p0[48:]
+	push := p0[52:]
 	if i32(push[8:]) <= 0 || i32(push[12:]) <= 0 {
 		t.Error("pushbox has no size")
 	}
@@ -132,7 +156,7 @@ func TestSnapshotLeavesNoStaleBoxes(t *testing.T) {
 	}
 	s.WriteSnapshot(b)
 
-	hitOff := headerSize + 68 + MaxBoxes*boxSize
+	hitOff := headerSize + 72 + MaxBoxes*boxSize
 	if u32(b[hitOff:]) == 0 {
 		t.Fatal("setup: expected a hitbox")
 	}

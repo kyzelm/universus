@@ -29,8 +29,8 @@ const ONE = 65536
 const MAX_BOXES = 4
 const MAX_PROJECTILES = 4
 const BOX = 4 * 4
-const HIT_OFF = 68 + MAX_BOXES * BOX
-const PLAYER_SIZE = 12 * 4 + BOX + 2 * (4 + MAX_BOXES * BOX)
+const HIT_OFF = 72 + MAX_BOXES * BOX
+const PLAYER_SIZE = 13 * 4 + BOX + 2 * (4 + MAX_BOXES * BOX)
 const HEADER = 9 * 4
 const PROJ_OFF = HEADER + 2 * PLAYER_SIZE
 
@@ -121,6 +121,12 @@ export interface PlayerSnapshot {
   combo: number
   /** Class of the most recent hit taken — index into COUNTER_NAMES. */
   counter: number
+  /**
+   * 1 while this player may act. The sim's own predicate, not a state list
+   * kept over here: the lab's frame advantage readout is measured off it, and
+   * it exists to check the frame data against what the game does.
+   */
+  actionable: number
   pushbox: Box
   hurtboxes: Box[]
   hitboxes: Box[]
@@ -293,8 +299,9 @@ export function readSnapshot(): Snapshot {
         burnout: v.getInt32(o + 36, true),
         combo: v.getInt32(o + 40, true),
         counter: v.getInt32(o + 44, true),
-        pushbox: readBox(v, o + 48),
-        hurtboxes: readBoxList(v, o + 64),
+        actionable: v.getInt32(o + 48, true),
+        pushbox: readBox(v, o + 52),
+        hurtboxes: readBoxList(v, o + 68),
         hitboxes: readBoxList(v, o + HIT_OFF),
       }
     }),

@@ -29,10 +29,11 @@ package sim
 //	12  int32   move index       32  int32  super
 //	16  int32   state            36  int32  burnout
 //	40  int32   combo hits       44  int32  counter class
-//	48  pushbox (4 x int32)
-//	64  uint32  hurt count       68  hurtboxes (MaxBoxes x 4 x int32)
-//	68+64 = 132  uint32 hit count
-//	136 hitboxes (MaxBoxes x 4 x int32)
+//	48  int32   actionable
+//	52  pushbox (4 x int32)
+//	68  uint32  hurt count       72  hurtboxes (MaxBoxes x 4 x int32)
+//	72+64 = 136  uint32 hit count
+//	140 hitboxes (MaxBoxes x 4 x int32)
 //
 // Boxes ride along for the debug overlay. It is the tool that debugs every
 // system built on top of them, so it is built early and it reads the same boxes
@@ -43,7 +44,7 @@ const (
 	// headerSize covers the match-level fields above: the frame, the camera,
 	// hitstop and the round flow.
 	headerSize         = 9 * 4
-	PlayerSnapshotSize = 12*4 + boxSize + 2*(4+MaxBoxes*boxSize)
+	PlayerSnapshotSize = 13*4 + boxSize + 2*(4+MaxBoxes*boxSize)
 	projOffset         = headerSize + 2*PlayerSnapshotSize
 	SnapshotSize       = projOffset + 4 + MaxProjectiles*boxSize
 )
@@ -58,6 +59,13 @@ func putU32(b []byte, v uint32) {
 }
 
 func putI32(b []byte, v int32) { putU32(b, uint32(v)) }
+
+func b2i(v bool) int32 {
+	if v {
+		return 1
+	}
+	return 0
+}
 
 func putBox(b []byte, x Box) {
 	putI32(b, int32(x.X))
@@ -116,15 +124,22 @@ func (s *GameState) WriteSnapshot(b []byte) {
 		// either of them crosses.
 		putI32(o[40:], p.Combo)
 		putI32(o[44:], p.Counter)
-		putBox(o[48:], s.Pushbox(i))
+		// Whether this player may act this frame, which is the sim's own
+		// predicate and not a state list the view keeps beside it. The frame
+		// advantage readout in the lab is measured off this: a recovery the
+		// view worked out for itself would confirm the view's idea of the
+		// frame data rather than the sim's, and the readout exists precisely
+		// to check the data against what the game does.
+		putI32(o[48:], b2i(Actionable(p.State)))
+		putBox(o[52:], s.Pushbox(i))
 
 		n := s.Hurtboxes(i, &boxes)
-		putU32(o[64:], uint32(n))
+		putU32(o[68:], uint32(n))
 		for k := int32(0); k < n; k++ {
-			putBox(o[68+int(k)*boxSize:], boxes[k])
+			putBox(o[72+int(k)*boxSize:], boxes[k])
 		}
 
-		hitOff := 68 + MaxBoxes*boxSize
+		hitOff := 72 + MaxBoxes*boxSize
 		n = s.Hitboxes(i, &boxes)
 		putU32(o[hitOff:], uint32(n))
 		for k := int32(0); k < n; k++ {

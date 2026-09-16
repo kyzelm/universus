@@ -227,3 +227,25 @@ test('a fireball crosses the boundary and travels', () => {
   advance(0, 0)
   expect(readSnapshot().projectiles[0].x).toBeGreaterThan(ball.x)
 })
+
+/**
+ * The lab's frame advantage readout is measured off this field, so it has to be
+ * the sim's answer and not a state list kept on this side — the whole point of
+ * the readout is to check the frame data against what the game does.
+ */
+test('actionability crosses the boundary', () => {
+  reset()
+  expect(readSnapshot().players.map((p) => p.actionable)).toEqual([1, 1])
+
+  advance(LP, 0)
+  expect(readSnapshot().players.map((p) => p.actionable)).toEqual([0, 1])
+
+  // The jab runs out and hands back control; nothing else is pressed, so the
+  // frame it does is the frame the readout would count.
+  let free = 0
+  for (free = 1; free < 60; free++) {
+    advance(0, 0)
+    if (readSnapshot().players[0].actionable === 1) break
+  }
+  expect(free).toBeLessThan(60)
+})
