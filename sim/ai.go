@@ -10,12 +10,16 @@ package sim
 // network harness, and what makes cheating impossible by construction, so
 // difficulty has to come from behaviour rather than from privilege.
 //
-// It runs *inside* Advance, above the input history, and its state lives in
-// GameState with the seeded PRNG it draws from — so every decision rolls back
-// and replays like everything else, even though offline modes never roll back.
-// The alternative, a device outside the sim like the training dummy, cannot be
-// the opponent in the native CI harness: that harness has no view layer to run
-// a device in.
+// **One rule list, two ways in.** A seat the sim plays (aiInput, called from
+// Advance) keeps its plan in GameState and draws from the match's own PRNG, so
+// every decision rolls back and replays like everything else. A seat played
+// from *outside* (AIDevice) keeps both privately and writes nothing to the
+// state — which is what the bot-vs-bot network harness needs, because two ends
+// that each generated the opponent's inputs locally would never mispredict, and
+// a harness that never mispredicts tests none of the netcode it exists for.
+//
+// The rules themselves are written once, against an interface for the rolls, so
+// the opponent the harness fuzzes is the opponent somebody plays.
 //
 // Honest about what it is: a priority-ordered rule list, first match wins. Not
 // a behaviour tree, not a search, and nothing that learns — that boundary is
@@ -58,6 +62,74 @@ const (
 	aiPlanCount
 )
 
+// aiRandom is where a decision's rolls come from. Two implementations and no
+// more: the match's own generator for a seat the sim is playing, and a device's
+// private one for a seat it is playing from outside (see AIDevice).
+//
+// The rule list is written against this rather than against GameState so that
+// both entry points run *the same rules*. A second copy of the list for the
+// harness would be a second opponent, and the one the tests fuzzed would not be
+// the one anybody plays.
+type aiRandom interface {
+	RandN(n uint32) uint32
+}
+
+// AIDevice plays a seat from outside the simulation: the same rule list, its
+// own generator and its own plan, and **nothing written to GameState**.
+//
+// It exists for the bot-vs-bot network harness (D49). A seat the sim plays is
+// no use there: both ends would generate the identical inputs locally, every
+// prediction would be right, and a harness that never mispredicts tests none of
+// the netcode it was built to test. A device presses buttons on one end and
+// they cross the wire like a player's.
+//
+// Its state is deliberately outside the match: it is not checksummed, so two
+// ends running different devices — or one running none — is not a desync, and
+// a rollback replays the inputs it already sent rather than asking it again.
+type AIDevice struct {
+	tier int32
+	plan int32
+	rng  uint32
+}
+
+// NewAIDevice returns a device at the given tier. The seed is what makes two of
+// them play differently; the same seed twice is the same opponent twice, which
+// is what makes a harness run reproducible.
+func NewAIDevice(tier int32, seed uint32) *AIDevice {
+	if seed == 0 {
+		seed = 1
+	}
+	return &AIDevice{tier: tier, rng: seed}
+}
+
+// RandN is the device's own generator — the same xorshift the sim uses, kept
+// separate so a device draw never perturbs the match's sequence.
+func (d *AIDevice) RandN(n uint32) uint32 {
+	x := d.rng
+	x ^= x << 13
+	x ^= x >> 17
+	x ^= x << 5
+	d.rng = x
+	if n == 0 {
+		return 0
+	}
+	return uint32((uint64(x) * uint64(n)) >> 32)
+}
+
+// Press is one frame of input for a seat, decided from the state as it stands.
+// The state is read and never written.
+func (d *AIDevice) Press(s *GameState, seat int) uint16 {
+	every := balance.AIDecisionFrames
+	if every <= 0 || seat < 0 || seat > 1 {
+		return 0
+	}
+	elapsed := int32(s.Frame % uint32(every))
+	if elapsed == 0 {
+		d.plan = aiDecide(s, seat, d.tier, d)
+	}
+	return aiPress(d.plan, elapsed, s.Players[seat].Facing)
+}
+
 // aiInput is the bitfield this seat presses this frame.
 //
 // Called from Advance before the input history is recorded, so the AI's presses
@@ -78,7 +150,7 @@ func (s *GameState) aiInput(i int) uint16 {
 	}
 	elapsed := int32(s.Frame % uint32(every))
 	if elapsed == 0 {
-		p.AIPlan = s.aiDecide(i)
+		p.AIPlan = aiDecide(s, i, p.AI, s)
 	}
 	return aiPress(p.AIPlan, elapsed, p.Facing)
 }
@@ -152,9 +224,9 @@ func press(age int32, bits uint16) uint16 {
 // aiDecide is the rule list, in priority order, first match wins. The order is
 // the design note's own and is the whole of the AI's character: anti-air before
 // punish, punish before block, and neutral movement last.
-func (s *GameState) aiDecide(i int) int32 {
+func aiDecide(s *GameState, i int, tier int32, r aiRandom) int32 {
 	p, o := &s.Players[i], &s.Players[1-i]
-	t := &balance.AITiers[aiTier(p.AI)]
+	t := &balance.AITiers[aiTier(tier)]
 	dist := s.aiDistance(i)
 
 	// **Deliberate imperfection, first and on purpose.** An opponent that only
@@ -162,8 +234,8 @@ func (s *GameState) aiDecide(i int) int32 {
 	// roll that throws the rule list away entirely is the one that makes the AI
 	// whiff, press in a bad spot and fail to punish. It is also the second of
 	// the two difficulty levers and the only one that is not reaction time.
-	if s.aiRoll(t.RandomPercent) {
-		return int32(s.RandN(uint32(aiPlanCount)))
+	if aiRoll(r, t.RandomPercent) {
+		return int32(r.RandN(uint32(aiPlanCount)))
 	}
 
 	switch {
@@ -186,21 +258,21 @@ func (s *GameState) aiDecide(i int) int32 {
 	// Easy beatable and Hard oppressive without giving either of them anything
 	// the player does not have.
 	case aiIncoming(o) && dist <= balance.AIMidRange &&
-		aiSeen(o, t.Reaction) && s.aiRoll(t.BlockPercent):
+		aiSeen(o, t.Reaction) && aiRoll(r, t.BlockPercent):
 		return aiBlock
 
 	// Reversal out of pressure. Pressed *during* blockstun: the input buffer
 	// holds it and spends it on the first actionable frame, which is exactly
 	// how a player reverses (D83), and it is why nothing here needs to know how
 	// long the stun is.
-	case p.State == StateBlockstun && s.aiRoll(balance.AIReversalPercent):
+	case p.State == StateBlockstun && aiRoll(r, balance.AIReversalPercent):
 		return aiDP
 
 	// Fireball at range, and only with the screen clear of its own. One at a
 	// time is how the move is used, and it spaces the motions far enough apart
 	// that two of them cannot be read as a super.
 	case dist > balance.AIMidRange && !s.aiHasProjectile(i) &&
-		s.aiRoll(balance.AIProjectilePercent):
+		aiRoll(r, balance.AIProjectilePercent):
 		return aiFireball
 
 	// Mid range: close the gap. This is what stops two of these standing at
@@ -210,13 +282,13 @@ func (s *GameState) aiDecide(i int) int32 {
 
 	// Close, and they are holding a block. A throw is what beats blocking, and
 	// the AI knowing that is the difference between pressure and a jab loop.
-	case o.State == StateBlockstun && s.aiRoll(balance.AIThrowPercent):
+	case o.State == StateBlockstun && aiRoll(r, balance.AIThrowPercent):
 		return aiThrow
 
 	// Close and nothing else applies: press something small, back off, or
 	// stand. The mix is what makes the neutral look like a player.
 	default:
-		switch s.RandN(4) {
+		switch r.RandN(4) {
 		case 0:
 			return aiJab
 		case 1:
@@ -237,13 +309,14 @@ func aiTier(ai int32) int32 {
 	return ai - 1
 }
 
-// aiRoll is a percentage chance, drawn from the state's own generator so every
-// decision rolls back and replays exactly.
-func (s *GameState) aiRoll(percent int32) bool {
+// aiRoll is a percentage chance. The generator is the caller's: the match's own
+// for a seat the sim plays, so every decision rolls back and replays exactly,
+// and the device's own for a seat played from outside.
+func aiRoll(r aiRandom, percent int32) bool {
 	if percent <= 0 {
 		return false
 	}
-	return int32(s.RandN(100)) < percent
+	return int32(r.RandN(100)) < percent
 }
 
 // aiSeen models perception latency, which is the honest difficulty lever: the

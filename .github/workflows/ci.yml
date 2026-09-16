@@ -68,8 +68,15 @@ jobs:
       - run: pnpm wasm
         working-directory: client
 
+      # Includes the bot-vs-bot harness (D49): two headless clients, two real
+      # WASM sims, scripted inputs and 100 ms / 15 ms jitter / 5% loss. With one
+      # machine and no partner on call it is the primary desync detector, so CI
+      # plays three seeded matches rather than one — each is about a second, and
+      # BOT_SEEDS raises it for an unattended soak.
       - run: pnpm exec vitest run
         working-directory: client
+        env:
+          BOT_SEEDS: 3
 
       - run: pnpm build
         working-directory: client

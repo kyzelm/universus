@@ -130,7 +130,7 @@ func TestAIAntiAirsAJumpIn(t *testing.T) {
 	s.Players[0].Y = FromInt(30)
 	s.Players[0].StateFrame = 20 // long enough for a hard AI to have noticed
 
-	if got := s.aiDecide(1); got != aiDP {
+	if got := aiDecide(&s, 1, s.Players[1].AI, &s); got != aiDP {
 		t.Errorf("decided plan %d against a jump-in, want the dragon punch (%d)", got, aiDP)
 	}
 }
@@ -148,7 +148,7 @@ func TestAIDoesNotReactBeforeItCouldHaveSeen(t *testing.T) {
 		s.Players[0].State = StateAttack
 		s.Players[0].MoveIndex = 3 // the fixture's heavy: slow enough to react to
 		s.Players[0].StateFrame = age
-		return s.aiDecide(1)
+		return aiDecide(&s, 1, s.Players[1].AI, &s)
 	}
 
 	reaction := testBalance().AITiers[aiTier(AIHard)].Reaction
@@ -182,7 +182,7 @@ func TestTheImperfectionRollIgnoresTheRules(t *testing.T) {
 
 	other := 0
 	for i := 0; i < 40; i++ {
-		if s.aiDecide(1) != aiDP {
+		if aiDecide(&s, 1, s.Players[1].AI, &s) != aiDP {
 			other++
 		}
 	}
@@ -208,7 +208,7 @@ func TestHarderTiersBlockMoreOften(t *testing.T) {
 
 		n := 0
 		for i := 0; i < 400; i++ {
-			if s.aiDecide(1) == aiBlock {
+			if aiDecide(&s, 1, s.Players[1].AI, &s) == aiBlock {
 				n++
 			}
 		}
@@ -261,4 +261,60 @@ func TestAButtonIsPressedOnce(t *testing.T) {
 			t.Errorf("the punish is still holding %#b at frame %d", got, age)
 		}
 	}
+}
+
+// The device is the same opponent played from outside the match, and the two
+// properties that make it usable as a test opponent are that it repeats and
+// that it leaves no trace: two ends running different devices must not be a
+// desync, which means a device may not touch the state it reads.
+func TestTheAIDeviceDecidesWithoutTouchingTheMatch(t *testing.T) {
+	s := New()
+	for f := 0; f < 40; f++ {
+		s.Advance([2]uint16{0, 0})
+	}
+
+	before := s.Checksum()
+	d := NewAIDevice(AIHard, 7)
+	var pressed []uint16
+	for f := 0; f < 40; f++ {
+		pressed = append(pressed, d.Press(&s, 1))
+	}
+	if got := s.Checksum(); got != before {
+		t.Errorf("the state changed under a device: %#x, was %#x", got, before)
+	}
+	if !pressedSomething(pressed) {
+		t.Error("the device pressed nothing at all in 40 frames")
+	}
+
+	// Same tier, same seed, same state: the same opponent. A harness run that
+	// did not repeat could not bisect the desync it found.
+	again := NewAIDevice(AIHard, 7)
+	for f, want := range pressed {
+		if got := again.Press(&s, 1); got != want {
+			t.Fatalf("frame %d: pressed %#b, want %#b", f, got, want)
+		}
+	}
+
+	// A different seed is a different opponent, or two bots in a harness play
+	// the same match twice and half the fuzz is wasted.
+	other := NewAIDevice(AIHard, 99)
+	same := true
+	for _, want := range pressed {
+		if other.Press(&s, 1) != want {
+			same = false
+			break
+		}
+	}
+	if same {
+		t.Error("two seeds pressed the same buttons")
+	}
+}
+
+func pressedSomething(in []uint16) bool {
+	for _, v := range in {
+		if v != 0 {
+			return true
+		}
+	}
+	return false
 }

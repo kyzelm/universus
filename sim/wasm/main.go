@@ -16,6 +16,11 @@ import (
 var (
 	session = sim.NewSession()
 	snap    [sim.SnapshotSize]byte
+
+	// The scripted opponent played as a device, per seat, for the bot-vs-bot
+	// harness. Outside the session on purpose: a device is an input source, not
+	// part of the match, and nothing it remembers is checksummed.
+	devices [2]*sim.AIDevice
 )
 
 func main() {
@@ -73,6 +78,26 @@ func main() {
 		return nil
 	}))
 
+	// aiPress(seat, tier, seed) is the scripted opponent played as a *device*:
+	// it reads the state and returns a bitfield, and the caller feeds that in
+	// wherever a keyboard's would go. Nothing is written to the match, so the
+	// two ends of a harness run may press different things without that being
+	// a desync (03 Game Design/AI Opponent.md).
+	//
+	// The device is created on the first call for a seat and lives until the
+	// next reset, so its generator runs one uninterrupted sequence per match —
+	// which is what makes a harness run reproducible.
+	api.Set("aiPress", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		seat := args[0].Int()
+		if seat < 0 || seat > 1 {
+			return 0
+		}
+		if devices[seat] == nil {
+			devices[seat] = sim.NewAIDevice(int32(args[1].Int()), uint32(args[2].Int()))
+		}
+		return int(devices[seat].Press(session.State(), seat))
+	}))
+
 	// rewind(frame) restores the state at the start of frame; the caller then
 	// replays with advance(). The net layer drives the replay because it holds
 	// the input history and knows which predictions the arriving packet just
@@ -107,6 +132,14 @@ func main() {
 	// diverged. A hash cannot answer that by construction.
 	api.Set("dump", js.FuncOf(func(js.Value, []js.Value) any {
 		return session.State().Dump()
+	}))
+
+	// frame() is the frame the sim is on. The net layer keeps its own count,
+	// so this is for a caller that has to compare two sims against each other —
+	// the bot-vs-bot harness lines both ends up on the same frame before it
+	// hashes them.
+	api.Set("frame", js.FuncOf(func(js.Value, []js.Value) any {
+		return int(session.Frame())
 	}))
 
 	// checksum() is what the native-vs-WASM differential compares.
