@@ -124,9 +124,11 @@ export function createDummy(): Dummy {
         case 'block':
           return guard()
         case 'jump':
-          // Held, not pressed: the sim jumps out of a grounded actionable
-          // state, so holding up is a dummy that jumps again on every landing.
-          return IN_UP
+          // Pressed while it can act, released while it cannot — which in the
+          // air is the whole jump. One press is one jump (D100), so a dummy
+          // that simply held up would jump once and then stand there; letting
+          // go on the way up is what arms the next one.
+          return me.actionable === 1 ? IN_UP : 0
         case 'reversal': {
           if (me.actionable === 1) {
             beat = 0

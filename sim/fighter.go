@@ -229,6 +229,13 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 	c := CharacterAt(p.Char)
 	now := s.Frame
 
+	// Letting go of up is what arms the next jump. Read from the raw bitfield
+	// and before anything below can return early, so releasing counts whatever
+	// the player is doing at the time — in the air, in stun, in a move.
+	if in&InUp == 0 {
+		p.JumpHeld = 0
+	}
+
 	// A move that has connected stops being a commitment if its data says so:
 	// the cancel window accepts one thing, a move in a category the move being
 	// cancelled names. Zero everywhere else, which is every move that does not
@@ -359,7 +366,10 @@ func (s *GameState) resolveInputs(i int, in uint16) {
 	}
 
 	switch {
-	case dir == DirUp || dir == DirUpFwd || dir == DirUpBack:
+	// One press, one jump. The hold that already produced this jump cannot
+	// produce another until it is released (see PlayerState.JumpHeld).
+	case (dir == DirUp || dir == DirUpFwd || dir == DirUpBack) && p.JumpHeld == 0:
+		p.JumpHeld = 1
 		p.enter(StatePreJump)
 		// The jump direction is committed here, at the *start* of pre-jump.
 		// There is no air control, so this is the only frame it can be chosen,

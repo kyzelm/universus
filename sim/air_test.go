@@ -230,3 +230,59 @@ func TestAnAirNormalIsNotAvailableOnTheGround(t *testing.T) {
 		t.Errorf("move %d on the ground, want the standing jab 0", got)
 	}
 }
+
+// **One press is one jump.** Holding up jumps once and then waits for the
+// player to let go, rather than jumping again the moment they touch down. The
+// genre's own default is the opposite, so this is a decision and not an
+// accident (D100), and it is the same rule the input buffer already applies to
+// buttons: one press produces one action.
+func TestHoldingUpJumpsOnce(t *testing.T) {
+	s := New()
+
+	// Up, held for long enough to cover the jump, the landing and a good while
+	// after it.
+	landings := 0
+	airborne := false
+	for range 120 {
+		s.Advance([2]uint16{InUp, 0})
+		if up := s.Players[0].Airborne(); up {
+			airborne = true
+		} else if airborne {
+			airborne = false
+			landings++
+		}
+	}
+	if landings != 1 {
+		t.Fatalf("%d jumps while up was held for 120 frames, want 1", landings)
+	}
+
+	// Letting go arms the next one, whatever the player was doing when they
+	// let go: the release is read from the raw input, not from a state.
+	s.Advance([2]uint16{0, 0})
+	s.Advance([2]uint16{InUp, 0})
+	for range 10 {
+		if s.Players[0].Airborne() {
+			return
+		}
+		s.Advance([2]uint16{InUp, 0})
+	}
+	t.Error("releasing up and pressing it again did not jump")
+}
+
+// The rule must not cost the buffered jump. Up pressed a few frames early —
+// during blockstun, during a landing, on a wakeup — still comes out on the
+// first actionable frame, which is why this is a hold flag and not a press
+// edge: an edge fires on one exact frame and is gone.
+func TestAJumpHeldThroughStunStillComesOut(t *testing.T) {
+	s := New()
+	s.Players[0].enter(StateHitstun)
+	s.Players[0].Stun = 6
+
+	for range 20 {
+		s.Advance([2]uint16{InUp, 0})
+		if s.Players[0].Airborne() || s.Players[0].State == StatePreJump {
+			return
+		}
+	}
+	t.Error("up held through hitstun never produced a jump")
+}

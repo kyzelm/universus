@@ -154,3 +154,26 @@ test('a take stops at the cap', () => {
   d.setMode('playback')
   expect(d.poll(snap, 0)).toBe(IN_DOWN)
 })
+
+/**
+ * The jump setting has to keep jumping. One press is one jump (D100), so a
+ * dummy that held up would leave the ground once and then stand there for the
+ * rest of the session — which looks like the setting working until you watch it
+ * for four seconds.
+ */
+test('the jumping dummy keeps jumping', () => {
+  reset(true)
+  const d = createDummy()
+  d.setMode('jump')
+
+  let jumps = 0
+  let airborne = false
+  for (let f = 0; f < 240; f++) {
+    const snap = readSnapshot()
+    advance(0, d.poll(snap, 0))
+    const up = readSnapshot().players[1].y > 0
+    if (up && !airborne) jumps++
+    airborne = up
+  }
+  expect(jumps).toBeGreaterThan(1)
+})

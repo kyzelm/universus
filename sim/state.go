@@ -133,6 +133,18 @@ type PlayerState struct {
 	// control, so the whole arc follows from this and gravity.
 	JumpVX Fix
 
+	// JumpHeld is 1 while the up that produced a jump is *still* being held.
+	// One press is one jump: holding up jumps once and then waits for the
+	// player to let go, rather than jumping again on every landing.
+	//
+	// A flag rather than a press edge, and the difference is buffering. An edge
+	// would only ever fire on the exact frame up arrives, so up pressed a few
+	// frames early — during blockstun, during a landing, on a wakeup — would be
+	// a jump that never happens. This way the hold stays live and comes out on
+	// the first actionable frame, which is what every other buffered input in
+	// the game does.
+	JumpHeld int32
+
 	// AI is the difficulty tier driving this seat, AIOff for a human, and
 	// AIPlan the action the last decision picked — see ai.go.
 	//
