@@ -33,6 +33,7 @@ import {
 import type {Bot} from './bot'
 import {createClock, STEP_MS} from './clock'
 import {createEvents} from './events'
+import {createDummy, type DummyMode} from './dummy'
 import {createInput} from './input'
 import {advantageText, createLab} from './lab'
 import {createSamples} from './stats'
@@ -122,6 +123,11 @@ export interface Game {
   readonly training: boolean
   /** Starts the match over, in the same mode. The training reset key. */
   restart(): void
+  /**
+   * Picks what the dummy does with seat 2. Training only; 'manual' hands the
+   * seat back to its keyboard, which is where it starts.
+   */
+  setDummy(mode: DummyMode): void
   /**
    * The figures the HUD draws, as plain numbers, for the measurement harness
    * (01 Thesis/Measurement Methodology.md). A run whose numbers were read off
@@ -241,6 +247,7 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
   // numbers — and because the mode is the one that lets you repeat the same
   // situation until the number means something.
   const lab = training ? createLab() : null
+  const dummy = training ? createDummy() : null
   const labText = (x: number, y: number, anchor: number, size: number) => {
     const t = new Text({
       text: '',
@@ -253,6 +260,9 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
   }
   // One column per seat, at the edges the fighters spend least time against.
   const inputCols = lab ? [labText(8, 190, 0, 11), labText(VIEW_W - 8, 190, 1, 11)] : null
+  // Over the column for the seat it drives, so what the dummy is doing and what
+  // it is pressing read as one thing.
+  const dummyText = dummy ? labText(VIEW_W - 8, 176, 1, 11) : null
   // Named for the frame advantage on screen, not the netplay one: net.advantage
   // is how far ahead of the other machine this one is running.
   const advText = lab ? labText(VIEW_W / 2, 38, 0.5, 16) : null
@@ -302,6 +312,11 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
       // The bot is a device: it stands in for the local player's keyboard and
       // is read once per fixed step, exactly where the keyboard is read.
       const p1 = bot ? bot.poll() : keys
+      // So is the dummy, in the other seat. It decides from the state as of
+      // the frame just simulated, which is the same one frame late a player
+      // reacting to the screen is.
+      const p2in =
+        dummy && dummy.mode() !== 'manual' ? dummy.poll(readSnapshot()) : p2
 
       const t0 = performance.now()
       if (net) {
@@ -310,15 +325,17 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
         net.step(p1)
         if (++ticks % PING_EVERY === 0) net.ping()
       } else {
-        advance(p1, p2)
-        recorded.push(p1, p2)
+        advance(p1, p2in)
+        // What the sim was fed, dummy included — a log that recorded the
+        // keyboard instead would replay a lab session nobody played.
+        recorded.push(p1, p2in)
       }
       stepCost.push(performance.now() - t0)
 
       // Per simulated frame, not per displayed one: a display frame that runs
       // two sim steps would otherwise lose a row of the input display and
       // could miss the frame a recovery ended on.
-      lab?.step(readSnapshot(), [p1, p2])
+      lab?.step(readSnapshot(), [p1, p2in])
     }
 
     const snap = readSnapshot()
@@ -383,6 +400,7 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
       }
       setText(advText, advantageText(lab.advantage()))
     }
+    if (dummy && dummyText) setText(dummyText, `DUMMY ${dummy.mode().toUpperCase()}`)
 
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.
@@ -401,6 +419,10 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
       lab?.reset()
       sparks.length = 0
       recorded.length = 0
+    },
+
+    setDummy(mode) {
+      dummy?.setMode(mode)
     },
 
     inputLog() {

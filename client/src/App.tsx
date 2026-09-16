@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
 import {createBot} from './game/bot'
+import {DUMMY_MODES} from './game/dummy'
 import {startGame, type Game} from './game/game'
 import NetPanel from './net/NetPanel'
 
@@ -131,7 +132,12 @@ export default function App() {
     // app already makes on load — the view is not writing sim state, it is
     // asking for a new one.
     const onKey = (e: KeyboardEvent) => {
-      if (training && e.code === 'KeyR') started?.restart()
+      if (!training) return
+      if (e.code === 'KeyR') started?.restart()
+      // Number row picks what the dummy does; 0 hands seat 2 back to its
+      // keyboard. The numpad is that keyboard, so the two never collide.
+      const n = /^Digit([0-5])$/.exec(e.code)
+      if (n) started?.setDummy(DUMMY_MODES[Number(n[1])])
     }
     window.addEventListener('keydown', onKey)
 
@@ -162,7 +168,7 @@ export default function App() {
       <div className="bar">
         <span className="keys">
           P1 <b>WASD</b> · P2 <b>arrows</b>
-          {game?.training && ' · training: R resets'}
+          {game?.training && ' · training: R resets · 0-5 dummy'}
         </span>
         <button type="button" onClick={() => game && saveLog(game)} disabled={!game}>
           save input log
