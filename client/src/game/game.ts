@@ -314,9 +314,9 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
       const p1 = bot ? bot.poll() : keys
       // So is the dummy, in the other seat. It decides from the state as of
       // the frame just simulated, which is the same one frame late a player
-      // reacting to the screen is.
-      const p2in =
-        dummy && dummy.mode() !== 'manual' ? dummy.poll(readSnapshot()) : p2
+      // reacting to the screen is, and it is handed seat 2's own keys — which
+      // it passes through when set to manual and keeps when recording.
+      const p2in = dummy ? dummy.poll(readSnapshot(), p2) : p2
 
       const t0 = performance.now()
       if (net) {
@@ -400,7 +400,12 @@ export async function startGame(parent: HTMLElement, bot?: Bot, training = false
       }
       setText(advText, advantageText(lab.advantage()))
     }
-    if (dummy && dummyText) setText(dummyText, `DUMMY ${dummy.mode().toUpperCase()}`)
+    if (dummy && dummyText) {
+      // The frame count is the whole recording UI: it is how you know the take
+      // is running, and how long the one you are about to loop is.
+      const n = dummy.frames()
+      setText(dummyText, `DUMMY ${dummy.mode().toUpperCase()}${n ? ` ${n}f` : ''}`)
+    }
 
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.

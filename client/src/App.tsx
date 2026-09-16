@@ -136,7 +136,7 @@ export default function App() {
       if (e.code === 'KeyR') started?.restart()
       // Number row picks what the dummy does; 0 hands seat 2 back to its
       // keyboard. The numpad is that keyboard, so the two never collide.
-      const n = /^Digit([0-5])$/.exec(e.code)
+      const n = /^Digit([0-7])$/.exec(e.code)
       if (n) started?.setDummy(DUMMY_MODES[Number(n[1])])
     }
     window.addEventListener('keydown', onKey)
@@ -168,7 +168,7 @@ export default function App() {
       <div className="bar">
         <span className="keys">
           P1 <b>WASD</b> · P2 <b>arrows</b>
-          {game?.training && ' · training: R resets · 0-5 dummy'}
+          {game?.training && ' · training: R resets · 0-7 dummy (6 record, 7 play)'}
         </span>
         <button type="button" onClick={() => game && saveLog(game)} disabled={!game}>
           save input log
