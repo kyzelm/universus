@@ -27,10 +27,12 @@ import {
   SUPER_BARS,
   reset,
   rewind,
+  type Setup,
   type Snapshot,
   STATE_NAMES,
 } from '../sim/wasm'
 import type {Bot} from './bot'
+import {encodeLog} from './log'
 import {createClock, STEP_MS} from './clock'
 import {createEvents} from './events'
 import {createDummy, type DummyMode} from './dummy'
@@ -104,11 +106,12 @@ const STRIP_Y = VIEW_H - 32
 /** Clean, predicted, corrected — indexed by the FRAME_* constants. */
 const STRIP_COLORS = [0x3a7a4a, 0xd8a53a, 0xe0574a]
 
+
 export interface Game {
   /**
-   * The inputs fed to the sim so far, in the replay log format: little-endian
-   * uint16 pairs, player 1 then player 2, one pair per frame, no header. The
-   * same bytes tools/replay reads.
+   * The session so far in the replay log format: a 16-byte header carrying the
+   * setup, then little-endian uint16 pairs, player 1 then player 2, one pair
+   * per frame. The same bytes tools/replay reads.
    */
   inputLog(): Blob
   /**
@@ -170,9 +173,10 @@ export async function startGame(
   bot?: Bot,
   training = false,
   ai = 0,
+  chars: [number, number] = [0, 0],
 ): Promise<Game> {
   await loadSim()
-  reset(training, ai)
+  reset(training, ai, chars)
 
   const app = new Application()
   await app.init({width: VIEW_W, height: VIEW_H, background: 0x14161a, antialias: false})
@@ -429,7 +433,7 @@ export async function startGame(
     training,
 
     restart() {
-      reset(training, ai)
+      reset(training, ai, chars)
       pump.reset()
       lab?.reset()
       sparks.length = 0
@@ -447,12 +451,15 @@ export async function startGame(
       // predictions instead, and replay a match nobody played.
       const src = net ? net.log : recorded
 
-      const buf = new ArrayBuffer(src.length * 2)
-      const v = new DataView(buf)
-      // Explicit little-endian rather than a Uint16Array, which would use the
-      // platform's byte order and silently produce a different file elsewhere.
-      for (let i = 0; i < src.length; i++) v.setUint16(i * 2, src[i], true)
-      return new Blob([buf], {type: 'application/octet-stream'})
+      // The setup goes in the header, or the inputs replay as a different
+      // match. A netplay session is always a plain match whatever the URL said
+      // — connect() resets to one before the first frame.
+      const setup: Setup = net
+        ? {training: false, ai: 0, chars}
+        : {training, ai, chars}
+      return new Blob([encodeLog(setup, dataVersion(), src)], {
+        type: 'application/octet-stream',
+      })
     },
 
     connect(peer, seat) {

@@ -187,19 +187,14 @@ export default function App() {
           {game?.training && ' · training: R resets · 0-7 dummy (6 record, 7 play)'}
         </span>
         {/*
-          Refused in an AI match, and this is not a nicety. The log is the
-          inputs the *caller* fed the sim, and the AI's presses are generated
-          inside it — so a saved AI match replays as one where seat 2 stands
-          still, and it does it silently. An AI match reproduces from its setup
-          (the tier, the seed) rather than from a log, which is what makes it
-          worth having at all.
+          Every mode saves now, including the lab and an AI match. The log used
+          to be the inputs the *caller* fed the sim and nothing else, which is
+          why those two were refused or silently wrong: the AI's presses are
+          generated inside the sim and the lab changes what a frame does. The
+          header carries the setup, so the log replays the match that was
+          played rather than one that resembles it.
         */}
-        <button
-          type="button"
-          onClick={() => game && saveLog(game)}
-          disabled={!game || ai > 0}
-          title={ai > 0 ? 'an AI match reproduces from its setup, not from an input log' : ''}
-        >
+        <button type="button" onClick={() => game && saveLog(game)} disabled={!game}>
           save input log
         </button>
       </div>

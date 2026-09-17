@@ -9,7 +9,7 @@ declare global {
     advance(p1: number, p2: number): void
     rewind(frame: number): boolean
     eventsAt(frame: number): number
-    reset(training?: boolean, ai?: number): void
+    reset(training?: boolean, ai?: number, c0?: number, c1?: number): void
     checksum(): number
     dataVersion(): number
     snapshotPtr(): number
@@ -239,14 +239,26 @@ export const AI_TIERS = ['off', 'easy', 'normal', 'hard'] as const
 export type AITier = (typeof AI_TIERS)[number]
 
 /**
- * Starts a fresh match. Both arguments pick a mode, and both go to the sim
- * rather than being kept out here: the lab is a different match, not a
- * different way of drawing one, and a seat the AI is driving is a different
- * match too — the opponent's inputs are generated inside the sim, from state,
- * so nothing out here could produce them.
+ * Everything about a match that is chosen before frame 0 and cannot be read
+ * back out of its input log: which characters, which mode, whether seat 2 is
+ * the scripted opponent. Written into the header of every saved log, because
+ * two of the three generate inputs the caller never sent.
  */
-export function reset(training = false, ai = 0): void {
-  sim.reset(training, ai)
+export interface Setup {
+  training: boolean
+  ai: number
+  chars: [number, number]
+}
+
+/**
+ * Starts a fresh match. Every field picks part of the *state* rather than being
+ * kept out here: the lab is a different match, not a different way of drawing
+ * one, and a seat the AI is driving is a different match too — the opponent's
+ * inputs are generated inside the sim, from state, so nothing out here could
+ * produce them.
+ */
+export function reset(training = false, ai = 0, chars: [number, number] = [0, 0]): void {
+  sim.reset(training, ai, chars[0], chars[1])
 }
 
 /** FNV-1a over the packed state. The number both machines must agree on. */

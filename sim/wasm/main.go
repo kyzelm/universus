@@ -55,25 +55,27 @@ func main() {
 		return nil
 	}))
 
-	// reset(training, ai) starts a fresh match. Both arguments pick a *mode*,
-	// which is part of the state rather than a switch the view holds: the lab
-	// is a different match, not a different way of drawing one, and a seat the
-	// AI is driving is a different match for the same reason — the opponent's
-	// inputs are generated inside the sim, so a client that disagreed about the
-	// tier would disagree about every frame.
+	// reset(training, ai, c0, c1) starts a fresh match from a setup. Every
+	// argument picks part of the *state* rather than a switch the view holds:
+	// the lab is a different match, not a different way of drawing one, and a
+	// seat the AI is driving is a different match for the same reason — the
+	// opponent's inputs are generated inside the sim, so a client that
+	// disagreed about the tier would disagree about every frame.
+	//
+	// These are exactly the fields a replay log's header carries, because they
+	// are exactly the ones an input log cannot recover on its own.
 	api.Set("reset", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		ai := 0
-		if len(args) > 1 {
-			ai = args[1].Int()
+		arg := func(i int) int {
+			if len(args) > i {
+				return args[i].Int()
+			}
+			return 0
 		}
-		switch {
-		case len(args) > 0 && args[0].Truthy():
-			session = sim.NewTrainingSession()
-		case ai > 0:
-			session = sim.NewAISession(int32(ai))
-		default:
-			session = sim.NewSession()
-		}
+		session = sim.NewSessionOf(sim.Setup{
+			Training: len(args) > 0 && args[0].Truthy(),
+			AI:       int32(arg(1)),
+			Chars:    [2]int32{int32(arg(2)), int32(arg(3))},
+		})
 		session.State().WriteSnapshot(snap[:])
 		return nil
 	}))

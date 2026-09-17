@@ -263,6 +263,29 @@ func NewAIMatch(tier int32) GameState {
 	return s
 }
 
+// Setup is everything about a match that is chosen before frame 0 and cannot
+// be read back out of an input log: which characters, which mode, and whether
+// seat 2 is the scripted opponent. Two of those three generate inputs the
+// caller never sent — the AI presses from inside Advance, the lab changes what
+// a frame does — so a log without them replays as a different match.
+type Setup struct {
+	Training bool
+	AI       int32
+	Chars    [2]int32
+}
+
+// NewStateOf is the one constructor the others are special cases of. The mode
+// flag and the AI tier are fields in GameState rather than switches held
+// outside it, so this sets them the same way a match would.
+func NewStateOf(u Setup) GameState {
+	s := NewMatch(u.Chars[0], u.Chars[1])
+	if u.Training {
+		s.Training = 1
+	}
+	s.Players[1].AI = u.AI
+	return s
+}
+
 // NewMatch starts a match between two roster entries: players apart, on the
 // ground, facing each other, at full health.
 func NewMatch(c0, c1 int32) GameState {

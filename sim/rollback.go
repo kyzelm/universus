@@ -41,16 +41,12 @@ type Session struct {
 
 func NewSession() Session { return Session{state: New()} }
 
-// NewTrainingSession is NewSession in training mode (03 Game Design/Game
-// Modes.md). Offline only, and the mode is in the state, so a client that
-// brought one of these to a match would disagree on the first checksum.
-func NewTrainingSession() Session { return Session{state: NewTraining()} }
-
-// NewAISession is NewSession with seat 2 played by the scripted opponent
-// (03 Game Design/AI Opponent.md). The one mode that demos with no network and
-// no second machine, which is also why it is the fallback if the venue blocks
-// WebRTC.
-func NewAISession(tier int32) Session { return Session{state: NewAIMatch(tier)} }
+// NewSessionOf starts a session from a setup — the lab, the scripted opponent
+// in seat 2, the characters (see Setup). Every one of those is state rather
+// than a switch held outside it, so a client that disagreed about any of them
+// would disagree on the first checksum. It is also exactly what a replay log's
+// header carries, because it is what the inputs alone cannot recover.
+func NewSessionOf(u Setup) Session { return Session{state: NewStateOf(u)} }
 
 func (s *Session) State() *GameState { return &s.state }
 func (s *Session) Frame() uint32     { return s.state.Frame }
