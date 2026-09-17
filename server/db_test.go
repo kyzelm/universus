@@ -2,11 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"os"
 	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"universus/sim"
+	"universus/sim/replaylog"
 )
 
 // The migration runner and the store against a real Postgres.
@@ -560,4 +564,97 @@ func TestTheSweepLeavesAMatchThatSettledItself(t *testing.T) {
 		t.Errorf("%+v became %+v", before, got)
 	}
 	_ = b
+}
+
+// **A plausibility anomaly flags an account and changes nothing about the
+// match.** An assist bot plays a real match: every hash it reports is correct,
+// so checks 1 and 2 have nothing to say, and voiding the result would punish
+// the opponent for somebody else's client.
+func TestAnImplausibleMatchIsFlaggedButStillCounts(t *testing.T) {
+	ctx, p := testPool(t)
+	users, matches, a, b := twoPlayers(t, ctx, p)
+
+	// A log whose seat 1 is a twenty-frame loop, played straight: it verifies,
+	// because it is a real simulation, and it looks nothing like a hand.
+	logBytes, checksums, frames := macroMatch(t)
+	s := submission{
+		winner: 1, endFrame: frames, chars: [2]int{0, 1},
+		disconnect: true, inputLog: logBytes, checksums: checksums,
+	}
+
+	id, err := matches.create(ctx, "ranked", a.ID, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := matches.record(ctx, id, a.ID, s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := matches.record(ctx, id, b.ID, s); err != nil {
+		t.Fatal(err)
+	}
+	row, _ := matches.byID(ctx, id)
+	if err := matches.settle(ctx, row, s); err != nil {
+		t.Fatal(err)
+	}
+
+	v := verifier{matches: matches, dataVersion: loadRoster()}
+	if !v.step(ctx) {
+		t.Fatal("the worker found no job")
+	}
+
+	// The match stands.
+	if _, verified := jobResult(t, ctx, p, id); verified != "ok" {
+		t.Errorf("the match was voided over a plausibility flag: %q", verified)
+	}
+	if ra := users.rating(ctx, a.ID); ra.LP != lpBase {
+		t.Errorf("the ladder was rolled back: %+v", ra)
+	}
+
+	// The account is flagged, and only the one the anomaly named.
+	var p1Flagged, p2Flagged bool
+	p.QueryRow(ctx, `SELECT flagged FROM users WHERE id = $1`, a.ID).Scan(&p1Flagged)
+	p.QueryRow(ctx, `SELECT flagged FROM users WHERE id = $1`, b.ID).Scan(&p2Flagged)
+	if !p1Flagged {
+		t.Error("the seat that played like a macro was not flagged")
+	}
+	if p2Flagged {
+		t.Error("the other player was flagged for their opponent's inputs")
+	}
+
+	// And the numbers are kept, because the signal is across matches rather
+	// than inside one of them.
+	var result map[string]any
+	if err := p.QueryRow(ctx, `SELECT result FROM verification_jobs WHERE match_id = $1`, id).
+		Scan(&result); err != nil {
+		t.Fatal(err)
+	}
+	if list, ok := result["anomalies"].([]any); !ok || len(list) == 0 {
+		t.Errorf("the job recorded no anomalies: %v", result)
+	}
+}
+
+// macroMatch plays a match where one seat loops a fixed input, which verifies
+// as a real simulation and reads as a script.
+func macroMatch(t *testing.T) (log, sums []byte, frames int) {
+	t.Helper()
+	version := loadRoster()
+
+	setup := sim.Setup{Chars: [2]int32{0, 1}}
+	s := sim.NewSessionOf(setup)
+	loop := []uint16{
+		sim.InRight, sim.InRight, sim.InDown, sim.InDown | sim.InRight,
+		sim.InRight | sim.InLP, 0, 0, 0,
+	}
+
+	var inputs [][2]uint16
+	var packed []byte
+	for f := range 1800 {
+		in := [2]uint16{loop[f%len(loop)], 0}
+		s.Advance(in)
+		inputs = append(inputs, in)
+		if s.Frame()%checksumEvery == 0 {
+			packed = binary.LittleEndian.AppendUint32(packed, s.Checksum())
+		}
+	}
+	return replaylog.Encode(setup, version, inputs), packed, len(inputs)
 }
