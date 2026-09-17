@@ -20,6 +20,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"sync"
 	"time"
@@ -184,6 +185,35 @@ func main() {
 	r := &rooms{waiting: map[string]*client{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", r.serve)
+
+	// **The database is optional and the server starts without one.** Training,
+	// local versus and versus AI require no account at all (03 Game Design/Game
+	// Modes.md), and the room and the relay read nothing from Postgres — so a
+	// database that is down costs the ladder rather than the demo. It is also
+	// what lets the whole thing run from one binary with no arguments.
+	ctx := context.Background()
+	pool, err := openDB(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Fatalf("database: %v", err)
+	}
+	if pool != nil {
+		defer pool.Close()
+		// Migrations run at startup, in the binary that needs them: a container
+		// that starts is a container that has its schema (02 Architecture/
+		// Database Schema.md).
+		n, err := migrate(ctx, pool, migrationFiles)
+		if err != nil {
+			log.Fatalf("migrating: %v", err)
+		}
+		log.Printf("database ready, %d migration(s) applied", n)
+
+		a := &auth{users: pgStore{pool: pool}, secret: jwtSecret(os.Getenv("UNIVERSUS_JWT_SECRET"))}
+		a.routes(mux)
+		log.Printf("accounts enabled")
+	} else {
+		log.Printf("no DATABASE_URL: offline modes only, no accounts")
+	}
+
 	if *static != "" {
 		// One origin for the page and the socket, which is what a remote session needs: a
 		// guest on https cannot open a ws:// socket to a separate port, and a tunnel or a

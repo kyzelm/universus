@@ -13,6 +13,28 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+
+    # Postgres for the migration and store tests. Without it they skip, and the
+    # schema is a file nobody has ever run — the one part of the backend a fake
+    # store cannot check is whether the SQL is valid and the constraints the
+    # schema promises are really enforced. A service container costs seconds.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: universus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgres://postgres:dev@localhost:5432/universus
+
     steps:
       - uses: actions/checkout@v5
 
