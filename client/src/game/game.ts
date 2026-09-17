@@ -34,6 +34,7 @@ import {
 } from '../sim/wasm'
 import type {Bot} from './bot'
 import {encodeLog} from './log'
+import {uploadResult} from '../net/report'
 import {createClock, STEP_MS} from './clock'
 import {createEvents} from './events'
 import {createDummy, type DummyMode} from './dummy'
@@ -120,7 +121,7 @@ export interface Game {
    * seat 1 drives P2; both ends reset to frame 0, and from then on each side
    * simulates frame N from (its own input at N, the other side's input at N).
    */
-  connect(peer: Peer, seat: 0 | 1, pair?: [number, number]): void
+  connect(peer: Peer, seat: 0 | 1, pair?: [number, number], matchID?: number): void
   /** Feed a packet in. The panel owns the channel, so it forwards them here. */
   receive(data: ArrayBuffer): void
   /** True in the lab. The net panel reads it and refuses to connect. */
@@ -306,6 +307,14 @@ export async function startGame(
 
   let net: Netplay | null = null
   let link: Link | null = null
+  // The match this session was recorded as, and whether its result has gone up.
+  // **Once, on the first frame the match is over**: the phase stays MATCH_END
+  // for as long as the screen shows it, and an upload per frame would be the
+  // same result a hundred times.
+  let matchID = 0
+  let reported = false
+  /** What the server made of the upload, for the HUD. */
+  let uploadStatus = ''
   let ticks = 0
   let hudTicks = 0
 
@@ -323,6 +332,23 @@ export async function startGame(
   // that can no longer be simulated again. Built in M2 with a placeholder
   // spark attached, because retrofitting it once there are real sounds means
   // auditing every effect in the game (02 Architecture/Rollback Netcode.md).
+  /**
+   * The session so far in the replay log format. Under netplay the driver's log
+   * is the authority: it holds the inputs that were *confirmed*, which is what
+   * the match actually simulated once every rollback had been applied. A log
+   * kept out here would record the predictions instead, and replay a match
+   * nobody played.
+   *
+   * The setup goes in the header, or the inputs replay as a different match. A
+   * netplay session is always a plain match whatever the URL said — connect()
+   * resets to one before the first frame.
+   */
+  const logBytes = (): ArrayBuffer => {
+    const src = net ? net.log : recorded
+    const setup: Setup = net ? {training: false, ai: 0, chars} : {training, ai, chars}
+    return encodeLog(setup, dataVersion(), src)
+  }
+
   const pump = createEvents(eventsAt)
   const sparks: {x: number; y: number; life: number; color: number}[] = []
 
@@ -383,6 +409,24 @@ export async function startGame(
       }
     })
 
+    // **The result goes up once the match is over and the frame is settled.**
+    // Settled matters: MATCH_END on a predicted frame can still be rolled back,
+    // and a result uploaded from a prediction is a result of a match that did
+    // not happen. Only a recorded match has anywhere to send it.
+    if (net && matchID && !reported && snap.phase === PHASE_MATCH_END &&
+        snap.winner !== NOBODY && net.confirmed >= snap.frame) {
+      reported = true
+      void uploadResult(matchID, {
+        winner: snap.winner + 1, // the sim counts seats from 0, the server from 1
+        endFrame: snap.frame,
+        chars,
+        inputLog: new Uint8Array(logBytes()),
+        checksums: net.checksums(),
+      }).then((status) => {
+        uploadStatus = status
+      })
+    }
+
     sparkLayer.clear()
     for (let i = sparks.length - 1; i >= 0; i--) {
       const s = sparks[i]
@@ -436,7 +480,7 @@ export async function startGame(
     // ponytail: no interpolation. The sim and the display are both ~60 Hz, so
     // add it when the judder is actually visible, not before.
     if (hudTicks++ % HUD_EVERY === 0) {
-      const top = net ? netHud(net, link) : localHud(snap)
+      const top = net ? netHud(net, link, uploadStatus) : localHud(snap)
       hud.text = `${top}\n${costHud(stepCost, frameCost, longFrames)}`
     }
   })
@@ -463,24 +507,10 @@ export async function startGame(
     },
 
     inputLog() {
-      // Under netplay the driver's log is the authority: it holds the inputs
-      // that were *confirmed*, which is what the match actually simulated once
-      // every rollback had been applied. A log kept out here would record the
-      // predictions instead, and replay a match nobody played.
-      const src = net ? net.log : recorded
-
-      // The setup goes in the header, or the inputs replay as a different
-      // match. A netplay session is always a plain match whatever the URL said
-      // — connect() resets to one before the first frame.
-      const setup: Setup = net
-        ? {training: false, ai: 0, chars}
-        : {training, ai, chars}
-      return new Blob([encodeLog(setup, dataVersion(), src)], {
-        type: 'application/octet-stream',
-      })
+      return new Blob([logBytes()], {type: 'application/octet-stream'})
     },
 
-    connect(peer, seat, pair) {
+    connect(peer, seat, pair, id) {
       // Never into a training match: the mode is in the state, so two ends that
       // disagreed about it would desync on frame 0. The panel refuses the
       // connection before this, and this is the second lock on the same door.
@@ -495,6 +525,10 @@ export async function startGame(
       // The fallback is this end's own choice, for the hand-signalled path,
       // which has no room to agree over.
       chars = pair ?? chars
+      // Zero for a private match by code, which is not recorded: a ladder made
+      // of matches two people arranged between themselves is not a ladder.
+      matchID = id ?? 0
+      reported = false
       reset(false, 0, chars)
       // The match restarts at frame 0, so what has been fired restarts with it.
       pump.reset()
@@ -856,7 +890,7 @@ function costHud(
  * right edge. This is the readout the M0 numbers are screenshotted from, so
  * every field has to be on screen at once.
  */
-function netHud(net: Netplay, link: Link | null): string {
+function netHud(net: Netplay, link: Link | null, upload: string): string {
   const s = net.stats
   if (s.dataMismatch) {
     return 'REFUSED: the peer has different character data.\nRebuild both ends from the same commit.'
@@ -875,6 +909,10 @@ function netHud(net: Netplay, link: Link | null): string {
     `stalls ${s.stalls}  skips ${s.skipped}  checked ${s.verified}  ` +
       (s.desyncs ? `DESYNC at frame ${s.desyncFrame}` : 'desync 0'),
     conditions(link),
+    // What the server made of the result, once there is one. Worth showing:
+    // "settled" and "mismatch" are the difference between a ranked match that
+    // counted and one that voided both players' evening.
+    upload && `result: ${upload}`,
   ]
     .filter(Boolean)
     .join('\n')

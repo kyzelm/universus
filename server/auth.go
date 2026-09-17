@@ -67,6 +67,10 @@ var displayNameOK = regexp.MustCompile(`^[A-Za-z0-9_-]{3,24}$`)
 type auth struct {
 	users  store
 	secret []byte
+	// Nil in the handler tests, which do not touch a match. The result endpoint
+	// is registered only when it is set, for the same reason the whole package
+	// is registered only when there is a database.
+	matches *matchStore
 }
 
 // jwtSecret is read from the environment, or generated.
@@ -100,6 +104,9 @@ func (a *auth) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/register", a.register)
 	mux.HandleFunc("POST /api/auth/login", a.login)
 	mux.HandleFunc("GET /api/profile", a.requireUser(a.profile))
+	if a.matches != nil {
+		mux.HandleFunc("POST /api/match/{id}/result", a.requireUser(a.submitResult))
+	}
 }
 
 type credentials struct {
@@ -218,8 +225,14 @@ func b2i(b bool) byte {
 	return 0
 }
 
+// profile is the account and its ladder standing. The rating is here rather
+// than on an endpoint of its own because it is the only thing anybody wants
+// alongside the name, and a second request for two numbers is a second request.
 func (a *auth) profile(w http.ResponseWriter, r *http.Request, u User) {
-	writeJSON(w, http.StatusOK, map[string]any{"user": u})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user":   u,
+		"rating": a.users.rating(r.Context(), u.ID),
+	})
 }
 
 // issue signs a token for u and writes the session.
@@ -328,12 +341,22 @@ func checkPassword(p string) error {
 // readJSON decodes a bounded, strict body. Reports whether the handler should
 // carry on; it has already answered the request when it says no.
 func readJSON(w http.ResponseWriter, r *http.Request, into any) bool {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
+	return decodeBody(w, r, into, maxBody)
+}
+
+// readBigJSON is the same for a match upload, which carries an input log and is
+// three orders of magnitude larger than a set of credentials.
+func readBigJSON(w http.ResponseWriter, r *http.Request, into any) bool {
+	return decodeBody(w, r, into, maxUpload)
+}
+
+func decodeBody(w http.ResponseWriter, r *http.Request, into any, limit int64) bool {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	// Unknown fields are refused: a client sending `passwrod` should be told,
 	// not silently registered with an empty password it thinks it set.
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(into); err != nil {
-		httpError(w, http.StatusBadRequest, "expected a small JSON object")
+		httpError(w, http.StatusBadRequest, "expected a JSON object")
 		return false
 	}
 	return true

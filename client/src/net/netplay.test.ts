@@ -619,3 +619,34 @@ describe('the rollback timeline', () => {
     expect(net.sample(0)).not.toBe(-1)
   })
 })
+
+// The checksum series goes to the server, which replays the log and compares
+// them in frame order. A Map iterates in insertion order and a rollback
+// rewrites an older frame's hash after a newer one was taken, so the order has
+// to be imposed rather than inherited.
+test('the checksums come out in frame order, packed little-endian', () => {
+  const {net} = harness()
+
+  // Far enough to take several checkpoints, with the remote input always
+  // available so nothing stalls.
+  for (let f = 0; f < CHECKSUM_EVERY * 3; f++) {
+    net.receive(encodeInputs(f, [0, 0, 0, 0]))
+    net.step(0)
+  }
+
+  // One uint32 per checkpoint taken, and nothing else in the buffer: the server
+  // reads this as a flat series and a stray entry would shift every comparison
+  // after it by one checkpoint.
+  const bytes = net.checksums()
+  expect(bytes.length).toBe(4 * Math.floor((CHECKSUM_EVERY * 3) / CHECKSUM_EVERY))
+
+  // Little-endian, whatever the machine — the server reads it with a fixed
+  // byte order and a platform-native view here would produce a different file
+  // on a big-endian one.
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  expect(v.getUint32(0, true)).not.toBe(v.getUint32(0, false))
+
+  // Stable: asking twice is the same series, so an upload retried after a
+  // failure does not send a different match.
+  expect([...net.checksums()]).toEqual([...bytes])
+})

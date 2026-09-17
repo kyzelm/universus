@@ -43,6 +43,17 @@ type store interface {
 	// rating row — a new account's rating is zero either way, so there is
 	// nothing for the caller to tell apart.
 	ratingOf(ctx context.Context, id int64) int
+	// rating is the profile view of it: points, tier, and the record.
+	rating(ctx context.Context, id int64) Rating
+}
+
+// Rating is the ladder as a player sees it (03 Game Design/Game Modes.md).
+type Rating struct {
+	LP       int    `json:"lp"`
+	Tier     int    `json:"tier"`
+	TierName string `json:"tierName"`
+	Matches  int    `json:"matches"`
+	Wins     int    `json:"wins"`
 }
 
 type pgStore struct{ pool *pgxpool.Pool }
@@ -97,6 +108,16 @@ func (s pgStore) ratingOf(ctx context.Context, id int64) int {
 		return 0
 	}
 	return lp
+}
+
+func (s pgStore) rating(ctx context.Context, id int64) Rating {
+	var r Rating
+	// A missing rating row reads as an unplayed account, which is what it is.
+	_ = s.pool.QueryRow(ctx,
+		`SELECT lp, tier, matches, wins FROM ratings WHERE user_id = $1`, id).
+		Scan(&r.LP, &r.Tier, &r.Matches, &r.Wins)
+	r.TierName = tierNames[min(max(r.Tier, 0), len(tierNames)-1)]
+	return r
 }
 
 func (s pgStore) userByID(ctx context.Context, id int64) (User, error) {

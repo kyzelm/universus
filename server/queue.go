@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"math"
 	"net/http"
 	"sync"
@@ -74,6 +75,11 @@ type waiting struct {
 type matchmaker struct {
 	mu    sync.Mutex
 	modes map[string][]*waiting
+
+	// Where a pairing is recorded, or nil on a server with no database — in
+	// which case there is no queue either, so this is nil only in tests that
+	// exercise the pairing rule without one.
+	matches *matchStore
 }
 
 func newMatchmaker() *matchmaker {
@@ -141,9 +147,16 @@ func (m *matchmaker) remove(mode string, w *waiting) {
 // widening band is that waiting eventually gets you a match, and a rule that
 // can skip the longest waiter takes that back.
 func (m *matchmaker) sweep(now time.Time) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	type made struct {
+		mode string
+		a, b *waiting
+	}
 
+	// Chosen under the lock, introduced outside it. Recording a pairing is a
+	// database round trip, and holding the queue's mutex across one would make
+	// every other player's join wait on somebody else's insert.
+	var pairs []made
+	m.mu.Lock()
 	for mode := range m.modes {
 		for {
 			a, b := m.bestPair(mode, now)
@@ -152,13 +165,36 @@ func (m *matchmaker) sweep(now time.Time) {
 			}
 			m.remove(mode, a)
 			m.remove(mode, b)
-
-			// Under the lock: a pair that failed to be told its roles is a pair
-			// where one end may already be gone, and both are out of the queue
-			// either way — a socket that broke is about to end its own read.
-			pair(a.c, b.c)
+			pairs = append(pairs, made{mode, a, b})
 		}
 	}
+	m.mu.Unlock()
+
+	for _, p := range pairs {
+		m.introduce(p.mode, p.a, p.b)
+	}
+}
+
+// introduce records the match and tells the two ends who they are.
+//
+// The row is written *before* the roles go out, so a match id exists by the
+// time either client could finish playing — a result uploaded against an id
+// nobody assigned is a result with nowhere to go.
+func (m *matchmaker) introduce(mode string, a, b *waiting) {
+	var id int64
+	if m.matches != nil && a.c.user != nil && b.c.user != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		recorded, err := m.matches.create(ctx, mode, a.c.user.ID, b.c.user.ID)
+		cancel()
+		if err != nil {
+			// The match is still playable; it just will not count. Better than
+			// refusing to pair two people who are waiting, and the log is where
+			// a ladder that stopped moving gets explained.
+			log.Printf("recording a %s pairing: %v", mode, err)
+		}
+		id = recorded
+	}
+	pair(a.c, b.c, id)
 }
 
 func (m *matchmaker) bestPair(mode string, now time.Time) (*waiting, *waiting) {

@@ -19,6 +19,11 @@ func TestTheEmbeddedMigrationsLoad(t *testing.T) {
 	if ms[0].version != 1 || ms[0].name != "init" {
 		t.Errorf("the first migration is %03d_%s, want 001_init", ms[0].version, ms[0].name)
 	}
+	for i, m := range ms {
+		if m.version != i+1 {
+			t.Errorf("migration %d is version %d: the numbering has a hole in it", i, m.version)
+		}
+	}
 
 	// Every table the schema note specifies, because a migration that parses
 	// and creates nothing is the failure with no symptom.

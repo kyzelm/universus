@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -190,7 +191,7 @@ func (s *hub) serveRoom(w http.ResponseWriter, req *http.Request) {
 	me.user = user
 
 	if other := s.rooms.join(code, me); other != nil {
-		if !pair(other, me) {
+		if !pair(other, me, 0) {
 			return
 		}
 	} else {
@@ -207,8 +208,16 @@ func (s *hub) serveRoom(w http.ResponseWriter, req *http.Request) {
 // start offering". The host also decides the transport and the characters
 // (D88, D106), which is why which end is which has to be settled here rather
 // than raced for.
-func pair(host, guest *client) bool {
-	if tell(host.conn, "host") != nil || tell(guest.conn, "guest") != nil {
+// A non-zero id is appended to the role — "host 42" — and is the match this
+// pairing was recorded as. A private match by code has none: it is for testing
+// and for the demo, and a ladder made of matches two people arranged between
+// themselves is not a ladder.
+func pair(host, guest *client, matchID int64) bool {
+	suffix := ""
+	if matchID != 0 {
+		suffix = " " + strconv.FormatInt(matchID, 10)
+	}
+	if tell(host.conn, "host"+suffix) != nil || tell(guest.conn, "guest"+suffix) != nil {
 		return false
 	}
 	host.paired <- guest.conn
@@ -308,7 +317,12 @@ func main() {
 		}
 		log.Printf("database ready, %d migration(s) applied", n)
 
-		h.auth = &auth{users: pgStore{pool: pool}, secret: jwtSecret(os.Getenv("UNIVERSUS_JWT_SECRET"))}
+		h.auth = &auth{
+			users:   pgStore{pool: pool},
+			secret:  jwtSecret(os.Getenv("UNIVERSUS_JWT_SECRET")),
+			matches: &matchStore{pool: pool},
+		}
+		h.queue.matches = h.auth.matches
 		h.auth.routes(mux)
 
 		// Matchmaking exists only where accounts do: a queue is an ordering of

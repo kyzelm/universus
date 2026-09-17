@@ -68,6 +68,13 @@ func (f *fakeStore) ratingOf(_ context.Context, id int64) int {
 	return f.lp[id]
 }
 
+func (f *fakeStore) rating(_ context.Context, id int64) Rating {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	lp := f.lp[id]
+	return Rating{LP: lp, Tier: tierOf(lp), TierName: tierNames[tierOf(lp)]}
+}
+
 func (f *fakeStore) userByID(_ context.Context, id int64) (User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

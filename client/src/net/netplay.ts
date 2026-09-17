@@ -190,6 +190,13 @@ export interface Netplay {
    */
   readonly log: readonly number[]
   /**
+   * The state hashes taken every CHECKSUM_EVERY frames, in frame order, packed
+   * as little-endian uint32s. Uploaded with the result: the server re-simulates
+   * the log and compares these, which is the check the whole Go→WASM decision
+   * exists to make possible (02 Architecture/Anti-Cheat and Verification.md).
+   */
+  checksums(): Uint8Array
+  /**
    * What happened on a frame, for the visualiser: `kind | depth << 2`, where
    * kind is one of the FRAME_* constants and depth is the depth of a rollback
    * that *landed* on this frame, or zero. -1 for a frame outside the ring.
@@ -598,6 +605,19 @@ export function createNetplay(
       })
       // dataMismatch is deliberately not cleared: it is a fact about the peer,
       // not a measurement, and it does not stop being true.
+    },
+
+    checksums() {
+      // Sorted by frame, because frame order is what the server replays in and
+      // nothing here guarantees it otherwise. Today the keys happen to be
+      // inserted in order — a rollback re-sets an existing key, which leaves a
+      // Map's iteration order alone — so this is one line against a change in
+      // how the checkpoints are taken rather than against a bug that exists.
+      const frames = [...sums.keys()].sort((a, b) => a - b)
+      const out = new Uint8Array(frames.length * 4)
+      const v = new DataView(out.buffer)
+      frames.forEach((f, i) => v.setUint32(i * 4, sums.get(f)! >>> 0, true))
+      return out
     },
 
     ping() {

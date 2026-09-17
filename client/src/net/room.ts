@@ -40,6 +40,12 @@ export interface Session {
    * people already agreed to join.
    */
   readonly chars: [number, number]
+  /**
+   * The match this pairing was recorded as, or 0 for one that was not — a
+   * private match by code is for testing and for the demo, and a ladder made of
+   * matches two people arranged between themselves is not a ladder.
+   */
+  readonly matchID: number
   close(): void
 }
 
@@ -125,9 +131,16 @@ export async function negotiate(
   // The first frame the server ever sends is the role, and it is sent when the
   // pair is complete — so "you are the host" also means "the other end is here,
   // start offering".
-  const role = await text.next()
+  // "host" or "host 42" — the id is the match the server recorded this pairing
+  // as, and only a queued match has one.
+  const opening = await text.next()
+  const [role, id] = opening.split(' ')
   if (role !== 'host' && role !== 'guest') {
-    throw new Error(`the room sent ${JSON.stringify(role)} where a role belongs`)
+    throw new Error(`the room sent ${JSON.stringify(opening)} where a role belongs`)
+  }
+  const matchID = id ? Number(id) : 0
+  if (!Number.isInteger(matchID) || matchID < 0) {
+    throw new Error(`the room sent ${JSON.stringify(id)} where a match id belongs`)
   }
 
   const conn =
@@ -148,12 +161,12 @@ export async function negotiate(
   if (kind === 'p2p') {
     const peer = await conn.ready
     sig.close() // the room has done its job
-    return {peer, kind, seat, chars: agreed, close: () => conn.close()}
+    return {peer, kind, seat, chars: agreed, matchID, close: () => conn.close()}
   }
 
   conn.close()
   sig.onBinary(onMessage)
-  return {peer: sig.asPeer(), kind, seat, chars: agreed, close: () => sig.close()}
+  return {peer: sig.asPeer(), kind, seat, chars: agreed, matchID, close: () => sig.close()}
 }
 
 /**

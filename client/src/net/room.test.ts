@@ -250,6 +250,33 @@ describe('room negotiation', () => {
     await expect(session).rejects.toThrow(/where a character pair belongs/)
   })
 
+  /**
+   * A queued match is recorded server-side and its id rides on the role frame;
+   * a private match by code has none, and 0 is what tells the client there is
+   * nowhere to upload a result to.
+   */
+  it('carries the match id when the pairing was recorded', async () => {
+    for (const [opening, want] of [
+      ['guest 42', 42],
+      ['guest', 0],
+    ] as const) {
+      const sig = fakeSignal()
+      const rtc = fakeConnectors()
+
+      const session = negotiate(sig.signal, () => {}, PICKED, rtc.connectors)
+      sig.arrive(opening) // the role frame is what carries the id
+      await flush()
+      sig.arrive('their-offer')
+      await flush()
+
+      rtc.connect()
+      sig.arrive('p2p 0,1')
+      await flush()
+
+      expect((await session).matchID).toBe(want)
+    }
+  })
+
   it('fails on a room that does not speak the protocol', async () => {
     const sig = fakeSignal()
     const session = negotiate(sig.signal, () => {}, PICKED, fakeConnectors().connectors)
