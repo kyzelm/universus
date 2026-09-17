@@ -320,7 +320,14 @@ func (m *Move) BoxesAt(frame int32) *Keyframe {
 }
 
 // Character is one fighter's complete data.
+//
+// Not GameState: this is immutable reference data loaded once, so the rules
+// about pointers and fixed sizes do not apply to it. The name is here for the
+// character select to read — the sim itself never looks at it, and it takes no
+// part in the checksum, which covers the *files* by way of their hash.
 type Character struct {
+	Name string
+
 	Health int32
 
 	WalkForward Fix

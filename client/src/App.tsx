@@ -1,8 +1,10 @@
 import {useEffect, useRef, useState} from 'react'
 import {createBot} from './game/bot'
 import {DUMMY_MODES} from './game/dummy'
-import {AI_TIERS} from './sim/wasm'
+import {AI_TIERS, loadSim, roster as loadRoster} from './sim/wasm'
 import {startGame, type Game} from './game/game'
+import Menu from './Menu'
+import {setupFromURL, type RunSetup} from './setup'
 import NetPanel from './net/NetPanel'
 
 declare global {
@@ -105,43 +107,32 @@ function Controls() {
   )
 }
 
-/**
- * ?ai, or ?ai=easy|normal|hard. Vs-AI is the mode that demos with no network
- * and no second machine (03 Game Design/AI Opponent.md), so it is reachable
- * from the URL like everything else a run is set up with. Read in two places —
- * the match setup and the control hint — so it is one function.
- */
-function aiFromURL(): number {
-  const params = new URLSearchParams(location.search)
-  if (!params.has('ai')) return 0
-  const tier = AI_TIERS.indexOf((params.get('ai') || 'normal') as (typeof AI_TIERS)[number])
-  return tier > 0 ? tier : AI_TIERS.indexOf('normal')
-}
-
-/**
- * ?p1=0&p2=1 picks the roster entries, defaulting to the first for both.
- *
- * **Not a character select screen**, which belongs with the menus — this is the
- * same thing every other part of a run's setup already is, a URL parameter, and
- * it is what makes the second character playable at all. Both ends of a netplay
- * session must pass the same pair: the characters are in `GameState`, so two
- * clients that disagreed would desync on frame 0 rather than play a mismatch.
- */
-function charsFromURL(): [number, number] {
-  const params = new URLSearchParams(location.search)
-  const pick = (key: string) => {
-    const n = Number(params.get(key))
-    return Number.isInteger(n) && n >= 0 ? n : 0
-  }
-  return [pick('p1'), pick('p2')]
-}
-
 export default function App() {
-  const ai = aiFromURL()
   const host = useRef<HTMLDivElement>(null)
   const [game, setGame] = useState<Game | null>(null)
 
+  // The run being played, or null for the menu. A URL that names one skips the
+  // menu entirely; a bare URL is somebody arriving, and they get the title.
+  const [setup, setSetup] = useState<RunSetup | null>(setupFromURL)
+
+  // The roster for the character select, loaded once. loadSim is idempotent, so
+  // this is the same instance startGame goes on to use rather than a second one.
+  const [roster, setRoster] = useState<{index: number; name: string}[]>([])
   useEffect(() => {
+    let cancelled = false
+    void loadSim().then(() => {
+      if (!cancelled) setRoster(loadRoster())
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const ai = setup?.ai ?? 0
+
+  useEffect(() => {
+    if (setup === null) return
+
     // ?bench leaves the sim untouched so a measurement harness can drive it
     // without the render loop advancing frames underneath it.
     if (new URLSearchParams(location.search).has('bench')) return
@@ -151,12 +142,11 @@ export default function App() {
     // and nobody pressing anything is a prediction that is always right.
     const params = new URLSearchParams(location.search)
     const bot = params.has('bot') ? createBot() : undefined
-    // ?training is the lab (03 Game Design/Game Modes.md): infinite resources,
+    // Training is the lab (03 Game Design/Game Modes.md): infinite resources,
     // no clock, no round end, and no netplay — the mode is sim state, so a
     // match cannot be half in it.
-    const training = params.has('training')
-    const ai = aiFromURL()
-    const chars = charsFromURL()
+    const training = setup.mode === 'training'
+    const {ai, chars} = setup
 
     let started: Game | undefined
     let cancelled = false
@@ -194,7 +184,20 @@ export default function App() {
       delete window.universus
       setGame(null)
     }
-  }, [])
+  }, [setup])
+
+  if (setup === null) {
+    return (
+      <main>
+        {roster.length > 0 ? (
+          <Menu roster={roster} onStart={setSetup} />
+        ) : (
+          <p className="keys">loading the sim…</p>
+        )}
+        <Controls />
+      </main>
+    )
+  }
 
   return (
     <main>
@@ -205,6 +208,16 @@ export default function App() {
           P1 <b>WASD</b> · P2 <b>{ai ? AI_TIERS[ai] : 'arrows'}</b>
           {game?.training && ' · training: R resets · 0-7 dummy (6 record, 7 play)'}
         </span>
+        {/*
+          Back to the title. Only offered when the URL did not name the run:
+          a measurement harness, a CI run and a link somebody was sent all
+          arrive with parameters, and none of them has a menu to return to.
+        */}
+        {setupFromURL() === null && (
+          <button type="button" onClick={() => setSetup(null)}>
+            menu
+          </button>
+        )}
         {/*
           Every mode saves now, including the lab and an AI match. The log used
           to be the inputs the *caller* fed the sim and nothing else, which is

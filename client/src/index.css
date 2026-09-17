@@ -181,3 +181,67 @@ button.on {
 .sweep .error {
   color: var(--accent);
 }
+
+/* The menu. Two screens and no chrome: a title with four modes, then two
+   columns of fighters. It is the canvas width because everything on this page
+   is, and the game replaces it in place rather than appearing beside it. */
+.menu {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  padding: 24px 0;
+}
+
+.menu h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.menu h2 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: normal;
+  color: var(--dim);
+}
+
+.menu .modes {
+  display: grid;
+  gap: 6px;
+  width: 420px;
+}
+
+/* A mode is a name and the one sentence that says what it is for. The hint is
+   not decoration: four buttons reading local / AI / training / online tell a
+   person nothing about which one they want. */
+.menu .modes button {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.menu .modes button span {
+  color: var(--dim);
+  font-size: 0.75rem;
+}
+
+.menu .select {
+  display: flex;
+  gap: 48px;
+}
+
+.menu .column {
+  display: grid;
+  gap: 6px;
+  justify-items: stretch;
+  min-width: 150px;
+}
+
+.menu .row {
+  display: flex;
+  gap: 6px;
+}

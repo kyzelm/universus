@@ -473,7 +473,14 @@ export async function startGame(
       // Never into a training match: the mode is in the state, so two ends that
       // disagreed about it would desync on frame 0. The panel refuses the
       // connection before this, and this is the second lock on the same door.
-      reset(false)
+      //
+      // The characters come along, because they are state too. **Both ends must
+      // have chosen the same pair** — the character select and `?p1`/`?p2` both
+      // say so, and a mismatch is a checksum disagreement on frame 0 rather
+      // than a match where each player sees a different opponent. The host
+      // deciding for both, the way it already decides the transport (D88), is
+      // the fix and it needs a handshake this does not have yet.
+      reset(false, 0, chars)
       // The match restarts at frame 0, so what has been fired restarts with it.
       pump.reset()
       sparks.length = 0

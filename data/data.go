@@ -727,6 +727,13 @@ func (jc *jsonCharacter) convert() (sim.Character, error) {
 	// decided by cross-multiplying the two players' health against each other's
 	// maximum, and two values above 46 340 overflow the int32 that holds the
 	// product. 30 000 is three times the shipped pool and well clear of it.
+	// A nameless character is a blank button on the select screen, and the
+	// select screen is the only thing that reads this.
+	if jc.Name == "" {
+		return c, fmt.Errorf("no name")
+	}
+	c.Name = jc.Name
+
 	if jc.Health <= 0 || jc.Health > 30000 {
 		return c, fmt.Errorf("health is %d, want 1..30000", jc.Health)
 	}

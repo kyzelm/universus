@@ -13,6 +13,7 @@ declare global {
     checksum(): number
     dataVersion(): number
     numCharacters(): number
+    characterName(i: number): string
     snapshotPtr(): number
     snapshotLen(): number
     noop(): void
@@ -260,6 +261,19 @@ export interface Setup {
  */
 export function reset(training = false, ai = 0, chars: [number, number] = [0, 0]): void {
   sim.reset(training, ai, chars[0], chars[1])
+}
+
+/**
+ * The roster, as the character select needs it: index and display name, in the
+ * order the sim holds them. That order is the filename order on both machines
+ * (data/data.go), which is what lets one end send an index and the other draw
+ * the right fighter.
+ */
+export function roster(): {index: number; name: string}[] {
+  return Array.from({length: numCharacters()}, (_, index) => ({
+    index,
+    name: sim.characterName(index),
+  }))
 }
 
 /** How many entries the loaded roster has. */

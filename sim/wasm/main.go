@@ -127,6 +127,18 @@ func main() {
 		return int(sim.NumCharacters())
 	}))
 
+	// characterName(i) is the roster entry's display name, for the character
+	// select. A string crossing the boundary is fine here for the reason
+	// GameState never does: this is immutable reference data read once when a
+	// menu is drawn, not per-frame state.
+	api.Set("characterName", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		i := int32(args[0].Int())
+		if i < 0 || i >= sim.NumCharacters() {
+			return ""
+		}
+		return sim.CharacterAt(i).Name
+	}))
+
 	// dataVersion() is the hash of the embedded character files. Both ends
 	// compare it before the first frame: different frame data is a desync that
 	// no amount of checksum exchange can diagnose after the fact.
