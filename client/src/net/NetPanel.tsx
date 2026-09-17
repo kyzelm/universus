@@ -3,6 +3,7 @@ import type {Game} from '../game/game'
 import {CLEAN, type Impairment} from './impair'
 import {guest, host, type Connection} from './peer'
 import {joinRoom, type Kind, type Session} from './room'
+import {roster} from '../sim/wasm'
 
 /**
  * The measurement matrix, as buttons (01 Thesis/Measurement Methodology.md,
@@ -47,6 +48,15 @@ function urlImpairment(): Impairment | null {
  * Once the channel opens this hands the peer to the game and gets out of the
  * way — the netplay numbers live in the HUD, next to the frame they describe.
  */
+/**
+ * "Shoto vs Grappler". Read from the sim rather than kept here, so a roster
+ * change cannot leave the panel naming a fighter nobody is playing.
+ */
+function matchup(chars: [number, number]): string {
+  const names = roster()
+  return `${names[chars[0]]?.name ?? '?'} vs ${names[chars[1]]?.name ?? '?'}`
+}
+
 export default function NetPanel({game}: {game: Game | null}) {
   const [role, setRole] = useState<'idle' | 'host' | 'guest'>('idle')
   const [localBlob, setLocalBlob] = useState('')
@@ -77,13 +87,17 @@ export default function NetPanel({game}: {game: Game | null}) {
 
     try {
       setStatus('waiting for the other end…')
-      const s = await joinRoom(joining, (data) => game.receive(data))
+      // This end's pick goes in; the host's comes back, for both ends.
+      const s = await joinRoom(joining, (data) => game.receive(data), game.chars)
 
       room.current = s
       setRole(s.seat === 0 ? 'host' : 'guest')
       setKind(s.kind)
-      game.connect(s.peer, s.seat)
-      setStatus('connected')
+      game.connect(s.peer, s.seat, s.chars)
+      // Naming the pair is not decoration for the guest: the host picked it, so
+      // a player who chose one fighter and is handed another needs the line
+      // that says why. It costs the host nothing to read the same line.
+      setStatus(`connected — ${matchup(s.chars)}`)
 
       // Applied after connecting, not before: connect() builds the link, so a
       // condition set earlier would be replaced by the clean one.
@@ -183,13 +197,15 @@ export default function NetPanel({game}: {game: Game | null}) {
         </div>
 
         <p className="keys">
-          {status} — same room code on both ends, or <b>host</b>/<b>join</b> to signal by hand
+          {status} — same room code on both ends, or <b>host</b>/<b>join</b> to signal by hand.
+          The host&apos;s characters are the ones played; signalling by hand has no room to
+          agree over, so both ends must have picked the same pair
         </p>
       </section>
     )
   }
 
-  const connected = status === 'connected'
+  const connected = status.startsWith('connected')
   return (
     <section className="net">
       <p className="keys">

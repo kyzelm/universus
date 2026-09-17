@@ -28,6 +28,17 @@ export interface Session {
   readonly kind: Kind
   /** The host drives P1. */
   readonly seat: 0 | 1
+  /**
+   * The characters the match is played with, **decided by the host for both
+   * ends**, exactly as the transport is. They are `GameState`, so two clients
+   * that disagreed would not play a mismatch — they would disagree on the
+   * frame-0 checksum and desync before either player pressed anything.
+   *
+   * The guest's own choice is overridden rather than negotiated. Negotiating
+   * means a screen where two people confirm each other, and this is a room two
+   * people already agreed to join.
+   */
+  readonly chars: [number, number]
   close(): void
 }
 
@@ -50,8 +61,9 @@ export interface Connectors {
 export async function joinRoom(
   code: string,
   onMessage: (data: ArrayBuffer) => void,
+  chars: [number, number],
 ): Promise<Session> {
-  return negotiate(await openRoom(relayURL(code)), onMessage)
+  return negotiate(await openRoom(relayURL(code)), onMessage, chars)
 }
 
 /** Where the page came from — `location`, or a stand-in in a test. */
@@ -80,6 +92,7 @@ export function relayURL(code: string, origin: Origin = location): string {
 export async function negotiate(
   sig: Signal,
   onMessage: (data: ArrayBuffer) => void,
+  chars: [number, number],
   connectors: Connectors = {host, guest},
   fallbackMs = FALLBACK_MS,
 ): Promise<Session> {
@@ -100,19 +113,46 @@ export async function negotiate(
   sig.send(conn.localBlob)
   if (role === 'host') await conn.accept!(await text.next())
 
-  const kind =
-    role === 'host' ? await decide(conn, sig, fallbackMs) : await follow(conn, text, fallbackMs)
+  const verdict =
+    role === 'host'
+      ? await decide(conn, sig, fallbackMs, chars)
+      : await follow(conn, text, fallbackMs)
+  const {kind} = verdict
   const seat = role === 'host' ? 0 : 1
+  const agreed = role === 'host' ? chars : verdict.chars
 
   if (kind === 'p2p') {
     const peer = await conn.ready
     sig.close() // the room has done its job
-    return {peer, kind, seat, close: () => conn.close()}
+    return {peer, kind, seat, chars: agreed, close: () => conn.close()}
   }
 
   conn.close()
   sig.onBinary(onMessage)
-  return {peer: sig.asPeer(), kind, seat, close: () => sig.close()}
+  return {peer: sig.asPeer(), kind, seat, chars: agreed, close: () => sig.close()}
+}
+
+/**
+ * The host's verdict on the wire: the transport and the pair of characters, in
+ * one message rather than two. One message because the socket is closed the
+ * moment P2P is up, and a second send racing that close is a guest waiting for
+ * a message that will never arrive.
+ */
+function encodeVerdict(kind: Kind, chars: [number, number]): string {
+  return `${kind} ${chars[0]},${chars[1]}`
+}
+
+function decodeVerdict(text: string): {kind: Kind; chars: [number, number]} {
+  const [kind, pair] = text.split(' ')
+  if (kind !== 'p2p' && kind !== 'relay') {
+    throw new Error(`the host sent ${JSON.stringify(text)} where a transport belongs`)
+  }
+
+  const chars = (pair ?? '').split(',').map(Number)
+  if (chars.length !== 2 || !chars.every((c) => Number.isInteger(c) && c >= 0)) {
+    throw new Error(`the host sent ${JSON.stringify(pair)} where a character pair belongs`)
+  }
+  return {kind, chars: [chars[0], chars[1]]}
 }
 
 /**
@@ -121,29 +161,32 @@ export async function negotiate(
  * machine and 5.1 s on the other leaves one end on P2P and the other on the
  * relay, each talking to nobody.
  */
-async function decide(conn: Connection, sig: Signal, fallbackMs: number): Promise<Kind> {
+async function decide(
+  conn: Connection,
+  sig: Signal,
+  fallbackMs: number,
+  chars: [number, number],
+): Promise<{kind: Kind; chars: [number, number]}> {
   const ready = await within(conn.ready, fallbackMs)
   const kind: Kind = ready === TIMEOUT ? 'relay' : 'p2p'
-  sig.send(kind)
-  return kind
+  sig.send(encodeVerdict(kind, chars))
+  return {kind, chars}
 }
 
 async function follow(
   conn: Connection,
   text: {next(): Promise<string>},
   fallbackMs: number,
-): Promise<Kind> {
+): Promise<{kind: Kind; chars: [number, number]}> {
   // Twice the host's budget: its verdict is sent at the five-second mark at the
   // latest, and has a trip to make after that.
-  const verdict = await within(text.next(), fallbackMs * 2)
-  if (verdict === TIMEOUT) throw new Error('the host never said which transport to use')
-  if (verdict !== 'p2p' && verdict !== 'relay') {
-    throw new Error(`the host sent ${JSON.stringify(verdict)} where a transport belongs`)
-  }
+  const said = await within(text.next(), fallbackMs * 2)
+  if (said === TIMEOUT) throw new Error('the host never said which transport to use')
+  const verdict = decodeVerdict(said)
 
   // Same ICE negotiation, so a channel the host has open is about to be open
   // here. If it is not, the verdict is wrong and playing on would be worse.
-  if (verdict === 'p2p' && (await within(conn.ready, fallbackMs)) === TIMEOUT) {
+  if (verdict.kind === 'p2p' && (await within(conn.ready, fallbackMs)) === TIMEOUT) {
     throw new Error('the host is on P2P and this end never connected')
   }
   return verdict

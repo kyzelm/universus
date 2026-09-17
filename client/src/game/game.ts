@@ -120,11 +120,16 @@ export interface Game {
    * seat 1 drives P2; both ends reset to frame 0, and from then on each side
    * simulates frame N from (its own input at N, the other side's input at N).
    */
-  connect(peer: Peer, seat: 0 | 1): void
+  connect(peer: Peer, seat: 0 | 1, pair?: [number, number]): void
   /** Feed a packet in. The panel owns the channel, so it forwards them here. */
   receive(data: ArrayBuffer): void
   /** True in the lab. The net panel reads it and refuses to connect. */
   readonly training: boolean
+  /**
+   * The characters this run was started with. The panel hands them to the
+   * room, where the host's pair becomes the pair both ends play.
+   */
+  readonly chars: [number, number]
   /** Starts the match over, in the same mode. The training reset key. */
   restart(): void
   /**
@@ -439,6 +444,12 @@ export async function startGame(
   return {
     training,
 
+    // A getter, not the value: connect() replaces the pair with the room's, and
+    // a field captured here would still be reporting what this end picked.
+    get chars() {
+      return chars
+    },
+
     restart() {
       reset(training, ai, chars)
       pump.reset()
@@ -469,17 +480,21 @@ export async function startGame(
       })
     },
 
-    connect(peer, seat) {
+    connect(peer, seat, pair) {
       // Never into a training match: the mode is in the state, so two ends that
       // disagreed about it would desync on frame 0. The panel refuses the
       // connection before this, and this is the second lock on the same door.
       //
-      // The characters come along, because they are state too. **Both ends must
-      // have chosen the same pair** — the character select and `?p1`/`?p2` both
-      // say so, and a mismatch is a checksum disagreement on frame 0 rather
-      // than a match where each player sees a different opponent. The host
-      // deciding for both, the way it already decides the transport (D88), is
-      // the fix and it needs a handshake this does not have yet.
+      // The characters come along, because they are state too, and **the pair
+      // the room agreed on wins over the one this end picked**: the host
+      // decides both, exactly as it decides the transport (D88). Two ends that
+      // chose differently do not play a mismatch — they disagree on the frame-0
+      // checksum and desync before anybody has pressed anything, which is a
+      // failure with no symptom that points at its cause.
+      //
+      // The fallback is this end's own choice, for the hand-signalled path,
+      // which has no room to agree over.
+      chars = pair ?? chars
       reset(false, 0, chars)
       // The match restarts at frame 0, so what has been fired restarts with it.
       pump.reset()

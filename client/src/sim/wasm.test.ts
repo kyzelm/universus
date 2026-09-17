@@ -8,6 +8,7 @@ import {
   EVENT_HIT,
   eventsAt,
   initSim,
+  numCharacters,
   readSnapshot,
   reset,
   SUPER_BARS,
@@ -277,4 +278,34 @@ test('an AI seat plays without anybody pressing anything', () => {
   reset()
   for (let f = 0; f < 600; f++) advance(0, 0)
   expect(readSnapshot().players[1].moveIndex).toBe(-1)
+})
+
+/**
+ * The characters cross the boundary as a pair of indices and land in
+ * `GameState`, which is why they have to be right before frame 0 rather than
+ * applied afterwards: an online match adopts the host's pair
+ * (02 Architecture/Transport and Connectivity.md) and every frame either end
+ * simulates depends on it.
+ *
+ * Told apart by the health pool, because that is the one number the snapshot
+ * already carries that differs between the two shipped fighters.
+ */
+test('a run plays the characters it was reset with', () => {
+  const health = (chars: [number, number]) => {
+    reset(false, 0, chars)
+    const {players} = readSnapshot()
+    return [players[0].health, players[1].health]
+  }
+
+  const [shoto] = health([0, 0])
+  const [grappler] = health([1, 1])
+  expect(grappler).toBeGreaterThan(shoto)
+
+  // And each seat is set from its own index rather than both from the first.
+  expect(health([0, 1])).toEqual([shoto, grappler])
+  expect(health([1, 0])).toEqual([grappler, shoto])
+
+  // A roster the sim does not have is the first entry, not a fighter who
+  // cannot move — the clamp startGame applies, checked where the bound is.
+  expect(numCharacters()).toBe(2)
 })

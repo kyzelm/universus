@@ -5,6 +5,13 @@ import type {Connection, Peer} from './peer'
 /** Drains pending microtasks and any timer due now. */
 const flush = () => vi.advanceTimersByTimeAsync(0)
 
+/**
+ * What this end picked in the character select. Not [0, 0]: a pair that
+ * survives the negotiation only because every index happens to be zero proves
+ * nothing about the negotiation.
+ */
+const PICKED: [number, number] = [1, 0]
+
 function fakeSignal() {
   const sent: string[] = []
   const relayed: ArrayBuffer[] = []
@@ -68,7 +75,7 @@ describe('room negotiation', () => {
     const sig = fakeSignal()
     const rtc = fakeConnectors()
 
-    const session = negotiate(sig.signal, () => {}, rtc.connectors)
+    const session = negotiate(sig.signal, () => {}, PICKED, rtc.connectors)
     sig.arrive('host')
     await flush()
 
@@ -87,7 +94,7 @@ describe('room negotiation', () => {
     expect(s.seat).toBe(0)
     expect(s.peer).toBe(rtc.channel)
     // The verdict goes out, then the room is no longer needed.
-    expect(sig.sent).toEqual(['local-blob', 'p2p'])
+    expect(sig.sent).toEqual(['local-blob', 'p2p 1,0'])
     expect(sig.state.closed).toBe(true)
   })
 
@@ -97,7 +104,7 @@ describe('room negotiation', () => {
     const rtc = fakeConnectors()
     const got: ArrayBuffer[] = []
 
-    const session = negotiate(sig.signal, (d) => got.push(d), rtc.connectors)
+    const session = negotiate(sig.signal, (d) => got.push(d), PICKED, rtc.connectors)
     sig.arrive('host')
     await flush()
     sig.arrive('their-answer')
@@ -109,7 +116,7 @@ describe('room negotiation', () => {
     const s = await session
 
     expect(s.kind).toBe('relay')
-    expect(sig.sent).toEqual(['local-blob', 'relay'])
+    expect(sig.sent).toEqual(['local-blob', 'relay 1,0'])
     // The socket is the transport now, so it stays open and the peer connection
     // does not.
     expect(sig.state.closed).toBe(false)
@@ -125,7 +132,7 @@ describe('room negotiation', () => {
     const sig = fakeSignal()
     const rtc = fakeConnectors()
 
-    const session = negotiate(sig.signal, () => {}, rtc.connectors)
+    const session = negotiate(sig.signal, () => {}, PICKED, rtc.connectors)
     sig.arrive('guest')
     await flush()
 
@@ -138,7 +145,7 @@ describe('room negotiation', () => {
     expect(sig.sent).toEqual(['local-blob'])
 
     rtc.connect()
-    sig.arrive('p2p')
+    sig.arrive('p2p 0,1')
     await flush()
 
     const s = await session
@@ -155,14 +162,14 @@ describe('room negotiation', () => {
     const sig = fakeSignal()
     const rtc = fakeConnectors()
 
-    const session = negotiate(sig.signal, () => {}, rtc.connectors)
+    const session = negotiate(sig.signal, () => {}, PICKED, rtc.connectors)
     sig.arrive('guest')
     await flush()
     sig.arrive('their-offer')
     await flush()
 
     rtc.connect()
-    sig.arrive('relay')
+    sig.arrive('relay 0,1')
     await flush()
 
     expect((await session).kind).toBe('relay')
@@ -172,21 +179,80 @@ describe('room negotiation', () => {
     const sig = fakeSignal()
     const rtc = fakeConnectors()
 
-    const session = negotiate(sig.signal, () => {}, rtc.connectors)
+    const session = negotiate(sig.signal, () => {}, PICKED, rtc.connectors)
     sig.arrive('guest')
     await flush()
     sig.arrive('their-offer')
     await flush()
 
-    sig.arrive('p2p') // and the channel never opens here
+    sig.arrive('p2p 0,1') // and the channel never opens here
     const failed = expect(session).rejects.toThrow(/never connected/)
     await vi.advanceTimersByTimeAsync(FALLBACK_MS)
     await failed
   })
 
+  /**
+   * **The host picks the fighters for both ends**, the way it picks the
+   * transport. The guest arrives having chosen `PICKED` and leaves playing what
+   * the host said, because the characters are `GameState`: two ends that kept
+   * their own choices would not play a mismatch, they would disagree on the
+   * frame-0 checksum and desync before either player pressed anything.
+   */
+  it('joins: plays the host\'s pair rather than its own', async () => {
+    const sig = fakeSignal()
+    const rtc = fakeConnectors()
+
+    const session = negotiate(sig.signal, () => {}, PICKED, rtc.connectors)
+    sig.arrive('guest')
+    await flush()
+    sig.arrive('their-offer')
+    await flush()
+
+    rtc.connect()
+    sig.arrive('p2p 0,1')
+    await flush()
+
+    const s = await session
+    expect(s.chars).toEqual([0, 1])
+    expect(s.chars).not.toEqual(PICKED)
+  })
+
+  it('hosts: plays its own pair and says so', async () => {
+    const sig = fakeSignal()
+    const rtc = fakeConnectors()
+
+    const session = negotiate(sig.signal, () => {}, PICKED, rtc.connectors)
+    sig.arrive('host')
+    await flush()
+    sig.arrive('their-answer')
+    await flush()
+    rtc.connect()
+    await flush()
+
+    expect((await session).chars).toEqual(PICKED)
+  })
+
+  // A verdict that parses as a transport and not as a pair is a peer running a
+  // different build, and the match it would start is one that desyncs on frame
+  // 0 with nothing to point at.
+  it('joins: refuses a verdict with no pair in it', async () => {
+    const sig = fakeSignal()
+    const rtc = fakeConnectors()
+
+    const session = negotiate(sig.signal, () => {}, PICKED, rtc.connectors)
+    sig.arrive('guest')
+    await flush()
+    sig.arrive('their-offer')
+    await flush()
+
+    rtc.connect()
+    sig.arrive('p2p')
+    await expect(session).rejects.toThrow(/where a character pair belongs/)
+  })
+
   it('fails on a room that does not speak the protocol', async () => {
     const sig = fakeSignal()
-    const session = negotiate(sig.signal, () => {}, fakeConnectors().connectors)
+    const session = negotiate(sig.signal, () => {}, PICKED, fakeConnectors().connectors)
 
     sig.arrive('room full')
     await expect(session).rejects.toThrow(/where a role belongs/)
