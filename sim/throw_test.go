@@ -281,3 +281,85 @@ func TestTheTechWindowIsTheBalanceValue(t *testing.T) {
 			BalanceOf().ThrowTechFrames+1, BalanceOf().ThrowTechFrames)
 	}
 }
+
+// The command throw: one button and a half-circle, and it is the fixture's
+// move 16. The pair below is what the grappler is built out of
+// (03 Game Design/Roster Plan.md).
+const (
+	commandThrowIndex = int32(16)
+	commandThrowInput = InHP
+)
+
+// hcf walks player 1 through ← ↙ ↓ ↘ → and then presses the button, one frame
+// each. The directions are written from the facing the fixture starts in —
+// player 1 faces right, so forward is right.
+func hcf(s *GameState, button uint16) {
+	for _, in := range []uint16{InLeft, InLeft | InDown, InDown, InDown | InRight, InRight} {
+		s.Advance([2]uint16{in, 0})
+	}
+	s.Advance([2]uint16{InRight | button, 0})
+}
+
+// A half-circle forward is a motion in its own right, and it is the row the
+// table promised for years before this character existed.
+func TestHalfCircleComesOut(t *testing.T) {
+	s := facing(30)
+	hcf(&s, commandThrowInput)
+
+	if got := s.Players[0].MoveIndex; got != commandThrowIndex {
+		t.Fatalf("the half-circle gave move %d, want the command throw %d", got, commandThrowIndex)
+	}
+}
+
+// **A command throw cannot be teched.** The defender presses their throw inside
+// the window — the same press that escapes an ordinary throw in
+// TestATechEscapesTheThrow — and it does not save them.
+//
+// The two throws in the fixture are identical bar the motion, so a failure here
+// is about the rule and not about reach, timing or damage.
+func TestACommandThrowCannotBeTeched(t *testing.T) {
+	full := char().Health
+
+	s := facing(30)
+	hcf(&s, commandThrowInput)
+	if s.Players[0].MoveIndex != commandThrowIndex {
+		t.Fatalf("the command throw did not come out")
+	}
+
+	mv := &char().Moves[commandThrowIndex]
+	for s.Players[1].State != StateThrown && s.Players[0].State == StateAttack {
+		in := uint16(0)
+		if s.Players[0].StateFrame == mv.Startup-2 {
+			in = throwInput
+		}
+		s.Advance([2]uint16{0, in})
+	}
+
+	if s.Players[1].State != StateThrown {
+		t.Fatal("the command throw never connected")
+	}
+	if s.Players[1].Health >= full {
+		t.Error("the defender took no damage: the command throw was teched")
+	}
+	if s.Players[0].State == StateThrown {
+		t.Error("the attacker is in the tech recovery: the command throw was teched")
+	}
+}
+
+// The tech input is the throw *without* a motion, and with two throws in the
+// roster that is a lookup that can pick the wrong one. If it ever did, the
+// character would tech with a single heavy punch — every punch thrown while
+// being grabbed would be an escape.
+func TestTheTechInputIsTheOrdinaryThrow(t *testing.T) {
+	if mv := throwOf(0); mv == nil {
+		t.Fatal("the fixture has no ordinary throw")
+	} else if mv.Button != throwInput {
+		t.Errorf("the tech input is %#x, want the two-button throw %#x", mv.Button, throwInput)
+	}
+
+	s := New()
+	s.Advance([2]uint16{0, commandThrowInput})
+	if got := s.techFrame(1, s.latest()); got >= 0 {
+		t.Errorf("pressing the command throw's button teched on frame %d", got)
+	}
+}

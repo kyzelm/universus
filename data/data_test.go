@@ -212,7 +212,15 @@ func TestValidationRejectsBadData(t *testing.T) {
 		{"a throw that releases immediately", func(c *jsonCharacter) {
 			c.Moves[0].Throw, c.Moves[0].Hitstun = true, 0
 		}},
-		{"a throw that is also a super", func(c *jsonCharacter) { c.Moves[0].Throw = true }},
+		// A throw *super* is legal — the grappler's level 3 is a command grab —
+		// but two throws with no motion are not: the motion-less one is the
+		// tech input, and a second would make the lookup pick by file order.
+		{"two throws with no motion", func(c *jsonCharacter) {
+			for i := range c.Moves {
+				c.Moves[i].Throw, c.Moves[i].Hitstun = true, 20
+				c.Moves[i].Super, c.Moves[i].Input.Motion = 0, ""
+			}
+		}},
 
 		// The one the design note itself got wrong: 8.0 and -0.03 pass every
 		// individual check and give a nine-second jump.
@@ -490,33 +498,42 @@ func TestTheShippedRosterHasThreeSupers(t *testing.T) {
 // The cancel tiering is data, and it is only tiering if the sources differ.
 // Level 1 out of cancelable normals, level 3 out of anything — including the
 // heavies, which cancel into nothing else.
-// The throw is what makes blocking a decision, so the shipped roster has to
-// have one — and it has to be on more than one button, since a throw sharing a
-// button with a normal would take that button over for the rest of the match.
+// The throw is what makes blocking a decision, so every character in the
+// shipped roster has exactly one ordinary throw — and it is on more than one
+// button, since a throw sharing a button with a normal would take that button
+// over for the rest of the match.
+//
+// A *command* throw is the other kind and obeys the opposite rule: one button,
+// and a motion is what buys it. The motion is also the discriminator the sim
+// uses, so if these two ever describe the same move the grappler techs with a
+// single punch.
 func TestTheShippedRosterHasAThrow(t *testing.T) {
 	cs, err := Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 
-	throws := 0
+	plain := 0
 	for _, c := range cs {
 		for m := int32(0); m < c.NumMoves; m++ {
 			mv := &c.Moves[m]
 			if !mv.IsThrow() {
 				continue
 			}
-			throws++
-			if bits.OnesCount16(mv.Button) < 2 {
-				t.Errorf("the throw is on one button (%#x)", mv.Button)
-			}
 			if mv.Hitstun <= 0 {
-				t.Error("the throw has no hitstun")
+				t.Error("a throw has no hitstun")
+			}
+			if mv.Motion != sim.MotionNone {
+				continue // a command throw: pressed with a motion, not a pair
+			}
+			plain++
+			if bits.OnesCount16(mv.Button) < 2 {
+				t.Errorf("the ordinary throw is on one button (%#x)", mv.Button)
 			}
 		}
 	}
-	if throws != len(cs) {
-		t.Errorf("%d throws across %d characters, want one each", throws, len(cs))
+	if plain != len(cs) {
+		t.Errorf("%d ordinary throws across %d characters, want one each", plain, len(cs))
 	}
 }
 

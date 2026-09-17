@@ -12,6 +12,7 @@ declare global {
     reset(training?: boolean, ai?: number, c0?: number, c1?: number): void
     checksum(): number
     dataVersion(): number
+    numCharacters(): number
     snapshotPtr(): number
     snapshotLen(): number
     noop(): void
@@ -259,6 +260,11 @@ export interface Setup {
  */
 export function reset(training = false, ai = 0, chars: [number, number] = [0, 0]): void {
   sim.reset(training, ai, chars[0], chars[1])
+}
+
+/** How many entries the loaded roster has. */
+export function numCharacters(): number {
+  return sim.numCharacters()
 }
 
 /** FNV-1a over the packed state. The number both machines must agree on. */

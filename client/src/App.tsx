@@ -118,6 +118,24 @@ function aiFromURL(): number {
   return tier > 0 ? tier : AI_TIERS.indexOf('normal')
 }
 
+/**
+ * ?p1=0&p2=1 picks the roster entries, defaulting to the first for both.
+ *
+ * **Not a character select screen**, which belongs with the menus — this is the
+ * same thing every other part of a run's setup already is, a URL parameter, and
+ * it is what makes the second character playable at all. Both ends of a netplay
+ * session must pass the same pair: the characters are in `GameState`, so two
+ * clients that disagreed would desync on frame 0 rather than play a mismatch.
+ */
+function charsFromURL(): [number, number] {
+  const params = new URLSearchParams(location.search)
+  const pick = (key: string) => {
+    const n = Number(params.get(key))
+    return Number.isInteger(n) && n >= 0 ? n : 0
+  }
+  return [pick('p1'), pick('p2')]
+}
+
 export default function App() {
   const ai = aiFromURL()
   const host = useRef<HTMLDivElement>(null)
@@ -138,6 +156,7 @@ export default function App() {
     // match cannot be half in it.
     const training = params.has('training')
     const ai = aiFromURL()
+    const chars = charsFromURL()
 
     let started: Game | undefined
     let cancelled = false
@@ -157,7 +176,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
 
-    void startGame(host.current!, bot, training, ai).then((g) => {
+    void startGame(host.current!, bot, training, ai, chars).then((g) => {
       if (cancelled) return g.dispose()
       started = g
       // The measurement harness reads this. It is installed **here** rather

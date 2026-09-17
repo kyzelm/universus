@@ -46,12 +46,19 @@ func (s *GameState) techFrame(defender int, now uint32) int32 {
 	return s.Players[defender].pressWithin(now, mv.Button, uint32(balance.ThrowTechFrames))
 }
 
-// throwOf is the character's throw, or nil. Scanned in index order, so it is
-// the same move on every machine; the first one wins, and no character has two.
+// throwOf is the character's *ordinary* throw — the one with no motion — or
+// nil. Scanned in index order, so it is the same move on every machine.
+//
+// The motion is what tells the two kinds apart, and no third field is needed:
+// a throw you press with two buttons is the universal one every character has,
+// and a throw you press with a half-circle is a command throw. Only the first
+// is the tech input, which matters the moment a character has both — otherwise
+// the grappler would tech with a single punch, and every punch it threw while
+// being grabbed would escape.
 func throwOf(char int32) *Move {
 	c := CharacterAt(char)
 	for i := int32(0); i < c.NumMoves; i++ {
-		if c.Moves[i].IsThrow() {
+		if c.Moves[i].IsThrow() && c.Moves[i].Motion == MotionNone {
 			return &c.Moves[i]
 		}
 	}
@@ -65,7 +72,13 @@ func throwOf(char int32) *Move {
 func (s *GameState) applyThrow(attacker, defender int, mv *Move, now uint32) {
 	ap, dp := &s.Players[attacker], &s.Players[defender]
 
-	if s.techFrame(defender, now) >= 0 {
+	// **A command throw cannot be teched**, which is the genre's own rule and
+	// the whole reason a grappler is frightening: the throw that beats blocking
+	// is answerable, and the one that costs a motion is not. It is paid for in
+	// the data instead — slower, punishable on whiff, no invulnerability
+	// (03 Game Design/Roster Plan.md) — so the answer is to not be standing
+	// there rather than to press a button back.
+	if mv.Motion == MotionNone && s.techFrame(defender, now) >= 0 {
 		s.tech(attacker, defender)
 		return
 	}

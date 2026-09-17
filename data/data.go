@@ -711,7 +711,7 @@ var stances = map[string]int32{
 // all write "none" would be noise in every entry.
 var inputMotions = map[string]sim.Motion{
 	"": sim.MotionNone, "qcf": sim.MotionQCF, "qcb": sim.MotionQCB, "dp": sim.MotionDP,
-	"qcfx2": sim.MotionQCFx2, "qcbx2": sim.MotionQCBx2,
+	"qcfx2": sim.MotionQCFx2, "qcbx2": sim.MotionQCBx2, "hcf": sim.MotionHCF,
 }
 
 // ---- conversion and validation --------------------------------------------
@@ -801,12 +801,28 @@ func (jc *jsonCharacter) convert() (sim.Character, error) {
 	if len(jc.Moves) > sim.MaxMoves {
 		return c, fmt.Errorf("%d moves, max %d", len(jc.Moves), sim.MaxMoves)
 	}
+	// Throws with a motion are command throws and cannot be teched; the one
+	// without a motion is the ordinary throw, and it is also the input the sim
+	// reads to decide whether *this* character can tech at all. A second
+	// motion-less throw would make that lookup pick whichever came first in the
+	// file, so a character would tech with a button that is not the one they
+	// throw with — and nothing would report it.
+	//
+	// None at all is legal and means a character who cannot tech, which the sim
+	// already handles as the honest answer rather than a special case.
+	plainThrows := 0
 	for i := range jc.Moves {
 		m, err := jc.Moves[i].convert()
 		if err != nil {
 			return c, fmt.Errorf("move %q: %w", jc.Moves[i].ID, err)
 		}
+		if m.IsThrow() && m.Motion == sim.MotionNone {
+			plainThrows++
+		}
 		c.Moves[i] = m
+	}
+	if plainThrows > 1 {
+		return c, fmt.Errorf("%d throws with no motion: only one can be the tech input", plainThrows)
 	}
 	c.NumMoves = int32(len(jc.Moves))
 
@@ -902,10 +918,18 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 	}
 	m.Armor = int32(jm.Armor)
 
-	// Armour is what a bar buys. Free armour is a normal that beats every
-	// other normal in the game, and the only way to notice is to lose to it.
-	if m.Armored() && m.Drive == 0 {
-		return m, fmt.Errorf("armor %d costs no drive", m.Armor)
+	// **Armour must be paid for, and there are three currencies.** Drive bars
+	// buy it on a Drive Impact, a super level buys it on the grappler's level
+	// 2, and a motion buys it on the grappler's armoured advance — a special
+	// with a slow startup and an exposed recovery is a commitment in its own
+	// right (03 Game Design/Roster Plan.md).
+	//
+	// What the rule actually forbids, and what it forbade when Drive Impact was
+	// the only armoured move in the game, is armour on a **plain normal**: a
+	// button with no cost and no motion that beats every other button, where
+	// the only way to notice is to lose to it.
+	if m.Armored() && m.Drive == 0 && m.Super == 0 && m.Motion == sim.MotionNone {
+		return m, fmt.Errorf("armor %d on a plain normal: it costs no drive, no super level and no motion", m.Armor)
 	}
 
 	if jm.Reversal {
@@ -933,9 +957,6 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 		// throw that let go instantly would be a hit with no consequence.
 		if m.Hitstun <= 0 {
 			return m, fmt.Errorf("throw has no hitstun, so it releases immediately")
-		}
-		if m.Super > 0 {
-			return m, fmt.Errorf("a throw cannot also be a super")
 		}
 	}
 

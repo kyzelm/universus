@@ -20,6 +20,7 @@ import {
   COUNTER_NAMES,
   DRIVE_BARS,
   NOBODY,
+  numCharacters,
   PHASE_FIGHT,
   PHASE_INTRO,
   PHASE_KO,
@@ -176,6 +177,12 @@ export async function startGame(
   chars: [number, number] = [0, 0],
 ): Promise<Game> {
   await loadSim()
+  // The characters arrive from the URL, so they are user input and clamped
+  // here — the first point at which the roster is loaded and its size is
+  // known. An index nobody has is the zero character in the sim, which is a
+  // fighter that stands still and never says why.
+  const roster = numCharacters()
+  chars = [chars[0] % roster, chars[1] % roster]
   reset(training, ai, chars)
 
   const app = new Application()

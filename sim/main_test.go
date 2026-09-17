@@ -158,7 +158,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 16,
+		NumMoves: 17,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -469,6 +469,26 @@ func testCharacter() Character {
 	c.Moves[15].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(0), W: FromInt(34), H: FromInt(46)}
 	c.Moves[15].Keys[2] = Keyframe{Frame: 8, NumHurt: 1}
 	c.Moves[15].Keys[2].Hurt[0] = c.StandHurt
+
+	// A command throw: the grappler's move, and the fixture's second throw.
+	// Deliberately the same shape and reach as move 10 so the only difference
+	// between them is the motion — which is the whole thing under test, since
+	// the motion is what makes a throw untechable and what keeps it out of the
+	// tech-input lookup.
+	c.Moves[16] = Move{
+		Startup: 5, Active: 3, Recovery: 20,
+		Damage: 400, Hitstun: 40, Hitstop: 8,
+		Level: LevelMid, Stance: StanceStand, Button: InHP,
+		Motion:    MotionHCF,
+		Throw:     1,
+		Knockdown: 1,
+		NumKeys:   2,
+	}
+	c.Moves[16].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[16].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[16].Keys[1] = Keyframe{Frame: 5, NumHurt: 1, NumHit: 1}
+	c.Moves[16].Keys[1].Hurt[0] = c.StandHurt
+	c.Moves[16].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(10), W: FromInt(22), H: FromInt(30)}
 
 	return c
 }

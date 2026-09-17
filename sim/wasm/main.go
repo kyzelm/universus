@@ -118,6 +118,15 @@ func main() {
 		return int(session.EventsAt(uint32(args[0].Int())))
 	}))
 
+	// numCharacters() is how many entries the roster actually has. The view
+	// needs it to keep a character index out of the URL from naming somebody
+	// who does not exist: CharacterAt answers with the zero character rather
+	// than crashing inside a rollback replay, which is right for the sim and
+	// reads on screen as a fighter who will not move.
+	api.Set("numCharacters", js.FuncOf(func(js.Value, []js.Value) any {
+		return int(sim.NumCharacters())
+	}))
+
 	// dataVersion() is the hash of the embedded character files. Both ends
 	// compare it before the first frame: different frame data is a desync that
 	// no amount of checksum exchange can diagnose after the fact.

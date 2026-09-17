@@ -50,6 +50,8 @@ const (
 	// never reordered — a Motion is part of a move's identity in the data.
 	MotionQCFx2 // ↓ ↘ → ↓ ↘ →
 	MotionQCBx2 // ↓ ↙ ← ↓ ↙ ←
+
+	MotionHCF // ← ↙ ↓ ↘ → — the grappler's command throw
 )
 
 // satisfies reports whether a recognised motion also counts as a simpler one it
@@ -70,6 +72,13 @@ func (m Motion) satisfies(want Motion) bool {
 		return want == MotionQCF
 	case MotionQCBx2:
 		return want == MotionQCB
+	case MotionHCF:
+		// A half-circle forward ends in a quarter-circle forward, and this line
+		// is what keeps the table's new row from changing anything for a
+		// character that has no half-circle move. Walking back and then
+		// throwing a fireball is read as an HCF — deliberately, see the table —
+		// and the fireball still comes out.
+		return want == MotionQCF
 	}
 	return false
 }
@@ -93,11 +102,22 @@ func (m Motion) satisfies(want Motion) bool {
 // checked after DP is a dragon punch every time. And the single quarter-circle
 // is a prefix of the double, which is the ordinary priority case.
 //
-// Adding HCF for the grappler's command throw, or a charge motion if a charge
-// character ever exists, is a row here and nothing else. Neither is built:
-// charge is expansion-only by the roster plan's own account, and building an
-// input path no character uses is how engines grow dead code. The two super
-// motions below were exactly that row-and-nothing-else when the supers landed.
+// **HCF was exactly the row-and-nothing-else this comment promised**, added
+// with the grappler and above both singles because a half-circle forward ends
+// in a quarter-circle forward. A charge motion would be the same one-row change
+// if a charge character ever exists; it is expansion-only by the roster plan's
+// own account, and building an input path no character uses is how engines grow
+// dead code.
+//
+// **The half-circle is lenient, and that is a choice with a known cost.** The
+// scan may step over the diagonals, which is what makes the motion pressable on
+// a keyboard — releasing ← before pressing ↓ never produces ↙ at all, and a
+// half-circle that demanded it would be a move nobody can do. The price is that
+// *walking back and then throwing a fireball* reads as a half-circle: ←, then
+// ↓↘→. That is harmless today because `satisfies` hands an HCF down to QCF, so
+// a character without a half-circle move is unaffected, and no character has
+// both. The day one does, this row splits into a tight one the way the DP
+// shortcut did (D73, D89).
 //
 // The doubles take a wider window, because they are twice the input. Still
 // inside InputHistory, which every window must be.
@@ -122,6 +142,7 @@ var motions = []struct {
 	{MotionQCBx2, []uint8{DirDown, DirDownBack, DirBack, DirDown, DirDownBack, DirBack}, 26, false},
 	{MotionDP, []uint8{DirFwd, DirDown, DirDownFwd}, 13, false},
 	{MotionDP, []uint8{DirFwd, DirDown, DirFwd}, 13, true}, // the shortcut: no diagonal
+	{MotionHCF, []uint8{DirBack, DirDownBack, DirDown, DirDownFwd, DirFwd}, 20, false},
 	{MotionQCB, []uint8{DirDown, DirDownBack, DirBack}, 13, false},
 	{MotionQCF, []uint8{DirDown, DirDownFwd, DirFwd}, 13, false},
 }
