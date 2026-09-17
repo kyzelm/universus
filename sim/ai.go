@@ -59,6 +59,16 @@ const (
 	aiFireball
 	aiThrow
 	aiJump
+
+	// The two plans for a character that does not own the Shoto's answers.
+	// **The rule list asks what the character *has*, not what the archetype it
+	// was written against had** — a grappler pressing a dragon punch it does
+	// not own throws a jab, and pressing a quarter-circle it does not own
+	// presses nothing at all. That is an opponent standing still at the range
+	// it is supposed to be closing.
+	aiAntiAir       // the anti-air normal, for a character with no invincible reversal
+	aiDriveReversal // the escape every character has, for one with no DP
+
 	aiPlanCount
 )
 
@@ -179,6 +189,15 @@ func aiPress(plan, age int32, facing int32) uint16 {
 		return press(age, InDown|InHK)
 	case aiThrow:
 		return press(age, InLP|InLK)
+	case aiAntiAir:
+		// Crouching heavy punch: a hitbox rather than an invincible move, which
+		// is the trade a character without a reversal makes everywhere else too.
+		return press(age, InDown|InHP)
+	case aiDriveReversal:
+		// HP+HK. In blockstun it is the Drive Reversal — the one action that
+		// comes out of blockstun (D91) — and anywhere else it is a Drive
+		// Impact, which is a plausible thing to have pressed.
+		return press(age, InHP|InHK)
 	case aiJump:
 		// Pressed, not held: holding up would jump again on every landing,
 		// which is a plan nobody chose.
@@ -243,7 +262,10 @@ func aiDecide(s *GameState, i int, tier int32, r aiRandom) int32 {
 	// out late loses to the jump-in it was meant to beat, and that is the
 	// mistake a human makes too.
 	case o.Airborne() && dist <= balance.AIAntiAirRange && aiSeen(o, t.Reaction):
-		return aiDP
+		if aiHasMotion(p.Char, MotionDP) {
+			return aiDP
+		}
+		return aiAntiAir
 
 	// Punish. A move in its recovery cannot block, and the AI's heaviest
 	// button is the answer.
@@ -266,12 +288,19 @@ func aiDecide(s *GameState, i int, tier int32, r aiRandom) int32 {
 	// how a player reverses (D83), and it is why nothing here needs to know how
 	// long the stun is.
 	case p.State == StateBlockstun && aiRoll(r, balance.AIReversalPercent):
-		return aiDP
+		if aiHasMotion(p.Char, MotionDP) {
+			return aiDP
+		}
+		// No invincible reversal of its own, so it spends the gauge for one.
+		// Refused outright in Burnout, which the AI does not check and does not
+		// need to: a refused move is a press that does nothing, and the next
+		// decision is a few frames away.
+		return aiDriveReversal
 
 	// Fireball at range, and only with the screen clear of its own. One at a
 	// time is how the move is used, and it spaces the motions far enough apart
 	// that two of them cannot be read as a super.
-	case dist > balance.AIMidRange && !s.aiHasProjectile(i) &&
+	case dist > balance.AIMidRange && aiHasProjectile(p.Char) && !s.aiHasProjectile(i) &&
 		aiRoll(r, balance.AIProjectilePercent):
 		return aiFireball
 
@@ -298,6 +327,35 @@ func aiDecide(s *GameState, i int, tier int32, r aiRandom) int32 {
 		}
 		return aiNeutral
 	}
+}
+
+// aiHasMotion reports whether the character owns a move on this motion, and
+// aiHasProjectile whether any of its moves spawns one.
+//
+// Scanned rather than precomputed: the roster is a handful of moves, this runs
+// once per decision rather than once per frame, and a cache would be state
+// outside GameState that has to be invalidated when the roster loads.
+//
+// **A plan the character cannot perform is not a weaker plan, it is a frame of
+// standing still**, and the two are indistinguishable from outside.
+func aiHasMotion(char int32, m Motion) bool {
+	c := CharacterAt(char)
+	for i := int32(0); i < c.NumMoves; i++ {
+		if c.Moves[i].Motion == m {
+			return true
+		}
+	}
+	return false
+}
+
+func aiHasProjectile(char int32) bool {
+	c := CharacterAt(char)
+	for i := int32(0); i < c.NumMoves; i++ {
+		if c.Moves[i].Proj.Exists() {
+			return true
+		}
+	}
+	return false
 }
 
 // aiTier clamps a difficulty to a tier index, so a hand-built state with a

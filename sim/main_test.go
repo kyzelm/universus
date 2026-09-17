@@ -20,6 +20,17 @@ func TestMain(m *testing.M) {
 	// changes between tests is a roster the tests can disagree about.
 	small := testCharacter()
 	small.Health /= 2
+	// It is also the entry **without a dragon punch** — the last move, dropped
+	// by shortening the list. The AI's anti-air rule asks what the character
+	// owns rather than assuming the archetype it was written against, and a
+	// roster where every entry owns the same moves cannot tell that rule from
+	// the one it replaced.
+	small.NumMoves--
+	// And the entry without a **projectile**, for the same reason: the rule
+	// that throws a fireball at range must be told by what the character owns,
+	// or a grappler stands at full screen pressing a motion it does not have.
+	// Between them these two omissions make entry 1 the other archetype.
+	small.Moves[2].Proj = ProjectileSpec{}
 
 	if !LoadCharacters([]Character{testCharacter(), small}) {
 		panic("fixture roster rejected")
@@ -158,7 +169,7 @@ func testCharacter() Character {
 		CrouchHurt: Box{X: FromInt(-12), Y: 0, W: FromInt(24), H: FromInt(32)},
 		AirHurt:    Box{X: FromInt(-12), Y: FromInt(4), W: FromInt(24), H: FromInt(40)},
 
-		NumMoves: 17,
+		NumMoves: 18,
 	}
 
 	// A standing jab: 4 startup, 3 active, 6 recovery. Reaches 40 units, which
@@ -469,6 +480,25 @@ func testCharacter() Character {
 	c.Moves[15].Keys[1].Hit[0] = Box{X: FromInt(12), Y: FromInt(0), W: FromInt(34), H: FromInt(46)}
 	c.Moves[15].Keys[2] = Keyframe{Frame: 8, NumHurt: 1}
 	c.Moves[15].Keys[2].Hurt[0] = c.StandHurt
+
+	// A dragon punch: the invincible reversal, and the move the AI's anti-air
+	// rule reaches for. It exists on this entry and **not** on the second one,
+	// which is what lets a test ask what a character without one does instead.
+	c.Moves[17] = Move{
+		Startup: 4, Active: 8, Recovery: 30,
+		Damage: 200, Hitstun: 20, Blockstun: 14, Hitstop: 10,
+		Level: LevelMid, Stance: StanceStand, Button: InLP,
+		Motion:      MotionDP,
+		InvulnStart: 0, InvulnEnd: 8,
+		Knockdown: 1,
+		LaunchVX:  FromInt(2), LaunchVY: FromInt(8),
+		NumKeys: 2,
+	}
+	c.Moves[17].Keys[0] = Keyframe{Frame: 0, NumHurt: 1}
+	c.Moves[17].Keys[0].Hurt[0] = c.StandHurt
+	c.Moves[17].Keys[1] = Keyframe{Frame: 4, NumHurt: 1, NumHit: 1}
+	c.Moves[17].Keys[1].Hurt[0] = c.AirHurt
+	c.Moves[17].Keys[1].Hit[0] = Box{X: FromInt(4), Y: FromInt(-4), W: FromInt(28), H: FromInt(70)}
 
 	// A command throw: the grappler's move, and the fixture's second throw.
 	// Deliberately the same shape and reach as move 10 so the only difference

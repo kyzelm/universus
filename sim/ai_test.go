@@ -355,3 +355,90 @@ func TestTheAISurvivesARoundReset(t *testing.T) {
 		t.Error("the opponent pressed nothing for 60 frames of round 2")
 	}
 }
+
+// **The rule list asks what the character owns.** A grappler has no dragon
+// punch and no fireball, and the list was written against a Shoto — pressing
+// either is a plan that produces a jab or nothing at all, which from outside
+// is an opponent standing still at the range it exists to close.
+//
+// Fixture entry 1 is the entry with no dragon punch (see TestMain).
+func TestAICharacterWithoutADPAntiAirsWithANormal(t *testing.T) {
+	certain(t)
+
+	s := NewAIMatch(AIHard)
+	s.Players[1].Char = 1
+	s.Players[0].X = FromInt(-20)
+	s.Players[1].X = FromInt(20)
+	s.Players[0].State = StateAir
+	s.Players[0].Y = FromInt(30)
+	s.Players[0].StateFrame = 20
+
+	if got := aiDecide(&s, 1, s.Players[1].AI, &s); got != aiAntiAir {
+		t.Errorf("decided plan %d against a jump-in, want the anti-air normal (%d)", got, aiAntiAir)
+	}
+}
+
+// Out of blockstun the answer is the same question asked again: the dragon
+// punch if there is one, and the Drive Reversal — which every character has —
+// if there is not.
+func TestAICharacterWithoutADPReversesWithTheGauge(t *testing.T) {
+	certain(t)
+
+	// certain silences the two per-tier rolls; the reversal has a roll of its
+	// own, and the rule cannot be reached without it.
+	b := testBalance()
+	for i := range b.AITiers {
+		b.AITiers[i].RandomPercent = 0
+	}
+	b.AIReversalPercent = 100
+	LoadBalance(b)
+
+	reversal := func(char int32) int32 {
+		s := NewAIMatch(AIHard)
+		s.Players[1].Char = char
+		s.Players[1].State = StateBlockstun
+		return aiDecide(&s, 1, s.Players[1].AI, &s)
+	}
+
+	if got := reversal(0); got != aiDP {
+		t.Errorf("a character with a dragon punch reversed with plan %d, want %d", got, aiDP)
+	}
+	if got := reversal(1); got != aiDriveReversal {
+		t.Errorf("a character without one reversed with plan %d, want the Drive Reversal (%d)",
+			got, aiDriveReversal)
+	}
+}
+
+// A fireball is refused outright rather than pressed and dropped. The plan that
+// takes its place at full screen is the approach, which is exactly what a
+// character with no projectile should be doing about the distance.
+//
+// Both halves, because "it approached" is also what a broken rule looks like if
+// the fireball never fires for anybody.
+func TestAICharacterWithoutAProjectileWalksIn(t *testing.T) {
+	certain(t)
+
+	b := testBalance()
+	for i := range b.AITiers {
+		b.AITiers[i].RandomPercent = 0
+	}
+	b.AIProjectilePercent = 100
+	LoadBalance(b)
+
+	atRange := func(char int32) int32 {
+		s := NewAIMatch(AIHard)
+		s.Players[1].Char = char
+		s.Players[0].X = FromInt(-150)
+		s.Players[1].X = FromInt(150)
+		return aiDecide(&s, 1, s.Players[1].AI, &s)
+	}
+
+	if got := atRange(0); got != aiFireball {
+		t.Errorf("a character with a projectile decided %d at range, want the fireball (%d)",
+			got, aiFireball)
+	}
+	if got := atRange(1); got != aiApproach {
+		t.Errorf("a character without one decided %d at range, want the approach (%d)",
+			got, aiApproach)
+	}
+}
