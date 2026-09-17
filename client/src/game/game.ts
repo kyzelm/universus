@@ -74,6 +74,13 @@ const HIT_COLOR = 0xe0574a
 const PING_EVERY = 30
 
 /**
+ * Silence that counts as a disconnect (02 Architecture/Transport and
+ * Connectivity.md). Long enough that a bad moment on a bad connection is not a
+ * forfeit, short enough that nobody sits watching a frozen screen wondering.
+ */
+const DISCONNECT_MS = 3000
+
+/**
  * Effect colours, one per event flag. The spark is a placeholder for the sounds
  * and particles that arrive in M4 — what matters here is that it is fired
  * through the confirmed-frame path, so everything hung off that path later
@@ -121,7 +128,7 @@ export interface Game {
    * seat 1 drives P2; both ends reset to frame 0, and from then on each side
    * simulates frame N from (its own input at N, the other side's input at N).
    */
-  connect(peer: Peer, seat: 0 | 1, pair?: [number, number], matchID?: number): void
+  connect(peer: Peer, seat: 0 | 1, session?: MatchSession): void
   /** Feed a packet in. The panel owns the channel, so it forwards them here. */
   receive(data: ArrayBuffer): void
   /** True in the lab. The net panel reads it and refuses to connect. */
@@ -175,6 +182,18 @@ export interface Game {
  * the AI's presses are generated inside the sim, so there is nothing out here
  * that could produce them and nothing out here that may disagree about them.
  */
+/**
+ * What the room agreed on, as the game needs it. The transport and the match id
+ * are carried because the *result* carries them: which of P2P and the relay a
+ * match was played on is a figure that only exists if the match that produced
+ * it says so (02 Architecture/Transport and Connectivity.md).
+ */
+export interface MatchSession {
+  chars?: [number, number]
+  matchID?: number
+  transport?: 'p2p' | 'relay'
+}
+
 export async function startGame(
   parent: HTMLElement,
   bot?: Bot,
@@ -313,6 +332,17 @@ export async function startGame(
   // same result a hundred times.
   let matchID = 0
   let reported = false
+  let transport: 'p2p' | 'relay' | undefined
+  /** Which seat this end is driving, once connected. */
+  let mySeat: 0 | 1 = 0
+  /**
+   * The peer stopped sending. **A disconnect is a loss for the disconnecting
+   * player** and the match ends immediately, with no reconnection window (D50,
+   * D51): reconnecting into a rollback match means re-establishing the
+   * connection, resynchronising frame numbers and transferring full simulation
+   * state — days of work for a rare case, and a new class of desync bugs.
+   */
+  let opponentLeft = false
   /** What the server made of the upload, for the HUD. */
   let uploadStatus = ''
   let ticks = 0
@@ -359,7 +389,11 @@ export async function startGame(
     // question is whether any frame was missed, not what the mean was.
     if (ticker.deltaMS > STEP_MS * 1.5) longFrames++
 
-    for (let i = clock.tick(ticker.deltaMS); i > 0; i--) {
+    // Once the opponent has gone the match is over: **no reconnection window**
+    // (D51), so there is nothing left to simulate and the last confirmed frame
+    // is the one the result is reported from. Stepping on would stall against
+    // input that is never arriving and climb the stall counter for it.
+    for (let i = opponentLeft ? 0 : clock.tick(ticker.deltaMS); i > 0; i--) {
       const [keys, p2] = input.poll()
       // The bot is a device: it stands in for the local player's keyboard and
       // is read once per fixed step, exactly where the keyboard is read.
@@ -409,17 +443,40 @@ export async function startGame(
       }
     })
 
+    // **Three seconds of silence is a disconnect** and the match ends there
+    // (02 Architecture/Transport and Connectivity.md). Not a stall: a peer that
+    // is merely behind keeps sending, and the driver counts anything at all —
+    // pings and checksums included — as the peer being alive.
+    if (net && !opponentLeft && net.silentMs() > DISCONNECT_MS) {
+      opponentLeft = true
+    }
+
     // **The result goes up once the match is over and the frame is settled.**
     // Settled matters: MATCH_END on a predicted frame can still be rolled back,
     // and a result uploaded from a prediction is a result of a match that did
     // not happen. Only a recorded match has anywhere to send it.
-    if (net && matchID && !reported && snap.phase === PHASE_MATCH_END &&
-        snap.winner !== NOBODY && net.confirmed >= snap.frame) {
+    //
+    // A disconnect does not wait for a settled frame or for a winner: there is
+    // nobody left to confirm anything, and the winner is decided by the policy
+    // rather than by the simulation.
+    const finished = snap.phase === PHASE_MATCH_END && snap.winner !== NOBODY &&
+      net !== null && net.confirmed >= snap.frame
+    if (net && matchID && !reported && (finished || opponentLeft)) {
       reported = true
+      const s = net.stats
       void uploadResult(matchID, {
-        winner: snap.winner + 1, // the sim counts seats from 0, the server from 1
-        endFrame: snap.frame,
+        // The sim counts seats from 0 and the server from 1. On a disconnect
+        // the survivor is whoever is still here to report it.
+        winner: opponentLeft ? mySeat + 1 : snap.winner + 1,
+        // The frames the log actually contains, which is what the server
+        // replays and counts — not the frame this end had simulated to, which
+        // on a disconnect runs past the last confirmed input.
+        endFrame: net.log.length / 2,
         chars,
+        disconnect: opponentLeft,
+        transport,
+        rttMs: s.rtt.count ? Math.round(s.rtt.percentile(50)) : 0,
+        rollbackAvg: averageDepth(s),
         inputLog: new Uint8Array(logBytes()),
         checksums: net.checksums(),
       }).then((status) => {
@@ -443,7 +500,11 @@ export async function startGame(
     // one: the overlay's job is to show what can hit you.
     for (const b of snap.projectiles) drawHitbox(boxes, b)
     setText(timer, `${seconds(snap.timer)}`)
-    setText(announce, announcement(snap))
+    // The disconnect takes the screen over: **immediate match end, an explicit
+    // message and a win** (02 Architecture/Disconnect and Match Integrity.md).
+    // No ambiguity and no waiting — the alternative is a player staring at a
+    // frozen opponent wondering whether to keep holding back.
+    setText(announce, opponentLeft ? 'OPPONENT DISCONNECTED\nYOU WIN' : announcement(snap))
 
     for (let i = 0; i < bars.length; i++) {
       drawBars(bars[i], snap.players[i], i, snap.frame, snap.wins[i])
@@ -510,7 +571,7 @@ export async function startGame(
       return new Blob([logBytes()], {type: 'application/octet-stream'})
     },
 
-    connect(peer, seat, pair, id) {
+    connect(peer, seat, session) {
       // Never into a training match: the mode is in the state, so two ends that
       // disagreed about it would desync on frame 0. The panel refuses the
       // connection before this, and this is the second lock on the same door.
@@ -524,11 +585,14 @@ export async function startGame(
       //
       // The fallback is this end's own choice, for the hand-signalled path,
       // which has no room to agree over.
-      chars = pair ?? chars
+      chars = session?.chars ?? chars
       // Zero for a private match by code, which is not recorded: a ladder made
       // of matches two people arranged between themselves is not a ladder.
-      matchID = id ?? 0
+      matchID = session?.matchID ?? 0
+      transport = session?.transport
+      mySeat = seat
       reported = false
+      opponentLeft = false
       reset(false, 0, chars)
       // The match restarts at frame 0, so what has been fired restarts with it.
       pump.reset()
@@ -890,6 +954,20 @@ function costHud(
  * right edge. This is the readout the M0 numbers are screenshotted from, so
  * every field has to be on screen at once.
  */
+/**
+ * Mean rollback depth over the session — a measurement column, and the one
+ * place a float is welcome: it is reported, never simulated from.
+ */
+function averageDepth(s: Netplay['stats']): number {
+  let frames = 0
+  let total = 0
+  for (let d = 1; d < s.depths.length; d++) {
+    frames += s.depths[d]
+    total += s.depths[d] * d
+  }
+  return frames ? total / frames : 0
+}
+
 function netHud(net: Netplay, link: Link | null, upload: string): string {
   const s = net.stats
   if (s.dataMismatch) {

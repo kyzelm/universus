@@ -456,3 +456,108 @@ func TestTwoWorkersDoNotClaimTheSameJob(t *testing.T) {
 		t.Errorf("%d workers claimed the one job", got)
 	}
 }
+
+// --- disconnects ------------------------------------------------------------
+
+// **The grace period is the mechanism.** Without it, whichever client's packet
+// arrived first would decide the match, and a quitter fabricating a counter
+// claim would be racing the player they quit on.
+func TestALoneSubmissionWaitsBeforeItCounts(t *testing.T) {
+	ctx, p := testPool(t)
+	users, matches, a, b := twoPlayers(t, ctx, p)
+
+	logBytes, checksums, winner, endFrame := playedMatch(t)
+	s := submission{
+		winner: winner, endFrame: endFrame, chars: [2]int{0, 1},
+		disconnect: true, transport: "relay", rttMs: 84, rollback: 1.75,
+		inputLog: logBytes, checksums: checksums,
+	}
+
+	id, err := matches.create(ctx, "ranked", a.ID, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := matches.record(ctx, id, a.ID, s); err != nil {
+		t.Fatal(err)
+	}
+
+	v := verifier{matches: matches, dataVersion: loadRoster()}
+	if v.sweepUnilateral(ctx) {
+		t.Fatal("a submission seconds old was accepted on its own")
+	}
+
+	// Backdated rather than waited out: the rule is about elapsed time, and a
+	// test that spends thirty seconds proving it is a test nobody runs.
+	if _, err := p.Exec(ctx,
+		`UPDATE match_submissions SET received_at = now() - interval '1 hour'`); err != nil {
+		t.Fatal(err)
+	}
+	if !v.sweepUnilateral(ctx) {
+		t.Fatal("a submission an hour old was still waiting")
+	}
+
+	// The survivor's claim stands: full win for them, full loss for the player
+	// who stopped reporting.
+	if ra := users.rating(ctx, a.ID); ra.LP != lpBase || ra.Wins != 1 {
+		t.Errorf("the surviving player is %+v", ra)
+	}
+
+	var disconnected bool
+	var transport string
+	var rtt int
+	var rollback float64
+	if err := p.QueryRow(ctx,
+		`SELECT disconnected, transport, avg_rtt_ms, rollback_avg FROM matches WHERE id = $1`, id).
+		Scan(&disconnected, &transport, &rtt, &rollback); err != nil {
+		t.Fatal(err)
+	}
+	if !disconnected {
+		t.Error("the match is not marked as a disconnect")
+	}
+	// The conditions are recorded because the P2P-versus-relay figure is one
+	// that only exists if the match that produced it says which it was.
+	if transport != "relay" || rtt != 84 || rollback != 1.75 {
+		t.Errorf("conditions recorded as %q, %d ms, %.2f", transport, rtt, rollback)
+	}
+
+	// The counts the policy actually rests on, and neither is a punishment.
+	var disconnects, unilateral int
+	p.QueryRow(ctx, `SELECT disconnects FROM ratings WHERE user_id = $1`, b.ID).Scan(&disconnects)
+	p.QueryRow(ctx, `SELECT unilateral_wins FROM ratings WHERE user_id = $1`, a.ID).Scan(&unilateral)
+	if disconnects != 1 || unilateral != 1 {
+		t.Errorf("%d disconnects for the player who left, %d unilateral wins for the survivor",
+			disconnects, unilateral)
+	}
+
+	// And it is still verified: a fabricated log has to be a valid simulation
+	// that produces the claimed result, which is the whole constraint on a
+	// unilateral claim.
+	if !v.step(ctx) {
+		t.Fatal("a unilateral settle queued no verification job")
+	}
+	if _, verified := jobResult(t, ctx, p, id); verified != "ok" {
+		t.Errorf("the match verified as %q", verified)
+	}
+}
+
+// The second player arriving in time is the ordinary path, and the sweep must
+// not settle a match twice.
+func TestTheSweepLeavesAMatchThatSettledItself(t *testing.T) {
+	ctx, p := testPool(t)
+	users, matches, a, b, _ := settled(t, ctx, p, nil)
+
+	before := users.rating(ctx, a.ID)
+	if _, err := p.Exec(ctx,
+		`UPDATE match_submissions SET received_at = now() - interval '1 hour'`); err != nil {
+		t.Fatal(err)
+	}
+
+	v := verifier{matches: matches, dataVersion: loadRoster()}
+	if v.sweepUnilateral(ctx) {
+		t.Error("the sweep picked up a match that both players reported on")
+	}
+	if got := users.rating(ctx, a.ID); got != before {
+		t.Errorf("%+v became %+v", before, got)
+	}
+	_ = b
+}

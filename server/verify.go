@@ -155,10 +155,12 @@ func (v verifier) judge(ctx context.Context, tx pgx.Tx, matchID int64) (verdict,
 	var winner *int
 	var endFrame *int
 	var p1Change, p2Change *int
+	var disconnected bool
 	err := tx.QueryRow(ctx,
-		`SELECT id, mode, p1_id, p2_id, winner, end_frame, p1_lp_change, p2_lp_change
+		`SELECT id, mode, p1_id, p2_id, winner, end_frame, p1_lp_change, p2_lp_change, disconnected
 		 FROM matches WHERE id = $1 FOR UPDATE`, matchID).
-		Scan(&row.id, &row.mode, &row.p1, &row.p2, &winner, &endFrame, &p1Change, &p2Change)
+		Scan(&row.id, &row.mode, &row.p1, &row.p2, &winner, &endFrame, &p1Change, &p2Change,
+			&disconnected)
 	if err != nil {
 		return verdict{}, err
 	}
@@ -176,7 +178,7 @@ func (v verifier) judge(ctx context.Context, tx pgx.Tx, matchID int64) (verdict,
 		return verdict{}, fmt.Errorf("reading the submission: %w", err)
 	}
 
-	result := v.resimulate(inputLog, checksums, *winner, *endFrame)
+	result := v.resimulate(inputLog, checksums, *winner, *endFrame, disconnected)
 	if result.ok {
 		if _, err := tx.Exec(ctx, `UPDATE matches SET verified = 'ok' WHERE id = $1`, matchID); err != nil {
 			return verdict{}, err
@@ -209,7 +211,20 @@ func (v verifier) judge(ctx context.Context, tx pgx.Tx, matchID int64) (verdict,
 // whose end state happens to match after diverging in the middle is still a
 // match that did not happen, and the frame the hashes first disagree on is the
 // only diagnostic worth having.
-func (v verifier) resimulate(inputLog, checksums []byte, winner, endFrame int) verdict {
+// disconnected changes what can be checked, and the difference is worth being
+// precise about. A match that ended because somebody stopped sending has a log
+// that **legitimately does not reach a match end**: the winner was decided by
+// policy (D50) rather than by the simulation, so asking the replay who won
+// would fail every honest disconnect.
+//
+// What still holds is that the log replays to its own hashes. That catches a
+// tampered log — somebody editing an honest match's inputs — and it does not
+// catch a fabricated one, because a client that made up the whole match made up
+// hashes to match it. **That is the exploit D52 accepts and the thesis states**:
+// with only one report there is no second copy to compare against, and what is
+// left is that a forgery has to be a plausible simulation rather than any
+// outcome at all.
+func (v verifier) resimulate(inputLog, checksums []byte, winner, endFrame int, disconnected bool) verdict {
 	parsed, err := replaylog.Decode("the uploaded log", inputLog)
 	if err != nil {
 		return verdict{reason: err.Error(), frame: -1}
@@ -257,6 +272,10 @@ func (v verifier) resimulate(inputLog, checksums []byte, winner, endFrame int) v
 	if got := int(s.Frame()); got != endFrame {
 		return verdict{reason: fmt.Sprintf("ended on frame %d, reported %d", got, endFrame), frame: got}
 	}
+	if disconnected {
+		return verdict{ok: true, frame: -1}
+	}
+
 	// The sim counts seats from 0 and reports -1 while a match is undecided;
 	// the server counts them from 1. A match that never ended is a report about
 	// a match that is still being played.

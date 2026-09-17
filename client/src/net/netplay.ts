@@ -190,6 +190,15 @@ export interface Netplay {
    */
   readonly log: readonly number[]
   /**
+   * Milliseconds since anything at all arrived from the peer.
+   *
+   * **The transport's own liveness, not the game's.** Pings, checksums and
+   * input packets all count: a peer that is stalled but connected is still
+   * sending, and a peer that has gone is sending nothing
+   * (02 Architecture/Disconnect and Match Integrity.md).
+   */
+  silentMs(): number
+  /**
    * The state hashes taken every CHECKSUM_EVERY frames, in frame order, packed
    * as little-endian uint32s. Uploaded with the result: the server re-simulates
    * the log and compares these, which is the check the whole Go→WASM decision
@@ -243,6 +252,11 @@ export function createNetplay(
    */
   let theirFrame = -1
   let lastSkip = -SKIP_EVERY
+
+  // Wall clock, not the frame counter: the question is whether the other
+  // machine is still there, and a stalled sim stops counting frames at exactly
+  // the moment that question starts mattering.
+  let lastHeard = Date.now()
 
   /** The newest frame we have put on the wire, for the resend on a held tick. */
   let sentInputsThrough = -1
@@ -532,6 +546,11 @@ export function createNetplay(
     },
 
     receive(data) {
+      // Before the parse and outside the try: a packet that arrived and failed
+      // to decode is still evidence the peer is alive, and a malformed one is
+      // the peer's bug rather than its funeral.
+      lastHeard = Date.now()
+
       let earliest = -1
       try {
         if (packetType(data) === PacketType.ping) {
@@ -605,6 +624,10 @@ export function createNetplay(
       })
       // dataMismatch is deliberately not cleared: it is a fact about the peer,
       // not a measurement, and it does not stop being true.
+    },
+
+    silentMs() {
+      return Date.now() - lastHeard
     },
 
     checksums() {

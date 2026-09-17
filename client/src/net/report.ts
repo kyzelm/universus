@@ -14,6 +14,17 @@ export interface MatchReport {
   winner: number
   endFrame: number
   chars: [number, number]
+  /**
+   * The match ended because the other side stopped sending. **A disconnect is
+   * a loss for the disconnecting player** (D50), and a lone report is accepted
+   * after a grace period rather than immediately, so a fabricated counter-claim
+   * cannot win by arriving first (D52).
+   */
+  disconnect?: boolean
+  /** Which transport it was played on, and how it went. Measurement columns. */
+  transport?: 'p2p' | 'relay'
+  rttMs?: number
+  rollbackAvg?: number
   /** The replay log, header and all: the bytes tools/replay reads. */
   inputLog: Uint8Array
   /** State hashes every 30 frames, packed little-endian. */
@@ -44,6 +55,10 @@ export async function uploadResult(matchID: number, r: MatchReport): Promise<str
         winner: r.winner,
         endFrame: r.endFrame,
         chars: r.chars,
+        disconnect: r.disconnect ?? false,
+        transport: r.transport ?? '',
+        rttMs: r.rttMs ?? 0,
+        rollbackAvg: r.rollbackAvg ?? 0,
         inputLog: base64(r.inputLog),
         checksums: base64(r.checksums),
       }),

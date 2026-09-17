@@ -72,7 +72,7 @@ func TestAnHonestMatchVerifies(t *testing.T) {
 	logBytes, checksums, winner, endFrame := playedMatch(t)
 	v := verifier{dataVersion: loadRoster()}
 
-	got := v.resimulate(logBytes, checksums, winner, endFrame)
+	got := v.resimulate(logBytes, checksums, winner, endFrame, false)
 	if !got.ok {
 		t.Fatalf("an honest match was rejected: %s (frame %d)", got.reason, got.frame)
 	}
@@ -88,7 +88,7 @@ func TestATamperedChecksumIsCaughtAtTheFrameItHappened(t *testing.T) {
 
 	// Break the third checkpoint, which is frame 90.
 	checksums[2*4] ^= 0xff
-	got := v.resimulate(logBytes, checksums, winner, endFrame)
+	got := v.resimulate(logBytes, checksums, winner, endFrame, false)
 
 	if got.ok {
 		t.Fatal("a tampered checksum verified")
@@ -110,7 +110,7 @@ func TestAMisreportedOutcomeIsCaught(t *testing.T) {
 		{"the loser claims the win", 3 - winner, endFrame, "won, reported"},
 		{"a frame count that is not the one it ended on", winner, endFrame + 1, "ended on frame"},
 	} {
-		got := v.resimulate(logBytes, checksums, c.winner, c.endFrame)
+		got := v.resimulate(logBytes, checksums, c.winner, c.endFrame, false)
 		if got.ok {
 			t.Errorf("%s: verified", c.name)
 		} else if !strings.Contains(got.reason, c.wantIn) {
@@ -126,7 +126,7 @@ func TestDataFromAnotherBuildIsNotAnAccusation(t *testing.T) {
 	logBytes, checksums, winner, endFrame := playedMatch(t)
 
 	v := verifier{dataVersion: loadRoster() ^ 1}
-	got := v.resimulate(logBytes, checksums, winner, endFrame)
+	got := v.resimulate(logBytes, checksums, winner, endFrame, false)
 	if got.ok {
 		t.Fatal("a log from another build verified")
 	}
@@ -146,7 +146,7 @@ func TestAnUnreadableLogIsRefusedRatherThanReplayed(t *testing.T) {
 		{"not a log", []byte("hello there, this is not an input log")},
 		{"header only", replaylog.Encode(sim.Setup{}, loadRoster(), nil)},
 	} {
-		if got := v.resimulate(c.log, nil, 1, 100); got.ok {
+		if got := v.resimulate(c.log, nil, 1, 100, false); got.ok {
 			t.Errorf("%s: verified", c.name)
 		}
 	}
@@ -158,13 +158,50 @@ func TestTheCheckpointCountsHaveToAgree(t *testing.T) {
 	logBytes, checksums, winner, endFrame := playedMatch(t)
 	v := verifier{dataVersion: loadRoster()}
 
-	short := v.resimulate(logBytes, checksums[:len(checksums)-4], winner, endFrame)
+	short := v.resimulate(logBytes, checksums[:len(checksums)-4], winner, endFrame, false)
 	if short.ok || !strings.Contains(short.reason, "checkpoints") {
 		t.Errorf("a short series gave %+v", short)
 	}
 
-	long := v.resimulate(logBytes, append(checksums, 0, 0, 0, 0), winner, endFrame)
+	long := v.resimulate(logBytes, append(checksums, 0, 0, 0, 0), winner, endFrame, false)
 	if long.ok || !strings.Contains(long.reason, "checkpoints") {
 		t.Errorf("a long series gave %+v", long)
 	}
+}
+
+// A disconnect match's log stops mid-match by definition: the winner was
+// decided by policy rather than by the simulation. Asking the replay who won
+// would fail every honest disconnect, so it is not asked — and what is still
+// checked is that the log replays to its own hashes.
+func TestADisconnectIsNotAskedWhoWon(t *testing.T) {
+	logBytes, checksums, _, endFrame := playedMatch(t)
+	v := verifier{dataVersion: loadRoster()}
+
+	// Cut the log short, which is what a match that ended early looks like.
+	parsed, err := replaylog.Decode("test", logBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	half := len(parsed.Inputs) / 2
+	half -= half % checksumEvery // end on a checkpoint, as the client does
+	short := replaylog.Encode(parsed.Setup, loadRoster(), parsed.Inputs[:half])
+	shortSums := checksums[:(half/checksumEvery)*4]
+
+	if got := v.resimulate(short, shortSums, 1, half, true); !got.ok {
+		t.Errorf("an honest disconnect was rejected: %s (frame %d)", got.reason, got.frame)
+	}
+	// The same log judged as a completed match is refused, which is what says
+	// the flag is doing the work rather than the check being absent.
+	if got := v.resimulate(short, shortSums, 1, half, false); got.ok {
+		t.Error("a half a match verified as a finished one")
+	}
+
+	// And a tampered disconnect log is still caught: the hashes are the check
+	// that survives having only one report.
+	bad := append([]byte(nil), shortSums...)
+	bad[4] ^= 0xff
+	if got := v.resimulate(short, bad, 1, half, true); got.ok {
+		t.Error("a tampered disconnect log verified")
+	}
+	_ = endFrame
 }

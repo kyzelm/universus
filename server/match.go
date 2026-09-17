@@ -37,6 +37,19 @@ type result struct {
 	Winner   int    `json:"winner"`
 	EndFrame int    `json:"endFrame"`
 	Chars    [2]int `json:"chars"`
+
+	// The match ended because the other side stopped sending, rather than by a
+	// KO or a timeout. **A disconnect is a loss for the disconnecting player**
+	// and rage-quit and pulled cable are treated identically, because they are
+	// not distinguishable per incident (D50).
+	Disconnect bool `json:"disconnect"`
+
+	// Measurement, and the reason these columns exist: the P2P-versus-relay
+	// comparison in the results chapter is a figure that only exists if both
+	// are recorded on the matches that produced them.
+	Transport   string  `json:"transport"`
+	RTTMs       int     `json:"rttMs"`
+	RollbackAvg float64 `json:"rollbackAvg"`
 	// The replay log, header and all: exactly the bytes tools/replay reads and
 	// exactly the bytes the re-simulation will consume.
 	InputLog  string `json:"inputLog"`
@@ -45,11 +58,15 @@ type result struct {
 
 // submission is one client's upload as stored.
 type submission struct {
-	winner    int
-	endFrame  int
-	chars     [2]int
-	inputLog  []byte
-	checksums []byte
+	winner     int
+	endFrame   int
+	chars      [2]int
+	disconnect bool
+	transport  string
+	rttMs      int
+	rollback   float64
+	inputLog   []byte
+	checksums  []byte
 }
 
 // matchRow is what the server knows about a match before anybody reports on it.
@@ -97,8 +114,11 @@ func (m matchStore) record(ctx context.Context, id, user int64, s submission) (*
 	_, err := m.pool.Exec(ctx,
 		`INSERT INTO match_submissions (match_id, user_id, input_log, checksums, result)
 		 VALUES ($1, $2, $3, $4, $5)`,
-		id, user, s.inputLog, s.checksums,
-		map[string]any{"winner": s.winner, "endFrame": s.endFrame, "chars": s.chars})
+		id, user, s.inputLog, s.checksums, map[string]any{
+			"winner": s.winner, "endFrame": s.endFrame, "chars": s.chars,
+			"disconnect": s.disconnect, "transport": s.transport,
+			"rttMs": s.rttMs, "rollbackAvg": s.rollback,
+		})
 	if uniqueViolation(err) {
 		return nil, errAlreadySent
 	}
@@ -107,11 +127,7 @@ func (m matchStore) record(ctx context.Context, id, user int64, s submission) (*
 	}
 
 	var other submission
-	var res struct {
-		Winner   int    `json:"winner"`
-		EndFrame int    `json:"endFrame"`
-		Chars    [2]int `json:"chars"`
-	}
+	var res storedResult
 	err = m.pool.QueryRow(ctx,
 		`SELECT input_log, checksums, result FROM match_submissions
 		 WHERE match_id = $1 AND user_id <> $2`, id, user).
@@ -122,8 +138,26 @@ func (m matchStore) record(ctx context.Context, id, user int64, s submission) (*
 	if err != nil {
 		return nil, err
 	}
-	other.winner, other.endFrame, other.chars = res.Winner, res.EndFrame, res.Chars
+	res.into(&other)
 	return &other, nil
+}
+
+// storedResult is the JSONB half of a submission, which is every field that is
+// not one of the two byte arrays.
+type storedResult struct {
+	Winner      int     `json:"winner"`
+	EndFrame    int     `json:"endFrame"`
+	Chars       [2]int  `json:"chars"`
+	Disconnect  bool    `json:"disconnect"`
+	Transport   string  `json:"transport"`
+	RTTMs       int     `json:"rttMs"`
+	RollbackAvg float64 `json:"rollbackAvg"`
+}
+
+func (r storedResult) into(s *submission) {
+	s.winner, s.endFrame, s.chars = r.Winner, r.EndFrame, r.Chars
+	s.disconnect, s.transport = r.Disconnect, r.Transport
+	s.rttMs, s.rollback = r.RTTMs, r.RollbackAvg
 }
 
 // settle writes the agreed result, applies the ladder, and queues verification.
@@ -137,6 +171,15 @@ func (m matchStore) settle(ctx context.Context, r matchRow, s submission) error 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := m.settleTx(ctx, tx, r, s); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// settleTx is the same work inside a transaction somebody else owns — the
+// unilateral sweep claims its match and settles it in one.
+func (m matchStore) settleTx(ctx context.Context, tx pgx.Tx, r matchRow, s submission) error {
 	// Casual is accepted as reported, which is what "no verification" means —
 	// and it is what makes ranked and casual genuinely different systems rather
 	// than two buttons on a menu (D19).
@@ -145,10 +188,17 @@ func (m matchStore) settle(ctx context.Context, r matchRow, s submission) error 
 		verified = "pending"
 	}
 
+	// nullable() rather than a zero: a match nobody measured and a match
+	// measured at zero milliseconds are different claims, and only one of them
+	// belongs in a results chapter.
 	if _, err := tx.Exec(ctx,
 		`UPDATE matches SET winner = $2, end_frame = $3, p1_character = $4, p2_character = $5,
-		        verified = $6 WHERE id = $1`,
-		r.id, s.winner, s.endFrame, s.chars[0], s.chars[1], verified); err != nil {
+		        verified = $6, disconnected = $7, transport = $8, avg_rtt_ms = $9,
+		        rollback_avg = $10 WHERE id = $1`,
+		r.id, s.winner, s.endFrame, s.chars[0], s.chars[1], verified, s.disconnect,
+		nullable(s.transport != "", s.transport),
+		nullable(s.rttMs > 0, s.rttMs),
+		nullable(s.rollback > 0, s.rollback)); err != nil {
 		return err
 	}
 
@@ -174,7 +224,40 @@ func (m matchStore) settle(ctx context.Context, r matchRow, s submission) error 
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	if s.disconnect {
+		return recordDisconnect(ctx, tx, r, s.winner)
+	}
+	return nil
+}
+
+// nullable writes a value or SQL NULL. A column nobody filled in has to read as
+// "not measured" rather than as a measurement of zero.
+func nullable[T any](ok bool, v T) any {
+	if !ok {
+		return nil
+	}
+	return v
+}
+
+// recordDisconnect keeps the two counts the policy rests on.
+//
+// **Neither is a punishment.** A pulled cable and a rage-quit produce identical
+// signals per incident and the policy says so; what carries signal is the rate
+// across many matches. A player at 40% is quitting and one at 2% has bad wifi,
+// and only the counts can tell you which — so they are kept, and read by a
+// person (02 Architecture/Disconnect and Match Integrity.md).
+func recordDisconnect(ctx context.Context, tx pgx.Tx, r matchRow, winnerSeat int) error {
+	winner, loser := r.p1, r.p2
+	if winnerSeat == 2 {
+		winner, loser = r.p2, r.p1
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE ratings SET disconnects = disconnects + 1 WHERE user_id = $1`, loser); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx,
+		`UPDATE ratings SET unilateral_wins = unilateral_wins + 1 WHERE user_id = $1`, winner)
+	return err
 }
 
 // applyLadder moves both ratings.
@@ -335,6 +418,10 @@ func (a *auth) submitResult(w http.ResponseWriter, r *http.Request, u User) {
 // agree is check 1: **do the two uploaded input logs match?** A disagreement
 // means at least one client lied, or a desync went undetected — and either way
 // the match is void, because nothing here can tell those two apart.
+// **The measurement fields are deliberately not compared.** RTT, the rollback
+// average and even which transport each end believes it used are observations
+// of the connection from one side, and two ends legitimately disagree about
+// them. What has to match is the match: the inputs, the hashes and the outcome.
 func agree(a, b submission) bool {
 	return a.winner == b.winner && a.endFrame == b.endFrame && a.chars == b.chars &&
 		bytes.Equal(a.inputLog, b.inputLog) && bytes.Equal(a.checksums, b.checksums)
@@ -355,8 +442,13 @@ func (in result) decode() (submission, error) {
 	if err != nil || len(checksums)%4 != 0 {
 		return submission{}, errors.New("checksums must be base64 uint32s")
 	}
+	if in.Transport != "" && in.Transport != "p2p" && in.Transport != "relay" {
+		return submission{}, errors.New("transport must be p2p or relay")
+	}
 	return submission{
 		winner: in.Winner, endFrame: in.EndFrame, chars: in.Chars,
+		disconnect: in.Disconnect, transport: in.Transport,
+		rttMs: in.RTTMs, rollback: in.RollbackAvg,
 		inputLog: inputLog, checksums: checksums,
 	}, nil
 }

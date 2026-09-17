@@ -662,3 +662,41 @@ test('the checksums come out in frame order, packed little-endian', () => {
   // failure does not send a different match.
   expect([...net.checksums()]).toEqual([...bytes])
 })
+
+describe('liveness', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  /**
+   * **Three seconds of silence is a disconnect**, and what resets the clock is
+   * *anything at all* from the peer. A peer that is stalled but connected is
+   * still sending pings and checksums; a peer that has gone sends nothing.
+   */
+  test('silence is measured from the last packet of any kind', () => {
+    const {net} = harness()
+    expect(net.silentMs()).toBe(0)
+
+    vi.advanceTimersByTime(4000)
+    expect(net.silentMs()).toBeGreaterThan(3000)
+
+    // A ping is not gameplay and still counts: it is the transport saying the
+    // other machine is there, which is the only question being asked.
+    net.receive(encodePing(stampNow(), false))
+    expect(net.silentMs()).toBe(0)
+
+    vi.advanceTimersByTime(1000)
+    net.receive(encodeInputs(0, [0]))
+    expect(net.silentMs()).toBe(0)
+  })
+
+  // A packet that fails to decode is still evidence the peer is alive. Its bug,
+  // not its funeral.
+  test('even a malformed packet counts as the peer being there', () => {
+    const {net} = harness()
+    vi.advanceTimersByTime(4000)
+
+    net.receive(new ArrayBuffer(1))
+    expect(net.silentMs()).toBe(0)
+    expect(net.stats.malformed).toBeGreaterThan(0)
+  })
+})

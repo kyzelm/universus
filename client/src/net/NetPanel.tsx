@@ -99,7 +99,7 @@ export default function NetPanel({game}: {game: Game | null}) {
       room.current = s
       setRole(s.seat === 0 ? 'host' : 'guest')
       setKind(s.kind)
-      game.connect(s.peer, s.seat, s.chars, s.matchID)
+      game.connect(s.peer, s.seat, {chars: s.chars, matchID: s.matchID, transport: s.kind})
       // Naming the pair is not decoration for the guest: the host picked it, so
       // a player who chose one fighter and is handed another needs the line
       // that says why. It costs the host nothing to read the same line.
@@ -129,7 +129,7 @@ export default function NetPanel({game}: {game: Game | null}) {
       room.current = s
       setRole(s.seat === 0 ? 'host' : 'guest')
       setKind(s.kind)
-      game.connect(s.peer, s.seat, s.chars, s.matchID)
+      game.connect(s.peer, s.seat, {chars: s.chars, matchID: s.matchID, transport: s.kind})
       setStatus(`connected — ${matchup(s.chars)}`)
 
       const condition = urlImpairment()

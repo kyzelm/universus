@@ -350,7 +350,12 @@ func main() {
 		if err != nil {
 			log.Fatalf("hashing the character data: %v", err)
 		}
-		verifier{matches: *h.auth.matches, dataVersion: version}.run(ctx, verifyWorkers)
+		v := verifier{matches: *h.auth.matches, dataVersion: version}
+		v.run(ctx, verifyWorkers)
+		// A match only one side ever reported on is settled on that report, but
+		// not immediately: the grace period is what stops whichever packet
+		// arrived first from deciding the match (D52).
+		go v.runUnilateral(ctx)
 
 		log.Printf("accounts, matchmaking and verification enabled (data %08x)", version)
 	} else {
