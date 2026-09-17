@@ -245,3 +245,22 @@ button.on {
   display: flex;
   gap: 6px;
 }
+
+/* Sign-in, in the net panel where the thing that needs an account is. */
+.signin {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  width: 100%;
+}
+
+.signin input[type='email'],
+.signin input[type='password'],
+.signin input:not([type]) {
+  width: 11rem;
+  padding: 3px 6px;
+}
+
+.signin label {
+  cursor: pointer;
+}

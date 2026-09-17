@@ -39,6 +39,10 @@ type store interface {
 	// credentials returns the user and their password hash, or errNoUser.
 	credentials(ctx context.Context, email string) (User, string, error)
 	userByID(ctx context.Context, id int64) (User, error)
+	// ratingOf is the account's ladder points, and 0 for an account with no
+	// rating row — a new account's rating is zero either way, so there is
+	// nothing for the caller to tell apart.
+	ratingOf(ctx context.Context, id int64) int
 }
 
 type pgStore struct{ pool *pgxpool.Pool }
@@ -81,6 +85,18 @@ func (s pgStore) credentials(ctx context.Context, email string) (User, string, e
 		return User{}, "", errNoUser
 	}
 	return u, hash, err
+}
+
+func (s pgStore) ratingOf(ctx context.Context, id int64) int {
+	var lp int
+	// A rating that cannot be read is a match nobody gets rather than a player
+	// who queues at zero, unless it is read as zero — which is what a brand new
+	// account's is. Logged by the caller if it ever matters; the queue's job is
+	// to keep working.
+	if err := s.pool.QueryRow(ctx, `SELECT lp FROM ratings WHERE user_id = $1`, id).Scan(&lp); err != nil {
+		return 0
+	}
+	return lp
 }
 
 func (s pgStore) userByID(ctx context.Context, id int64) (User, error) {

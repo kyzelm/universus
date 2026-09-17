@@ -16,6 +16,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -263,7 +264,21 @@ func (a *auth) userID(header string) (int64, error) {
 	if !found {
 		return 0, errors.New("no bearer token")
 	}
+	return a.subjectOf(raw)
+}
 
+// userOf resolves a bare token — no Bearer prefix — to the account it names.
+// The WebSocket endpoints use it: a browser cannot set headers on a socket, so
+// the token arrives as the first frame instead (see hub.accept).
+func (a *auth) userOf(token string) (User, error) {
+	id, err := a.subjectOf(token)
+	if err != nil {
+		return User{}, err
+	}
+	return a.users.userByID(context.Background(), id)
+}
+
+func (a *auth) subjectOf(raw string) (int64, error) {
 	// **The algorithm is pinned.** Accepting whatever the token says it was
 	// signed with is how `alg: none` and the HMAC-verified-against-an-RSA-key
 	// trick both work; the parser enforces it rather than the caller checking

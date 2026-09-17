@@ -21,12 +21,13 @@ type fakeStore struct {
 	mu     sync.Mutex
 	byID   map[int64]User
 	hashes map[string]string // email -> password hash
+	lp     map[int64]int     // ladder points, which only the queue reads
 	next   int64
 	fail   error // forced, for the "the database is on fire" paths
 }
 
 func newStore() *fakeStore {
-	return &fakeStore{byID: map[int64]User{}, hashes: map[string]string{}, next: 1}
+	return &fakeStore{byID: map[int64]User{}, hashes: map[string]string{}, lp: map[int64]int{}, next: 1}
 }
 
 func (f *fakeStore) createUser(_ context.Context, email, hash, name string) (User, error) {
@@ -59,6 +60,12 @@ func (f *fakeStore) credentials(_ context.Context, email string) (User, string, 
 		}
 	}
 	return User{}, "", errNoUser
+}
+
+func (f *fakeStore) ratingOf(_ context.Context, id int64) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lp[id]
 }
 
 func (f *fakeStore) userByID(_ context.Context, id int64) (User, error) {

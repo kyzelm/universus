@@ -2,7 +2,9 @@ import {useEffect, useRef, useState} from 'react'
 import type {Game} from '../game/game'
 import {CLEAN, type Impairment} from './impair'
 import {guest, host, type Connection} from './peer'
-import {joinRoom, type Kind, type Session} from './room'
+import {joinQueue, joinRoom, type Kind, type Session} from './room'
+import SignIn from './SignIn'
+import {account, type Account} from './account'
 import {roster} from '../sim/wasm'
 
 /**
@@ -68,6 +70,10 @@ export default function NetPanel({game}: {game: Game | null}) {
 
   const conn = useRef<Connection | null>(null)
   const room = useRef<Session | null>(null)
+  // Who is signed in, if anybody. Only the queue needs it — a private match by
+  // code needs one too (D104), but the server is what enforces that and saying
+  // so twice is two places to disagree.
+  const [who, setWho] = useState<Account | null>(account)
   const autoJoined = useRef(false)
 
   useEffect(
@@ -101,6 +107,31 @@ export default function NetPanel({game}: {game: Game | null}) {
 
       // Applied after connecting, not before: connect() builds the link, so a
       // condition set earlier would be replaced by the clean one.
+      const condition = urlImpairment()
+      if (condition) impair(condition)
+    } catch (e) {
+      setStatus(`failed: ${(e as Error).message}`)
+    }
+  }
+
+  /**
+   * The queue. Everything after the pairing is the negotiation a private match
+   * already uses, so this differs from connectRoom by one call and by who
+   * decided the two of you should meet.
+   */
+  async function queueUp(mode: 'ranked' | 'casual') {
+    if (!game) return setStatus('the sim is still loading')
+
+    try {
+      setStatus(`waiting for a ${mode} match…`)
+      const s = await joinQueue(mode, (data) => game.receive(data), game.chars)
+
+      room.current = s
+      setRole(s.seat === 0 ? 'host' : 'guest')
+      setKind(s.kind)
+      game.connect(s.peer, s.seat, s.chars)
+      setStatus(`connected — ${matchup(s.chars)}`)
+
       const condition = urlImpairment()
       if (condition) impair(condition)
     } catch (e) {
@@ -178,6 +209,22 @@ export default function NetPanel({game}: {game: Game | null}) {
   if (role === 'idle') {
     return (
       <section className="net">
+        <SignIn onChange={setWho} />
+
+        {/*
+          Ranked and casual are the same socket and the same negotiation; what
+          differs is how wide the skill bands open while you wait (D43, D44).
+          Both need an account, so they are offered only once there is one —
+          a button that always answers "sign in first" is a button that should
+          have been a sentence.
+        */}
+        {who && (
+          <div className="row">
+            <button onClick={() => void queueUp('ranked')}>ranked queue</button>
+            <button onClick={() => void queueUp('casual')}>casual queue</button>
+          </div>
+        )}
+
         <div className="row">
           <input
             placeholder="room code"

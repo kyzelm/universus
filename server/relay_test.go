@@ -10,19 +10,34 @@ import (
 	"github.com/coder/websocket"
 )
 
-func relay(t *testing.T) string {
+// A hub with no accounts, which is the configuration the room is specified in:
+// the relay reads nothing from a database and three of the five game modes need
+// no account at all.
+func relayServer(t *testing.T) string {
+	t.Helper()
+	return serverFor(t, &hub{rooms: &rooms{waiting: map[string]*client{}}, queue: newMatchmaker()})
+}
+
+func serverFor(t *testing.T, h *hub) string {
 	t.Helper()
 
-	r := &rooms{waiting: map[string]*client{}}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", r.serve)
+	mux.HandleFunc("/ws", h.serveRoom)
+	mux.HandleFunc("/ws/queue", h.serveQueue)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return srv.URL + "/ws?room="
+	return srv.URL
 }
 
+// dial opens a socket and sends the opening token frame every client sends,
+// signed in or not — see hub.accept for why the credential is a frame and not
+// a query parameter.
 func dial(t *testing.T, url string) *websocket.Conn {
+	return dialAs(t, url, "")
+}
+
+func dialAs(t *testing.T, url, token string) *websocket.Conn {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -33,6 +48,10 @@ func dial(t *testing.T, url string) *websocket.Conn {
 		t.Fatalf("dial %s: %v", url, err)
 	}
 	t.Cleanup(func() { conn.CloseNow() })
+
+	if err := write(conn, websocket.MessageText, []byte(token)); err != nil {
+		t.Fatalf("sending the token frame: %v", err)
+	}
 	return conn
 }
 
@@ -60,7 +79,7 @@ func send(t *testing.T, conn *websocket.Conn, typ websocket.MessageType, data []
 // The whole contract in one test: two clients on one code learn which is which,
 // and from then on whatever one sends the other reads, message type intact.
 func TestPairAndForward(t *testing.T) {
-	url := relay(t) + "abc-1"
+	url := relayServer(t) + "/ws?room=abc-1"
 
 	host := dial(t, url)
 	guest := dial(t, url)
@@ -92,7 +111,7 @@ func TestPairAndForward(t *testing.T) {
 // Separate codes are separate matches, which is what makes a private match by
 // code work at all.
 func TestCodesDoNotMix(t *testing.T) {
-	base := relay(t)
+	base := relayServer(t) + "/ws?room="
 
 	a := dial(t, base+"room-a")
 	b := dial(t, base+"room-b")
@@ -111,7 +130,7 @@ func TestCodesDoNotMix(t *testing.T) {
 // Hanging up ends the match for both ends: the survivor's read fails instead of
 // waiting for input that is never coming.
 func TestPeerLeaving(t *testing.T) {
-	url := relay(t) + "abc-1"
+	url := relayServer(t) + "/ws?room=abc-1"
 
 	host := dial(t, url)
 	guest := dial(t, url)
@@ -128,7 +147,7 @@ func TestPeerLeaving(t *testing.T) {
 }
 
 func TestBadCode(t *testing.T) {
-	base := relay(t)
+	base := relayServer(t) + "/ws?room="
 
 	for _, code := range []string{"", "with space", "zażółć", "../etc", "a-very-long-code-that-runs-past-thirty-two"} {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -1,3 +1,4 @@
+import {token} from './account'
 import {guest, host, type Connection, type Peer} from './peer'
 
 /**
@@ -66,6 +67,23 @@ export async function joinRoom(
   return negotiate(await openRoom(relayURL(code)), onMessage, chars)
 }
 
+/**
+ * The matchmaking queue (02 Architecture/Backend Services.md). The same socket
+ * as a room: wait on it, get told which end you are, then signal and relay over
+ * it — so everything below this line is the negotiation a private match already
+ * uses, and the only difference is who decided the two of you should meet.
+ *
+ * **Both modes need an account** (D104), which is why this can only fail in one
+ * new way: a server with no database does not serve the endpoint at all.
+ */
+export async function joinQueue(
+  mode: 'ranked' | 'casual',
+  onMessage: (data: ArrayBuffer) => void,
+  chars: [number, number],
+): Promise<Session> {
+  return negotiate(await openRoom(queueURL(mode)), onMessage, chars)
+}
+
 /** Where the page came from — `location`, or a stand-in in a test. */
 export interface Origin {
   readonly protocol: string
@@ -83,10 +101,16 @@ export interface Origin {
  * address is not known when the bundle is built.
  */
 export function relayURL(code: string, origin: Origin = location): string {
+  return `${socketBase(origin)}/ws?room=${encodeURIComponent(code)}`
+}
+
+export function queueURL(mode: string, origin: Origin = location): string {
+  return `${socketBase(origin)}/ws/queue?mode=${encodeURIComponent(mode)}`
+}
+
+function socketBase(origin: Origin): string {
   const scheme = origin.protocol === 'https:' ? 'wss:' : 'ws:'
-  const base =
-    new URLSearchParams(origin.search).get('relay') ?? `${scheme}//${origin.host}`
-  return `${base}/ws?room=${encodeURIComponent(code)}`
+  return new URLSearchParams(origin.search).get('relay') ?? `${scheme}//${origin.host}`
 }
 
 export async function negotiate(
@@ -237,6 +261,14 @@ export async function openRoom(url: string): Promise<Signal> {
     ws.onclose = (e) => reject(new Error(e.reason || `the relay refused the room (${e.code})`))
   })
   ws.onclose = null
+
+  // **The opening frame is the credential, and every client sends one.** A
+  // browser cannot set headers on a WebSocket, so the usual alternative is
+  // `?token=…` — and a URL is the one place a credential is guaranteed to be
+  // written down, in proxy logs, server logs and browser history. Sent even
+  // when empty, so there is nothing for the two ends to negotiate: a server
+  // without accounts ignores it and one with accounts refuses an empty one.
+  ws.send(token())
 
   let text: ((t: string) => void) | null = null
   let binary: ((d: ArrayBuffer) => void) | null = null
