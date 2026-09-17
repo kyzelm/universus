@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -304,5 +305,154 @@ func TestTheTierFloorHoldsThroughTheDatabase(t *testing.T) {
 	}
 	if winner := users.rating(ctx, a.ID); winner.LP != 1005+lpBase {
 		t.Errorf("the winner is %d LP, want %d", winner.LP, 1005+lpBase)
+	}
+}
+
+// --- verification -----------------------------------------------------------
+
+// settled plays a real match, uploads it from both ends, and settles it — the
+// state a verification job is created in.
+func settled(t *testing.T, ctx context.Context, p *pgxpool.Pool, tamper func(s *submission)) (
+	pgStore, matchStore, User, User, int64,
+) {
+	t.Helper()
+	users, matches, a, b := twoPlayers(t, ctx, p)
+
+	logBytes, checksums, winner, endFrame := playedMatch(t)
+	s := submission{
+		winner: winner, endFrame: endFrame, chars: [2]int{0, 1},
+		inputLog: logBytes, checksums: checksums,
+	}
+	if tamper != nil {
+		tamper(&s)
+	}
+
+	id, err := matches.create(ctx, "ranked", a.ID, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both ends upload the same thing, which is what got the match settled in
+	// the first place — the lie this catches is one both clients agree on.
+	if _, err := matches.record(ctx, id, a.ID, s); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := matches.record(ctx, id, b.ID, s); err != nil {
+		t.Fatal(err)
+	}
+	row, err := matches.byID(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := matches.settle(ctx, row, s); err != nil {
+		t.Fatal(err)
+	}
+	return users, matches, a, b, id
+}
+
+func jobResult(t *testing.T, ctx context.Context, p *pgxpool.Pool, id int64) (string, string) {
+	t.Helper()
+	var status, verified string
+	if err := p.QueryRow(ctx, `SELECT status FROM verification_jobs WHERE match_id = $1`, id).
+		Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.QueryRow(ctx, `SELECT verified FROM matches WHERE id = $1`, id).
+		Scan(&verified); err != nil {
+		t.Fatal(err)
+	}
+	return status, verified
+}
+
+func TestAnHonestMatchSurvivesVerification(t *testing.T) {
+	ctx, p := testPool(t)
+	users, matches, a, b, id := settled(t, ctx, p, nil)
+
+	before := []Rating{users.rating(ctx, a.ID), users.rating(ctx, b.ID)}
+	v := verifier{matches: matches, dataVersion: loadRoster()}
+	if !v.step(ctx) {
+		t.Fatal("the worker found no job")
+	}
+
+	if status, verified := jobResult(t, ctx, p, id); status != "done" || verified != "ok" {
+		t.Errorf("job %q, match %q, want done and ok", status, verified)
+	}
+	for i, u := range []User{a, b} {
+		if got := users.rating(ctx, u.ID); got != before[i] {
+			t.Errorf("player %d: %+v became %+v", i+1, before[i], got)
+		}
+	}
+
+	// And the queue is empty afterwards, which is what says the job was claimed
+	// rather than left for the next poll to find again.
+	if v.step(ctx) {
+		t.Error("the same job was claimed twice")
+	}
+}
+
+// **The correction.** LP was paid on cross-client agreement (D109); this is
+// where a match that could not be replayed takes it back.
+func TestAMatchThatFailsResimulationIsReversed(t *testing.T) {
+	ctx, p := testPool(t)
+	// Both clients upload the same tampered checksum series, which is what
+	// collusion or a shared modified build looks like from here.
+	users, matches, a, b, id := settled(t, ctx, p, func(s *submission) {
+		s.checksums[8] ^= 0xff
+	})
+
+	paid := users.rating(ctx, a.ID)
+	if paid.LP == 0 {
+		t.Fatal("the winner was never paid, so there is nothing to reverse")
+	}
+
+	v := verifier{matches: matches, dataVersion: loadRoster()}
+	if !v.step(ctx) {
+		t.Fatal("the worker found no job")
+	}
+
+	if status, verified := jobResult(t, ctx, p, id); status != "done" || verified != "mismatch" {
+		t.Errorf("job %q, match %q, want done and mismatch", status, verified)
+	}
+
+	for i, u := range []User{a, b} {
+		got := users.rating(ctx, u.ID)
+		if got.LP != 0 || got.Matches != 0 || got.Wins != 0 {
+			t.Errorf("player %d is %+v, want the rating it started with", i+1, got)
+		}
+	}
+
+	var flagged int
+	p.QueryRow(ctx, `SELECT count(*) FROM users WHERE flagged`).Scan(&flagged)
+	if flagged != 2 {
+		t.Errorf("%d accounts flagged, want both", flagged)
+	}
+}
+
+// Two workers asking at once get different rows rather than one waiting on the
+// other — the whole of what SKIP LOCKED is doing here.
+func TestTwoWorkersDoNotClaimTheSameJob(t *testing.T) {
+	ctx, p := testPool(t)
+	_, matches, _, _, _ := settled(t, ctx, p, nil)
+
+	v := verifier{matches: matches, dataVersion: loadRoster()}
+
+	var wg sync.WaitGroup
+	claimed := make([]bool, 4)
+	for i := range claimed {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			claimed[i] = v.step(ctx)
+		}()
+	}
+	wg.Wait()
+
+	got := 0
+	for _, c := range claimed {
+		if c {
+			got++
+		}
+	}
+	if got != 1 {
+		t.Errorf("%d workers claimed the one job", got)
 	}
 }

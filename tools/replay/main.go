@@ -2,29 +2,8 @@
 // the native sim and prints a checksum per frame; the same log run through the
 // WASM build must print the same bytes. That comparison is the determinism gate.
 //
-// Log format: a 16-byte header, then little-endian uint16 pairs, player 1 then
-// player 2, one pair per frame. The pairs are the same bytes the sim, the
-// network and the server see; the header is everything about the match that is
-// not in them.
-//
-//	0  [4] magic "UNIV"
-//	4  u8  format version
-//	5  u8  training mode
-//	6  u8  AI tier in seat 2
-//	7  u8  character, player 1
-//	8  u8  character, player 2
-//	9  [3] reserved, zero
-//	12 u32 data version (hash of the embedded character and balance files)
-//
-// The header exists because the log records what the *caller* fed the sim, and
-// two modes generate inputs the caller never sent: the AI's presses come from
-// inside Advance, and the lab changes what a frame does. Replaying either
-// without its setup replays a different match — a lab session comes back as one
-// where seat 2 stands still.
-//
-// The data version is recorded and compared, never enforced: a log taken
-// against older frame data is still a log, and the warning is the explanation
-// for the divergence rather than a reason to refuse the file.
+// Log format: universus/sim/replaylog, which owns the header and the frames and
+// is the same decoder the server's verification worker runs.
 //
 // Usage:
 //
@@ -34,7 +13,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -42,6 +20,7 @@ import (
 
 	"universus/data"
 	"universus/sim"
+	"universus/sim/replaylog"
 )
 
 const usage = `usage:
@@ -166,39 +145,12 @@ func gen(frames int) [][2]uint16 {
 	return in
 }
 
-// Header layout, documented at the top of the file. Sixteen bytes so the input
-// pairs stay 4-byte aligned in the file, and so the reserved bytes have
-// somewhere to live if a mode is added later.
-const (
-	headerSize = 16
-	logVersion = 1
-)
-
-var magic = [4]byte{'U', 'N', 'I', 'V'}
-
 func writeLog(path string, u sim.Setup, in [][2]uint16) error {
-	b := make([]byte, headerSize+len(in)*4)
-	copy(b, magic[:])
-	b[4] = logVersion
-	if u.Training {
-		b[5] = 1
-	}
-	b[6] = byte(u.AI)
-	b[7] = byte(u.Chars[0])
-	b[8] = byte(u.Chars[1])
-	// b[9:12] stay zero: reserved, and a reader checks them.
-
 	v, err := data.Version()
 	if err != nil {
 		return err
 	}
-	binary.LittleEndian.PutUint32(b[12:], v)
-
-	for f, p := range in {
-		binary.LittleEndian.PutUint16(b[headerSize+f*4:], p[0])
-		binary.LittleEndian.PutUint16(b[headerSize+f*4+2:], p[1])
-	}
-	return os.WriteFile(path, b, 0o644)
+	return os.WriteFile(path, replaylog.Encode(u, v, in), 0o644)
 }
 
 func readLog(path string) (sim.Setup, [][2]uint16, error) {
@@ -206,56 +158,17 @@ func readLog(path string) (sim.Setup, [][2]uint16, error) {
 	if err != nil {
 		return sim.Setup{}, nil, err
 	}
-	return parseLog(path, b)
-}
-
-func parseLog(path string, b []byte) (sim.Setup, [][2]uint16, error) {
-	fail := func(format string, a ...any) (sim.Setup, [][2]uint16, error) {
-		return sim.Setup{}, nil, fmt.Errorf("%s: "+format, append([]any{path}, a...)...)
-	}
-
-	if len(b) < headerSize || [4]byte(b[:4]) != magic {
-		return fail("not an input log (no %q header)", magic)
-	}
-	if b[4] != logVersion {
-		return fail("log format version %d, this build reads %d", b[4], logVersion)
-	}
-	body := b[headerSize:]
-	if len(body) == 0 || len(body)%4 != 0 {
-		return fail("%d bytes after the header is not a whole number of 4-byte frames", len(body))
-	}
-
-	setup := sim.Setup{
-		Training: b[5] != 0,
-		AI:       int32(b[6]),
-		Chars:    [2]int32{int32(b[7]), int32(b[8])},
-	}
-	if setup.AI > sim.AIHard {
-		return fail("AI tier %d is not a difficulty this build knows", setup.AI)
-	}
-	for _, c := range setup.Chars {
-		if c < 0 || c >= sim.NumCharacters() {
-			// CharacterAt would hand back the zero character rather than fail,
-			// and a match between two fighters who cannot move is a confusing
-			// way to learn the log named a character this build does not have.
-			return fail("character %d is not in this roster of %d", c, sim.NumCharacters())
-		}
+	log, err := replaylog.Decode(path, b)
+	if err != nil {
+		return sim.Setup{}, nil, err
 	}
 
 	// Recorded, compared, never enforced. A log taken against older frame data
 	// still replays; it just replays a match that is no longer the same one,
 	// and this line is the explanation waiting for whoever diffs the checksums.
-	if v, err := data.Version(); err == nil && v != binary.LittleEndian.Uint32(b[12:]) {
+	if v, err := data.Version(); err == nil && v != log.DataVersion {
 		fmt.Fprintf(os.Stderr, "replay: %s was recorded against data version %08x, this build is %08x\n",
-			path, binary.LittleEndian.Uint32(b[12:]), v)
+			path, log.DataVersion, v)
 	}
-
-	in := make([][2]uint16, len(body)/4)
-	for f := range in {
-		in[f] = [2]uint16{
-			binary.LittleEndian.Uint16(body[f*4:]),
-			binary.LittleEndian.Uint16(body[f*4+2:]),
-		}
-	}
-	return setup, in, nil
+	return log.Setup, log.Inputs, nil
 }

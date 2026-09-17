@@ -28,6 +28,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"universus/data"
+	"universus/sim"
 )
 
 const (
@@ -330,7 +333,26 @@ func main() {
 		mux.HandleFunc("/ws/queue", h.serveQueue)
 		go h.queue.run(ctx)
 
-		log.Printf("accounts and matchmaking enabled")
+		// The roster this binary re-simulates with. It has to be the same data
+		// the clients played on, which is what the version compared per job is
+		// checking — so if it cannot be loaded, nothing here can judge anything.
+		cs, err := data.Load()
+		if err != nil || !sim.LoadCharacters(cs) {
+			log.Fatalf("the sim refused the embedded roster: %v", err)
+		}
+		balance, err := data.LoadBalance()
+		if err != nil {
+			log.Fatalf("balance data: %v", err)
+		}
+		sim.LoadBalance(balance)
+
+		version, err := data.Version()
+		if err != nil {
+			log.Fatalf("hashing the character data: %v", err)
+		}
+		verifier{matches: *h.auth.matches, dataVersion: version}.run(ctx, verifyWorkers)
+
+		log.Printf("accounts, matchmaking and verification enabled (data %08x)", version)
 	} else {
 		log.Printf("no DATABASE_URL: offline modes only, no accounts, no queue")
 	}

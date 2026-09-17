@@ -23,26 +23,17 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// A mis-parsed log makes the determinism gate compare the wrong thing and pass,
-// which is worse than failing. Pin the round trip and the rejections.
-func TestLogRoundTrip(t *testing.T) {
+// The file half of the round trip: the tool writes a log and reads it back,
+// stamped with the data version this build was compiled against. The byte
+// layout itself is pinned in universus/sim/replaylog, which owns it.
+func TestLogRoundTripThroughAFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.inputs")
 	want := gen(97)
-	// Not the zero setup: a header that survives the round trip only because
-	// every field happens to be zero proves nothing.
 	setup := sim.Setup{Training: true, AI: sim.AINormal}
 
 	if err := writeLog(path, setup, want); err != nil {
 		t.Fatal(err)
 	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fi.Size() != headerSize+97*4 {
-		t.Fatalf("log is %d bytes, want %d", fi.Size(), headerSize+97*4)
-	}
-
 	gotSetup, got, err := readLog(path)
 	if err != nil {
 		t.Fatal(err)
@@ -58,12 +49,17 @@ func TestLogRoundTrip(t *testing.T) {
 			t.Fatalf("frame %d: read %v, wrote %v", f, got[f], want[f])
 		}
 	}
+
+	// A missing file is an error rather than an empty log.
+	if _, _, err := readLog(filepath.Join(t.TempDir(), "nope.inputs")); err == nil {
+		t.Error("a missing log was accepted")
+	}
 }
 
 // The whole reason the header exists: the same inputs replayed under a
 // different setup are a different match. If these checksums ever matched, the
 // setup would not be reaching the sim and a lab log would silently replay as a
-// normal one — which is the bug this format was added to close.
+// normal one.
 func TestSetupChangesWhatTheSameInputsReplayAs(t *testing.T) {
 	in := gen(240)
 
@@ -86,41 +82,6 @@ func TestSetupChangesWhatTheSameInputsReplayAs(t *testing.T) {
 	}
 	if normal.String() == ai.String() {
 		t.Error("an AI match replayed identically to one with an empty seat 2")
-	}
-}
-
-func TestReadLogRejectsWhatItCannotReplay(t *testing.T) {
-	dir := t.TempDir()
-	good := func() []byte {
-		b := make([]byte, headerSize+8)
-		copy(b, magic[:])
-		b[4] = logVersion
-		return b
-	}
-
-	for _, c := range []struct {
-		name string
-		log  []byte
-	}{
-		{"truncated", []byte{1, 0, 2}},
-		{"no magic", append(make([]byte, 4), good()[4:]...)},
-		{"future version", func() []byte { b := good(); b[4] = logVersion + 1; return b }()},
-		{"partial frame", good()[:headerSize+3]},
-		{"header only", good()[:headerSize]},
-		{"unknown tier", func() []byte { b := good(); b[6] = byte(sim.AIHard + 1); return b }()},
-		{"character off the roster", func() []byte { b := good(); b[7] = 250; return b }()},
-	} {
-		path := filepath.Join(dir, c.name)
-		if err := os.WriteFile(path, c.log, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, err := readLog(path); err == nil {
-			t.Errorf("%s: accepted", c.name)
-		}
-	}
-
-	if _, _, err := readLog(filepath.Join(dir, "nope.inputs")); err == nil {
-		t.Error("a missing log was accepted")
 	}
 }
 

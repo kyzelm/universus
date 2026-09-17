@@ -153,7 +153,16 @@ func (m matchStore) settle(ctx context.Context, r matchRow, s submission) error 
 	}
 
 	if r.mode == "ranked" {
-		if err := applyLadder(ctx, tx, r, s.winner); err != nil {
+		// The amounts are recorded with the match, because the verification
+		// worker reverses exactly what was paid and cannot recompute it once
+		// the ratings have moved (migration 003).
+		p1Change, p2Change, err := applyLadder(ctx, tx, r, s.winner)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx,
+			`UPDATE matches SET p1_lp_change = $2, p2_lp_change = $3 WHERE id = $1`,
+			r.id, p1Change, p2Change); err != nil {
 			return err
 		}
 		// The job the re-simulation will pick up. Queued here rather than run
@@ -175,7 +184,7 @@ func (m matchStore) settle(ctx context.Context, r matchRow, s submission) error 
 // ranked match and seeing nothing happen until a worker gets to them, which
 // reads as a broken ladder — every game in the genre pays provisionally for the
 // same reason. What verification buys is the correction, not the delay.
-func applyLadder(ctx context.Context, tx pgx.Tx, r matchRow, winnerSeat int) error {
+func applyLadder(ctx context.Context, tx pgx.Tx, r matchRow, winnerSeat int) (int, int, error) {
 	winner, loser := r.p1, r.p2
 	if winnerSeat == 2 {
 		winner, loser = r.p2, r.p1
@@ -192,19 +201,19 @@ func applyLadder(ctx context.Context, tx pgx.Tx, r matchRow, winnerSeat int) err
 		`SELECT user_id, lp FROM ratings WHERE user_id IN ($1, $2) ORDER BY user_id FOR UPDATE`,
 		first, second)
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 	for rows.Next() {
 		var id, points int
 		if err := rows.Scan(&id, &points); err != nil {
 			rows.Close()
-			return err
+			return 0, 0, err
 		}
 		lp[int64(id)] = points
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return err
+		return 0, 0, err
 	}
 
 	change := lpChange(lp[winner], lp[loser])
@@ -224,10 +233,14 @@ func applyLadder(ctx context.Context, tx pgx.Tx, r matchRow, winnerSeat int) err
 			`UPDATE ratings SET lp = $2, tier = $3, matches = matches + 1, wins = wins + $4,
 			        updated_at = now() WHERE user_id = $1`,
 			u.id, u.lp, tierOf(u.lp), u.won); err != nil {
-			return err
+			return 0, 0, err
 		}
 	}
-	return nil
+
+	// Signed, per seat, and **not the same magnitude**: the loser's is floored
+	// at their tier boundary, so they may have paid less than the winner gained.
+	changes := map[int64]int{winner: newWinner - lp[winner], loser: newLoser - lp[loser]}
+	return changes[r.p1], changes[r.p2], nil
 }
 
 // void is what a disagreement costs: no winner, no LP, and both accounts

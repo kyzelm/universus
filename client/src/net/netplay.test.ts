@@ -624,6 +624,18 @@ describe('the rollback timeline', () => {
 // them in frame order. A Map iterates in insertion order and a rollback
 // rewrites an older frame's hash after a newer one was taken, so the order has
 // to be imposed rather than inherited.
+/**
+ * **The cadence is the one coupling the determinism gate cannot cover.** The
+ * gate proves native and WASM agree on the hash at every frame; what it cannot
+ * prove is that the client samples the same *frames* the server replays to. The
+ * two are one number in two languages — CHECKSUM_EVERY here, checksumEvery in
+ * server/verify.go — and if they ever drift, every ranked match in the world
+ * fails verification with a checkpoint-count mismatch.
+ */
+test('the checkpoint cadence is the one the server replays to', () => {
+  expect(CHECKSUM_EVERY).toBe(30)
+})
+
 test('the checksums come out in frame order, packed little-endian', () => {
   const {net} = harness()
 
