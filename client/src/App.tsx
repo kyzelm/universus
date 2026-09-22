@@ -146,6 +146,10 @@ export default function App() {
     // no clock, no round end, and no netplay — the mode is sim state, so a
     // match cannot be half in it.
     const training = setup.mode === 'training'
+    // The box overlay is the lab's whole job (03 Game Design/Game Modes.md),
+    // so training gets it without asking; ?boxes turns it on anywhere else,
+    // which is what debugging a netplay session needs.
+    const showBoxes = training || params.has('boxes')
     const {ai, chars} = setup
 
     let started: Game | undefined
@@ -166,7 +170,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
 
-    void startGame(host.current!, bot, training, ai, chars).then((g) => {
+    void startGame(host.current!, bot, training, ai, chars, showBoxes).then((g) => {
       if (cancelled) return g.dispose()
       started = g
       // The measurement harness reads this. It is installed **here** rather

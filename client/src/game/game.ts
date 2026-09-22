@@ -1,4 +1,4 @@
-import {Application, Container, Graphics, Text} from 'pixi.js'
+import {Application, Container, Graphics, Sprite, Text} from 'pixi.js'
 import {CLEAN, createLink, type Impairment, type Link} from '../net/impair'
 import {createNetplay, depthP99, MAX_ROLLBACK, TIMELINE, type Netplay} from '../net/netplay'
 import type {Peer} from '../net/peer'
@@ -21,6 +21,7 @@ import {
   DRIVE_BARS,
   NOBODY,
   numCharacters,
+  roster,
   PHASE_FIGHT,
   PHASE_INTRO,
   PHASE_KO,
@@ -39,6 +40,7 @@ import {createClock, STEP_MS} from './clock'
 import {createEvents} from './events'
 import {createDummy, type DummyMode} from './dummy'
 import {createInput} from './input'
+import {loadSheet} from './sprites'
 import {advantageText, createLab} from './lab'
 import {createSamples, type Samples} from './stats'
 
@@ -200,15 +202,23 @@ export async function startGame(
   training = false,
   ai = 0,
   chars: [number, number] = [0, 0],
+  showBoxes = false,
 ): Promise<Game> {
   await loadSim()
   // The characters arrive from the URL, so they are user input and clamped
   // here — the first point at which the roster is loaded and its size is
   // known. An index nobody has is the zero character in the sim, which is a
   // fighter that stands still and never says why.
-  const roster = numCharacters()
-  chars = [chars[0] % roster, chars[1] % roster]
+  const count = numCharacters()
+  chars = [chars[0] % count, chars[1] % count]
   reset(training, ai, chars)
+
+  // A sheet per seat, named after the character. Loaded before the first frame
+  // rather than swapped in when it arrives: a missing or malformed sheet stops
+  // the game here, with the tag it could not find, instead of rendering an
+  // invisible fighter somebody has to debug from the symptom.
+  const names = roster()
+  const sheets = await Promise.all(chars.map((c) => loadSheet(names[c].name.toLowerCase())))
 
   const app = new Application()
   await app.init({width: VIEW_W, height: VIEW_H, background: 0x14161a, antialias: false})
@@ -227,7 +237,22 @@ export async function startGame(
     )
   }
 
+  // Fighters go under the overlay: boxes are a thing drawn *on* a character.
+  const fighters = sheets.map((sheet) => {
+    const s = new Sprite()
+    s.anchor.set(sheet.anchor.x, sheet.anchor.y)
+    world.addChild(s)
+    return s
+  })
+
+  // Projectiles have no sprite yet, so they are drawn as the hitbox they are —
+  // on their own layer, because that hitbox is the only thing on screen saying
+  // a fireball exists. Hiding it with the debug overlay would delete it.
+  const projectiles = new Graphics()
+  world.addChild(projectiles)
+
   const boxes = new Graphics()
+  boxes.visible = showBoxes
   world.addChild(boxes)
 
   // Sparks live in the world, not on the stage: an effect at a fighter's feet
@@ -494,11 +519,26 @@ export async function startGame(
       if (--s.life <= 0) sparks.splice(i, 1)
     }
 
+    // The animation is a pure function of the snapshot — state, how many
+    // frames it has been in it, and which move — so a frame resimulated eight
+    // times during a rollback picks the same texture eight times. Nothing
+    // here is remembered between frames and nothing travels back to the sim.
+    for (let i = 0; i < fighters.length; i++) {
+      const p = snap.players[i]
+      const f = fighters[i]
+      f.texture = sheets[i].texture(p.state, p.stateFrame, p.moveIndex)
+      f.position.set(p.x * SCALE, GROUND_PX - p.y * SCALE)
+      // Facing is the sim's, and it flips the sprite rather than the data:
+      // boxes are authored facing right and mirrored when placed, and the art
+      // is drawn once for the same reason.
+      f.scale.set(p.facing, 1)
+    }
+
+    projectiles.clear()
+    for (const b of snap.projectiles) drawHitbox(projectiles, b)
+
     boxes.clear()
-    for (const p of snap.players) drawBoxes(boxes, p)
-    // A projectile is a hitbox with no character attached, so it is drawn as
-    // one: the overlay's job is to show what can hit you.
-    for (const b of snap.projectiles) drawHitbox(boxes, b)
+    if (boxes.visible) for (const p of snap.players) drawBoxes(boxes, p)
     setText(timer, `${seconds(snap.timer)}`)
     // The disconnect takes the screen over: **immediate match end, an explicit
     // message and a win** (02 Architecture/Disconnect and Match Integrity.md).

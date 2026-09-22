@@ -27,8 +27,13 @@ export interface SheetMeta {
 }
 
 export interface Sheet {
-  /** Centre-bottom, at the feet, matching the sim's coordinate origin. */
-  readonly origin: {x: number; y: number}
+  /**
+   * The sheet's origin as a Pixi anchor, so a sprite placed at the fighter's
+   * simulated position lands with its feet there. Computed here rather than at
+   * the call site because it is a property of the sheet, and a sheet whose
+   * cells changed size would otherwise move every character half a frame.
+   */
+  readonly anchor: {x: number; y: number}
   /** The texture a fighter in this state is on. Never throws. */
   texture(state: number, stateFrame: number, moveIndex: number): Texture
 }
@@ -110,9 +115,10 @@ export function buildSheet(meta: SheetMeta, base: Texture): Sheet {
   }
 
   const idle = runs.get('idle')!
+  const cell = meta.frames[0].frame
 
   return {
-    origin: meta.meta.origin,
+    anchor: {x: meta.meta.origin.x / cell.w, y: meta.meta.origin.y / cell.h},
     texture(state, stateFrame, moveIndex) {
       // Startup validation means every tag resolves, so the fallbacks below
       // are for the two things it cannot cover: a move index of -1, which the
