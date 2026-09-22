@@ -112,17 +112,26 @@ def move_category(mv):
 
 
 def tags_for(character):
-    """Every tag this character's sheet must carry, in draw order."""
+    """Every tag this character's sheet must carry, in draw order.
+
+    Also returns the move-index-to-tag table. The view gets a `moveIndex` in
+    the render snapshot and has no way to turn it into a name — `sim.Move`
+    carries frame data, not its own id — so the table ships with the sheet,
+    built from the same JSON array the sim loads its moves from, in the same
+    order. Presentation naming stays out of the simulation.
+    """
     tags = [(name, cat) for name, cat in STATE_TAGS]
     groups = strength_groups(character["moves"])
     seen = set()
+    move_tags = []
     for mv in character["moves"]:
         tag = groups[mv["id"]]
+        move_tags.append(tag)
         if tag in seen:
             continue
         seen.add(tag)
         tags.append((tag, move_category(mv)))
-    return tags
+    return tags, move_tags
 
 
 def pose(cat, f, n):
@@ -224,7 +233,7 @@ def draw(d, body, p, ox, oy):
 
 def build(key, character):
     body = BODIES[key]
-    tags = tags_for(character)
+    tags, move_tags = tags_for(character)
     total = sum(FRAMES[cat] for _, cat in tags)
     rows = (total + COLS - 1) // COLS
 
@@ -258,6 +267,17 @@ def build(key, character):
             "size": {"w": img.width, "h": img.height}, "scale": "1",
             "origin": {"x": ORIGIN[0], "y": ORIGIN[1]},
             "frameTags": frame_tags,
+            # Move index to tag, in roster order. Not an Aseprite field — the
+            # hand-drawn sheets will need it merged in, which is the price of
+            # keeping move ids out of sim.Move.
+            #
+            # ponytail: nothing proves this table still matches the embedded
+            # character data. Add a move and rebuild without regenerating and
+            # the view plays the wrong animation, silently and cosmetically
+            # only. Upgrade path is a CI step that reruns this generator and
+            # fails on a diff, which makes the drift impossible rather than
+            # merely detectable.
+            "moveTags": move_tags,
         },
     }, indent=2) + "\n")
     return len(tags), total, img.size
