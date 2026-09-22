@@ -1,6 +1,6 @@
 {
   "id": 1,
-  "name": "Grappler",
+  "name": "Torv",
 
   "_comment": "The second character, and the one that proves the system generalises (03 Game Design/Roster Plan.md). One character proves nothing — everything could be hardcoded to it. The pair is chosen to stress opposite parts of the engine: the Shoto is projectiles and invincibility, this is throw targeting, armour states and walk-speed balance. Placeholder numbers, legible rather than balanced, same as its counterpart.",
 

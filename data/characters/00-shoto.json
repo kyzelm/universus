@@ -1,6 +1,6 @@
 {
   "id": 0,
-  "name": "Shoto",
+  "name": "Kai",
   "_comment": "M1/M2 placeholder. Two normals, two specials in three strengths each, rectangles, numbers chosen to be legible rather than balanced. Filenames are sorted and the order is the roster index, hence the numeric prefix.",
 
   "health": 10000,
