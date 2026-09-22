@@ -52,6 +52,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: client/pnpm-lock.yaml
 
+      # For tools/sprites.py. A managed interpreter rather than the runner's
+      # system python, which refuses `pip install` outside a virtualenv.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
       - run: go vet ./...
 
       # The invariant with teeth: the sim is 16.16 fixed-point, so a float
@@ -60,6 +66,26 @@ jobs:
         run: |
           if grep -rnE '\b(float32|float64)\b|"math"' ./sim/; then
             echo "::error::floats in sim/ — the sim is fixed-point only"
+            exit 1
+          fi
+
+      # The sprite sheets carry a move-index-to-tag table (D113), because the
+      # view gets a moveIndex and sim.Move has no name to give it. Nothing at
+      # runtime proves that table still matches the embedded character data:
+      # add a move, forget to regenerate, and the wrong animation plays with no
+      # error anywhere. Regenerating here and refusing a diff makes the drift
+      # impossible rather than merely detectable.
+      #
+      # Only the JSON is compared. The PNGs are pixels out of whatever Pillow
+      # the runner installed, and byte-identical output across versions is not
+      # a promise anyone made — the tags are the thing that can silently rot.
+      - name: Sprite tags match the roster
+        run: |
+          python3 -m pip install --quiet Pillow
+          python3 tools/sprites.py
+          if ! git diff --quiet -- 'client/public/sprites/*.json'; then
+            echo "::error::sprite sheets are stale — run tools/sprites.py and commit"
+            git diff -- 'client/public/sprites/*.json'
             exit 1
           fi
 
