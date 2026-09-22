@@ -52,6 +52,16 @@ const FRAMES = Number(process.env.BOT_FRAMES) || 7200
  */
 const MATCHES = Number(process.env.BOT_SEEDS) || 1
 
+/**
+ * The only test here whose runtime is a variable, so it is the only one that
+ * cannot live with vitest's fixed 5 s default. Two real WASM sims playing
+ * 7 200 frames cost roughly a second and a half on a shared runner, and the
+ * budget has to scale with the seed count or **the soak mode this file
+ * advertises can never pass** — fifty pairs against five seconds was never
+ * going to run, and three pairs missed it by 47 ms the first time CI tried.
+ */
+const TIMEOUT_MS = Math.max(30_000, MATCHES * 10_000)
+
 declare class Go {
   importObject: WebAssembly.Imports
   run(instance: WebAssembly.Instance): Promise<void>
@@ -172,7 +182,7 @@ async function botMatch(corruptAt = -1, pair = 0) {
 
 test('two bots play a match over a bad connection without desyncing', async () => {
   for (let pair = 0; pair < MATCHES; pair++) await oneMatch(pair)
-})
+}, TIMEOUT_MS)
 
 async function oneMatch(pair: number) {
   const {A, B, netA, netB} = await botMatch(-1, pair)
