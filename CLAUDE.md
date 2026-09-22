@@ -6,8 +6,9 @@ vault is the source of truth for *what* to build and *why*:
 ```
 /home/kyzelm/Obsidian/Universus/
   Universus.md                  home map, locked stack
-  00 Meta/Decision Log.md       D1–D65, every locked decision + reason
-  06 Roadmap/Task Board.md      concrete tasks, M0/M1 broken down
+  00 Meta/Decision Log.md       D1–D113, every locked decision + reason
+  01 Thesis/Implementation Log.md  dated problems and fixes — chapter 5 is written from it
+  06 Roadmap/Task Board.md      concrete tasks, M0–M3 broken down
   06 Roadmap/Build Roadmap.md   milestones, M0 pass criteria
   02 Architecture/*.md          sim, fixed-point, WASM boundary, rollback, transport, backend
   03 Game Design/*.md           combat, input, character data, resources, rounds, AI
@@ -28,8 +29,8 @@ Deterministic fixed-point sim in **Go → WASM** (same source compiled native fo
 **PixiJS + TypeScript** view layer (read-only) · **rollback netcode**, GGPO params · **WebRTC
 DataChannel** P2P with **WebSocket relay** fallback · **Go** backend · **Postgres**.
 
-Go 1.26, module `universus`. Client: Vite + TypeScript + React (shell/menus only) + pnpm + oxlint.
-PixiJS is **not installed yet** — add it when the canvas work starts.
+Go 1.26, module `universus`. Client: Vite + TypeScript + React (shell/menus only) + pnpm + oxlint +
+PixiJS 8. Four Go dependencies and no framework on either side (D93).
 
 ## Non-negotiable invariants
 
@@ -57,8 +58,9 @@ data/       character + balance JSON
 testdata/   input log corpus — every desync bug ever found lands here as a regression log
 ```
 
-Monorepo, one Go module, one version. Currently: dirs exist, Go files are empty, `client/` is still
-the default Vite+React scaffold.
+Monorepo, one Go module, one version. All four trees are real: ~19 000 lines of Go across sim,
+server and tools, ~44 TypeScript files in the client. Assume code exists and read it before
+proposing to write it.
 
 ## Core formats — do not drift from these
 
@@ -140,35 +142,38 @@ Instrument from day one: rollback frequency, depth distribution, frame time by d
 rate, stall frequency. Report distributions and 99th percentiles, never bare means. These are the
 results chapter and they are painful to retrofit.
 
-## Current milestone: M0 — netcode spike (2 weeks, throwaway code)
+## Where the project actually is
 
-**Question: does the architecture hold?** Not the game. Delete it afterwards without regret.
+**M0 through M3 are code-complete.** Sim, rollback, netcode, training mode, scripted AI, bot-vs-bot
+harness, and the whole backend spine — auth, Postgres with embedded migrations, ranked and casual
+queues, match results, the ladder, disconnect handling, verification by re-simulation, all three
+anti-cheat checks, menus and character select. Decision Log runs to **D113**.
 
-Week 1: Go→WASM hello-world (budget a full day, the toolchain fights back) · PixiJS one rectangle at
-60 fps fixed timestep · `Fix` + tests · minimal `GameState` · `advance()`, gravity, walls · packed
-snapshot read via `DataView` · keyboard → `uint16`.
+M0's bars were measured, not estimated, and four cleared with margin (see the vault's *M0 Results*):
+sim step **p99 0.023 ms** against 0.5 · 8-frame rollback **p99 0.540 ms** against 4 · **10 001
+identical** checksums native vs WASM · sustained 60 fps under continuous rollback. No escape hatch
+was needed; max rollback stays at 8 and TinyGo stays unopened.
 
-Week 2: `saveState`/`loadState`/`checksum` · rollback rewind+replay · native headless replay harness
-· native-vs-WASM differential over 10 000 frames · WebRTC between two tabs then two machines (manual
-signaling is fine) · 8-frame input redundancy.
+**One bar is still open and it is the same one blocking two milestones**: RTT across a real network
+between two machines. It needs a partner and a tunnel, not code — the server already serves the
+built client at its own origin behind one port (D93), and a run is set up entirely from its URL.
+That session is also M2's exit and M3's playtest row.
 
-Pass criteria — **measure, do not estimate**:
+**Current work is M4 (art).** The engineering half is done: sprite sheets load from Aseprite's export
+format and animation is chosen from the render snapshot alone. The drawing has not started.
 
-| Target | Bar |
-|---|---|
-| Sim step in WASM | < 0.5 ms |
-| 8-frame rollback | < 4 ms |
-| Native vs WASM checksums | identical over 10 000 frames |
-| P2P between two machines | connects, RTT measured |
-| Frame rate under continuous rollback | sustained 60 fps |
+- Tag naming is **D113**: an attack's tag is the move's `id`, everything else is the sim's state
+  name. There is no `animation` field in character JSON and there must not be — `Version()` hashes
+  the raw embedded bytes, so a cosmetic rename would refuse a handshake against identical frame data.
+- `tools/sprites.py` generates placeholder sheets and the move-index-to-tag table. CI reruns it and
+  fails on a JSON diff, so the table cannot drift from the roster.
+- Hand-drawn sheets replace `client/public/sprites/*` at the same paths; the client does not change.
 
-**If a bar fails, stop and re-plan.** Escape hatches in order: reduce max rollback to 4–5 · shrink
-state · try TinyGo · fall back to delay-based netcode (which makes the thesis comparative). Write the
-numbers down — they are the first data in the results chapter.
+Then M5: measurement matrix, camera latency rig, deploy, and ~68 pages of thesis. **M5 starting late
+is the failure mode** — cut features, never weeks from M5.
 
-Then: M1 core sim + local 2P (4w) → M2 combat + online (5w) → M3 modes + backend (5w) → M4 art
-(parallel from M1) → M5 measurement + thesis. Placeholder rectangles throughout; art never blocks
-engineering.
+Placeholder art throughout; art never blocks engineering. The box overlay is off outside training
+now that fighters are sprites; `?boxes` brings it back anywhere.
 
 ## When working here
 
