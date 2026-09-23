@@ -127,6 +127,16 @@ func main() {
 		return int(sim.NumCharacters())
 	}))
 
+	// stageHalfWidth() and cameraHalfWidth() are the walls and the screen, in
+	// whole units, so the view frames what the sim collides against rather
+	// than a copy of it.
+	api.Set("stageHalfWidth", js.FuncOf(func(js.Value, []js.Value) any {
+		return sim.BalanceOf().StageHalfWidth.ToInt()
+	}))
+	api.Set("cameraHalfWidth", js.FuncOf(func(js.Value, []js.Value) any {
+		return sim.BalanceOf().CameraHalfWidth.ToInt()
+	}))
+
 	// characterName(i) is the roster entry's display name, for the character
 	// select. A string crossing the boundary is fine here for the reason
 	// GameState never does: this is immutable reference data read once when a

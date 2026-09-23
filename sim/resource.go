@@ -140,6 +140,14 @@ type Balance struct {
 	// rabbit hole that adds nothing the thesis needs.
 	KnockdownFrames int32
 
+	// Half the stage and half the screen, in units. **The screen edges are
+	// walls too**: clampToStage holds both players inside whichever is nearer,
+	// which is what caps how far apart they can get on a stage wider than the
+	// screen. The view may zoom in tighter than the screen; it never frames
+	// wider, so the sim's idea of "on screen" is the widest thing drawn.
+	StageHalfWidth  Fix
+	CameraHalfWidth Fix
+
 	// The scripted opponent (ai.go). **Difficulty is reaction delay and
 	// decision randomness only** (D63), which is what AITier holds one of per
 	// tier; everything below it is shared by all three, because a difficulty

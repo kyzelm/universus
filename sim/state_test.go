@@ -283,17 +283,38 @@ func TestSingleTapDoesNotDash(t *testing.T) {
 
 func TestWallsClamp(t *testing.T) {
 	s := New()
-	run(&s, 1000, [2]uint16{InLeft, InRight})
+	// Both walking left: the screen follows them, so they reach the stage end.
+	run(&s, 1000, [2]uint16{InLeft, InLeft})
 
 	for i := range s.Players {
 		box := s.Pushbox(i)
-		if box.X < -StageHalfWidth || box.X+box.W > StageHalfWidth {
+		if box.X < -balance.StageHalfWidth || box.X+box.W > balance.StageHalfWidth {
 			t.Errorf("player %d pushbox %+v is outside the stage", i, box)
 		}
 	}
-	// And they actually reached the walls rather than stopping early.
-	if (s.Pushbox(0).X + StageHalfWidth).Abs() > One {
+	// And they actually reached the wall rather than stopping early.
+	if (s.Pushbox(0).X + balance.StageHalfWidth).Abs() > One {
 		t.Errorf("player 0 did not reach the left wall: %+v", s.Pushbox(0))
+	}
+}
+
+// The screen edges are walls too, so walking apart stops at the edges of the
+// screen rather than at the ends of a stage wider than it.
+func TestSeparationIsCappedByTheScreen(t *testing.T) {
+	s := New()
+	run(&s, 1000, [2]uint16{InLeft, InRight})
+
+	a, b := s.Pushbox(0), s.Pushbox(1)
+	if b.X+b.W-a.X > 2*balance.CameraHalfWidth {
+		t.Errorf("players %d apart, the screen is %d", b.X+b.W-a.X, 2*balance.CameraHalfWidth)
+	}
+	// Pinned to the edges, not stopped short of them.
+	if (a.X-(s.CamX-balance.CameraHalfWidth)).Abs() > One || (b.X+b.W-(s.CamX+balance.CameraHalfWidth)).Abs() > One {
+		t.Errorf("players %+v %+v did not reach the screen edges around %d", a, b, s.CamX)
+	}
+	// The stage is wider than the screen, or this test proves nothing.
+	if a.X <= -balance.StageHalfWidth {
+		t.Error("player 0 reached the stage end; the screen should have stopped them first")
 	}
 }
 
@@ -328,13 +349,13 @@ func TestCameraFollowsAndStopsAtTheWalls(t *testing.T) {
 		t.Errorf("camera starts at %d, want centred", s.CamX)
 	}
 
-	s.Players[0].X = StageHalfWidth
-	s.Players[1].X = StageHalfWidth
+	s.Players[0].X = balance.StageHalfWidth
+	s.Players[1].X = balance.StageHalfWidth
 	s.updateCamera()
-	if want := StageHalfWidth - CameraHalfWidth; s.CamX != want && CameraHalfWidth < StageHalfWidth {
+	if want := balance.StageHalfWidth - balance.CameraHalfWidth; s.CamX != want && balance.CameraHalfWidth < balance.StageHalfWidth {
 		t.Errorf("camera at the right wall = %d, want %d", s.CamX, want)
 	}
-	if s.CamX+CameraHalfWidth > StageHalfWidth {
+	if s.CamX+balance.CameraHalfWidth > balance.StageHalfWidth {
 		t.Errorf("camera shows past the right wall: %d", s.CamX)
 	}
 }

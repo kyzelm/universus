@@ -112,8 +112,10 @@ func TestPushbackIsAwayFromTheAttacker(t *testing.T) {
 func TestTheCornerPushesTheAttackerBack(t *testing.T) {
 	s := facing(40)
 	// Player 1's pushbox is 12 wide either side, so this is exactly the wall.
-	s.Players[1].X = StageHalfWidth - FromInt(12)
+	s.Players[1].X = balance.StageHalfWidth - FromInt(12)
 	s.Players[0].X = s.Players[1].X - FromInt(40)
+	// Teleported, so move the camera with them or its edge is the wall.
+	s.updateCamera()
 
 	for range 60 {
 		s.Advance([2]uint16{InLP, 0})

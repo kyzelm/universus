@@ -36,6 +36,11 @@
     "techPush": 24
   },
 
+  "stage": {
+    "halfWidth": 320,
+    "cameraHalfWidth": 200
+  },
+
   "knockdown": {
     "frames": 40
   },

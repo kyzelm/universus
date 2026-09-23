@@ -58,6 +58,11 @@ func testBalance() Balance {
 		// window that exists.
 		PairFrames: 4,
 
+		// Wider than the screen, so the screen-edge walls are reachable
+		// without the stage ends getting there first.
+		StageHalfWidth:  FromInt(320),
+		CameraHalfWidth: FromInt(200),
+
 		BurnoutBlockstun:   5,
 		BurnoutChipPercent: 10,
 

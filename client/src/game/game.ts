@@ -32,6 +32,7 @@ import {
   type Setup,
   type Snapshot,
   STATE_NAMES,
+  stageGeometry,
 } from '../sim/wasm'
 import type {Bot} from './bot'
 import {encodeLog} from './log'
@@ -47,9 +48,22 @@ import {createSamples, type Samples} from './stats'
 const VIEW_W = 800
 const VIEW_H = 450
 
-/** Pixels per sim unit. The stage is ~400 units wide, so 2 fills the view. */
+/** Pixels per sim unit at full zoom-out: the 400-unit screen fills the view. */
 const SCALE = 2
 const GROUND_PX = 380
+
+/**
+ * Zoom is framing, not gameplay: the sim's camera (and the screen-edge walls
+ * that cap separation) always use the full screen width. The view only ever
+ * frames *tighter* than that, around both players, so it never hides anything
+ * the sim treats as on screen.
+ */
+const ZOOM_MIN_HALF = 140
+/** Units kept either side of the players, and above the higher one's feet. */
+const ZOOM_MARGIN_X = 90
+const ZOOM_MARGIN_Y = 90
+/** Fraction of the gap to the target half-width closed per displayed frame. */
+const ZOOM_EASE = 0.12
 
 /**
  * Displayed frames between HUD refreshes, **counted off the display and not
@@ -226,6 +240,9 @@ export async function startGame(
 
   // The world scrolls under a fixed camera; the stage layer does not.
   const world = new Container()
+  // Balance data, read once from the sim so the view frames what it collides.
+  const {stageHalf, camHalf: screenHalf} = stageGeometry()
+  let camHalf = screenHalf
   app.stage.addChild(world)
 
   world.addChild(new Graphics().rect(-2000, GROUND_PX, 4000, VIEW_H - GROUND_PX).fill(0x2a2f38))
@@ -233,7 +250,7 @@ export async function startGame(
   // Wall markers, so the corner is visible as a place rather than a surprise.
   for (const side of [-1, 1]) {
     world.addChild(
-      new Graphics().rect(side * 200 * SCALE - 2, 0, 4, GROUND_PX).fill(0x3a4150),
+      new Graphics().rect(side * stageHalf * SCALE - 2, 0, 4, GROUND_PX).fill(0x3a4150),
     )
   }
 
@@ -452,8 +469,17 @@ export async function startGame(
     const snap = readSnapshot()
 
     // The camera is sim state, not a view decision — corner position is
-    // gameplay, so both machines must agree on where the corner is.
-    world.position.x = VIEW_W / 2 - snap.camX * SCALE
+    // gameplay, so both machines must agree on where the corner is. Zoom is
+    // the view's: it frames tighter around the players and eases, and at full
+    // zoom-out the centre is exactly the sim's.
+    camHalf += (zoomTarget(snap, screenHalf) - camHalf) * ZOOM_EASE
+    const zoom = screenHalf / camHalf
+    const mid = (snap.players[0].x + snap.players[1].x) / 2
+    const centre =
+      camHalf >= screenHalf ? snap.camX : Math.min(Math.max(mid, -stageHalf + camHalf), stageHalf - camHalf)
+    world.scale.set(zoom)
+    // Pinned at the ground line, so zooming grows the fighters upward.
+    world.position.set(VIEW_W / 2 - centre * SCALE * zoom, GROUND_PX * (1 - zoom))
 
     // Under netplay the confirmed line lags the simulated frame by the
     // rollback window; locally every frame that has run is settled the moment
@@ -1049,4 +1075,13 @@ function conditions(link: Link | null): string {
   const {arrived, dropped} = link.stats
   const rate = ((dropped / Math.max(1, arrived + dropped)) * 100).toFixed(1)
   return `SIM-NET +${delayMs}±${jitterMs}ms ${lossPercent}% loss (dropped ${dropped}, ${rate}%)`
+}
+
+/** Half-width that keeps both fighters framed with margin, clamped to the zoom range. */
+function zoomTarget(snap: {players: {x: number; y: number}[]}, screenHalf: number): number {
+  const [a, b] = snap.players
+  const wide = Math.abs(a.x - b.x) / 2 + ZOOM_MARGIN_X
+  // Visible height above the ground is GROUND_PX / (SCALE * zoom) units.
+  const tall = ((Math.max(a.y, b.y) + ZOOM_MARGIN_Y) * SCALE * screenHalf) / GROUND_PX
+  return Math.min(Math.max(wide, tall, ZOOM_MIN_HALF), screenHalf)
 }

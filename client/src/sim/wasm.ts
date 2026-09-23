@@ -14,6 +14,8 @@ declare global {
     dataVersion(): number
     numCharacters(): number
     characterName(i: number): string
+    stageHalfWidth(): number
+    cameraHalfWidth(): number
     snapshotPtr(): number
     snapshotLen(): number
     noop(): void
@@ -274,6 +276,11 @@ export function roster(): {index: number; name: string}[] {
     index,
     name: sim.characterName(index),
   }))
+}
+
+/** Half the stage and half the screen, in units — balance data, read once. */
+export function stageGeometry(): {stageHalf: number; camHalf: number} {
+  return {stageHalf: sim.stageHalfWidth(), camHalf: sim.cameraHalfWidth()}
 }
 
 /** How many entries the loaded roster has. */

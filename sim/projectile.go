@@ -72,10 +72,11 @@ func (s *GameState) advanceProjectiles() {
 		pr.X += pr.VX
 		pr.Life--
 
-		// Off the end of the stage or out of life. There is no wall to hit:
-		// the stage bound is where the screen ends, and a fireball that has
-		// left it is gone whatever it does next.
-		if pr.Life <= 0 || pr.X < -StageHalfWidth || pr.X > StageHalfWidth {
+		// Off the screen or out of life. There is no wall to hit: a fireball
+		// that has left the screen is gone whatever it does next, and one
+		// crossing the rest of a stage wider than the screen would hit a
+		// player nobody could see it reach.
+		if pr.Life <= 0 || pr.X < s.CamX-balance.CameraHalfWidth || pr.X > s.CamX+balance.CameraHalfWidth {
 			pr.Active = 0
 		}
 	}

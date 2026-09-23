@@ -19,13 +19,12 @@ const (
 // Stage geometry. Not character data — it belongs to the stage, and there is
 // one stage.
 const (
-	GroundY        = Fix(0)
-	StageHalfWidth = Fix(200) << FracBits // ~400 units wide
-
-	// Half the view width in game units. The camera keeps this much visible on
-	// each side of its centre and never shows past a wall.
-	CameraHalfWidth = Fix(200) << FracBits
+	GroundY = Fix(0)
 )
+
+// The stage and screen widths are balance data (Balance.StageHalfWidth,
+// Balance.CameraHalfWidth), so the data hash covers them: two builds that
+// disagreed on where the walls are would otherwise handshake and desync.
 
 // PlayerState is one fighter. Every field is 4 bytes — see the note on
 // GameState.
@@ -763,12 +762,21 @@ func (s *GameState) clampToStage() {
 
 // wallCorrection is how far player i has to move to be inside the walls, or
 // zero if they already are.
+//
+// A wall is the stage end or the screen edge, whichever is nearer. The screen
+// edge is last frame's camera — step 8 moves it after this runs — so a player
+// who walks back into it stays put until the other one follows, and the corner
+// rule applies at the screen edge exactly as it does at the stage end, which is
+// the genre's behaviour: pushback against the edge of the screen moves the
+// attacker.
 func (s *GameState) wallCorrection(i int) Fix {
 	box := s.Pushbox(i)
-	if d := -StageHalfWidth - box.X; d > 0 {
+	lo := max(-balance.StageHalfWidth, s.CamX-balance.CameraHalfWidth)
+	hi := min(balance.StageHalfWidth, s.CamX+balance.CameraHalfWidth)
+	if d := lo - box.X; d > 0 {
 		return d
 	}
-	if d := (box.X + box.W) - StageHalfWidth; d > 0 {
+	if d := (box.X + box.W) - hi; d > 0 {
 		return -d
 	}
 	return 0
@@ -813,15 +821,15 @@ func (s *GameState) updateCamera() {
 	mid := (s.Players[0].X + s.Players[1].X) / 2
 
 	// Never show past a wall: the corner has to look like a corner.
-	if lo := -StageHalfWidth + CameraHalfWidth; mid < lo {
+	if lo := -balance.StageHalfWidth + balance.CameraHalfWidth; mid < lo {
 		mid = lo
 	}
-	if hi := StageHalfWidth - CameraHalfWidth; mid > hi {
+	if hi := balance.StageHalfWidth - balance.CameraHalfWidth; mid > hi {
 		mid = hi
 	}
 	// A stage narrower than the view pins the camera at the centre rather than
 	// letting the two clamps fight.
-	if CameraHalfWidth >= StageHalfWidth {
+	if balance.CameraHalfWidth >= balance.StageHalfWidth {
 		mid = 0
 	}
 	s.CamX = mid

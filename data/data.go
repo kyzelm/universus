@@ -243,6 +243,12 @@ type jsonBalance struct {
 		GravityPercent int `json:"gravityPercent"`
 	} `json:"juggle"`
 
+	// Stage geometry in whole units (sim.Balance.StageHalfWidth).
+	Stage struct {
+		HalfWidth       int `json:"halfWidth"`
+		CameraHalfWidth int `json:"cameraHalfWidth"`
+	} `json:"stage"`
+
 	Damage struct {
 		ComboScale        []int `json:"comboScale"`
 		StarterLight      int   `json:"starterLight"`
@@ -465,6 +471,15 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 	if b.KnockdownFrames <= 0 {
 		return b, fmt.Errorf("knockdown.frames must be positive, or nothing is ever knocked down")
 	}
+
+	// A screen wider than the stage would show past the walls, and a stage
+	// with no width puts both players on one pixel.
+	if jb.Stage.CameraHalfWidth <= 0 || jb.Stage.HalfWidth < jb.Stage.CameraHalfWidth {
+		return b, fmt.Errorf("stage.cameraHalfWidth is %d, want 1..stage.halfWidth (%d)",
+			jb.Stage.CameraHalfWidth, jb.Stage.HalfWidth)
+	}
+	b.StageHalfWidth = sim.FromInt(jb.Stage.HalfWidth)
+	b.CameraHalfWidth = sim.FromInt(jb.Stage.CameraHalfWidth)
 
 	if b.KnockbackHit, err = parseFix(jb.Knockback.Hit); err != nil {
 		return b, fmt.Errorf("knockback.hit: %w", err)
