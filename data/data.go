@@ -247,6 +247,7 @@ type jsonBalance struct {
 	Stage struct {
 		HalfWidth       int `json:"halfWidth"`
 		CameraHalfWidth int `json:"cameraHalfWidth"`
+		CameraMargin    int `json:"cameraMargin"`
 	} `json:"stage"`
 
 	Damage struct {
@@ -480,6 +481,14 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 	}
 	b.StageHalfWidth = sim.FromInt(jb.Stage.HalfWidth)
 	b.CameraHalfWidth = sim.FromInt(jb.Stage.CameraHalfWidth)
+	// Below a pushbox's half-width the camera never scrolls (see
+	// sim.Balance.CameraMargin); past half the screen there is no dead zone
+	// left and the camera is the midpoint again.
+	if jb.Stage.CameraMargin <= 0 || 2*jb.Stage.CameraMargin >= jb.Stage.CameraHalfWidth {
+		return b, fmt.Errorf("stage.cameraMargin is %d, want 1..%d",
+			jb.Stage.CameraMargin, jb.Stage.CameraHalfWidth/2-1)
+	}
+	b.CameraMargin = sim.FromInt(jb.Stage.CameraMargin)
 
 	if b.KnockbackHit, err = parseFix(jb.Knockback.Hit); err != nil {
 		return b, fmt.Errorf("knockback.hit: %w", err)

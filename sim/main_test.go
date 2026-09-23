@@ -62,6 +62,7 @@ func testBalance() Balance {
 		// without the stage ends getting there first.
 		StageHalfWidth:  FromInt(320),
 		CameraHalfWidth: FromInt(200),
+		CameraMargin:    FromInt(60),
 
 		BurnoutBlockstun:   5,
 		BurnoutChipPercent: 10,

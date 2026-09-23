@@ -648,3 +648,36 @@ func TestACancelTakesOnlyTheCategoriesTheMoveNames(t *testing.T) {
 		t.Errorf("state %d: a jump came out of a cancel window", got)
 	}
 }
+
+// **The camera has a dead zone.** Walking toward a player who is standing still
+// must not move the camera, or the standing player slides across the screen
+// and reads as moving too — which is exactly what the midpoint camera did.
+func TestCameraHoldsWhileOnePlayerWalksIn(t *testing.T) {
+	s := New()
+	cam := s.CamX
+	for f := range 30 {
+		s.Advance([2]uint16{InRight, 0})
+		if s.CamX != cam {
+			t.Fatalf("frame %d: camera moved %d -> %d with one player walking inside the screen", f, cam, s.CamX)
+		}
+	}
+	if start := New().Players[0].X; s.Players[0].X-start < FromInt(20) {
+		t.Fatalf("player 0 moved only %d, so the test proves nothing", s.Players[0].X-start)
+	}
+}
+
+// And it does follow once a player reaches the margin, or the screen-edge
+// wall would stop them walking long before the stage ends.
+func TestCameraFollowsAtTheMargin(t *testing.T) {
+	s := New()
+	run(&s, 90, [2]uint16{InRight, InRight})
+	if s.CamX <= 0 {
+		t.Errorf("camera at %d after both walked right for 90 frames", s.CamX)
+	}
+	// Against the stage end the camera cannot follow and the player may pass
+	// the margin; anywhere short of it they may not.
+	atEnd := s.CamX == balance.StageHalfWidth-balance.CameraHalfWidth
+	if edge := s.CamX + balance.CameraHalfWidth - balance.CameraMargin; !atEnd && s.Players[1].X > edge+One {
+		t.Errorf("player 1 at %d, past the margin at %d", s.Players[1].X, edge)
+	}
+}

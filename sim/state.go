@@ -309,7 +309,7 @@ func NewMatch(c0, c1 int32) GameState {
 	s.Timer = balance.RoundFrames
 	s.RoundWinner = RoundNobody
 	s.Winner = RoundNobody
-	s.updateCamera()
+	s.centreCamera()
 	return s
 }
 
@@ -814,23 +814,42 @@ func (s *GameState) updateFacing() {
 	}
 }
 
-// updateCamera centres the camera between the players and keeps it inside the
-// stage. Derived from positions and stored, so it is identical on both machines
-// and rolls back with everything else.
-func (s *GameState) updateCamera() {
-	mid := (s.Players[0].X + s.Players[1].X) / 2
+// centreCamera puts the camera between the players, inside the stage. Used
+// where the players have just been placed rather than moved — a new match or a
+// new round — so the camera starts framing them rather than following them.
+func (s *GameState) centreCamera() {
+	s.CamX = s.clampCamera((s.Players[0].X + s.Players[1].X) / 2)
+}
 
-	// Never show past a wall: the corner has to look like a corner.
-	if lo := -balance.StageHalfWidth + balance.CameraHalfWidth; mid < lo {
-		mid = lo
+// updateCamera moves the camera only as far as it has to. **A dead zone, not
+// the midpoint**: while both players are at least CameraMargin inside the
+// screen it does not move at all, so a player standing still stays still on
+// screen when the other walks. Following the midpoint instead slides the
+// standing player at half the walker's speed, which reads as both of them
+// moving. When both cannot be kept inside the margins it centres on them, and
+// the screen-edge walls in clampToStage do the rest.
+//
+// Derived from positions and last frame's camera and stored, so it is
+// identical on both machines and rolls back with everything else.
+func (s *GameState) updateCamera() {
+	a, b := s.Players[0].X, s.Players[1].X
+	lo, hi := min(a, b), max(a, b)
+	reach := balance.CameraHalfWidth - balance.CameraMargin
+	c := s.CamX
+	switch {
+	case hi-lo > 2*reach:
+		c = (lo + hi) / 2
+	case hi > c+reach:
+		c = hi - reach
+	case lo < c-reach:
+		c = lo + reach
 	}
-	if hi := balance.StageHalfWidth - balance.CameraHalfWidth; mid > hi {
-		mid = hi
-	}
-	// A stage narrower than the view pins the camera at the centre rather than
-	// letting the two clamps fight.
-	if balance.CameraHalfWidth >= balance.StageHalfWidth {
-		mid = 0
-	}
-	s.CamX = mid
+	s.CamX = s.clampCamera(c)
+}
+
+// clampCamera keeps the screen inside the stage: never show past a wall, or
+// the corner does not look like a corner.
+func (s *GameState) clampCamera(c Fix) Fix {
+	return min(max(c, -balance.StageHalfWidth+balance.CameraHalfWidth),
+		balance.StageHalfWidth-balance.CameraHalfWidth)
 }

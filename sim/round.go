@@ -224,5 +224,5 @@ func (s *GameState) startRound() {
 	// like everything else, and a projectile left in it would arrive during the
 	// next round's intro.
 	clear(s.Projectiles[:])
-	s.updateCamera()
+	s.centreCamera()
 }

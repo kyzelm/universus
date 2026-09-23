@@ -145,8 +145,14 @@ type Balance struct {
 	// which is what caps how far apart they can get on a stage wider than the
 	// screen. The view may zoom in tighter than the screen; it never frames
 	// wider, so the sim's idea of "on screen" is the widest thing drawn.
+	//
+	// CameraMargin is the dead zone's edge: how close to the side of the
+	// screen a player gets before the camera moves (updateCamera). It must be
+	// wider than a pushbox's half-width, or the screen-edge wall stops the
+	// player before the camera ever sees them arrive and it never scrolls.
 	StageHalfWidth  Fix
 	CameraHalfWidth Fix
+	CameraMargin    Fix
 
 	// The scripted opponent (ai.go). **Difficulty is reaction delay and
 	// decision randomness only** (D63), which is what AITier holds one of per

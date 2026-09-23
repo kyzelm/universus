@@ -38,7 +38,8 @@
 
   "stage": {
     "halfWidth": 320,
-    "cameraHalfWidth": 200
+    "cameraHalfWidth": 200,
+    "cameraMargin": 60
   },
 
   "knockdown": {

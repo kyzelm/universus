@@ -57,13 +57,22 @@ const GROUND_PX = 380
  * that cap separation) always use the full screen width. The view only ever
  * frames *tighter* than that, around both players, so it never hides anything
  * the sim treats as on screen.
+ *
+ * **Two levels, not a continuous function of distance.** A zoom that tracks
+ * every unit of spacing rescales the scene on every step, so a player standing
+ * still drifts across the screen whenever the other walks. Here the zoom only
+ * changes when spacing crosses a threshold, with a gap between the in and out
+ * thresholds so spacing that hovers at one of them does not flicker the zoom,
+ * and it eases over about a second so the change reads as a camera move.
  */
-const ZOOM_MIN_HALF = 140
-/** Units kept either side of the players, and above the higher one's feet. */
-const ZOOM_MARGIN_X = 90
-const ZOOM_MARGIN_Y = 90
+const ZOOM_CLOSE_HALF = 160
+/** Zoom in below this spacing in units, back out above the second. */
+const ZOOM_IN_AT = 120
+const ZOOM_OUT_AT = 170
 /** Fraction of the gap to the target half-width closed per displayed frame. */
-const ZOOM_EASE = 0.12
+const ZOOM_EASE = 0.05
+/** How close to the side of a zoomed frame a player gets before it shifts. */
+const ZOOM_EDGE = 40
 
 /**
  * Displayed frames between HUD refreshes, **counted off the display and not
@@ -243,6 +252,7 @@ export async function startGame(
   // Balance data, read once from the sim so the view frames what it collides.
   const {stageHalf, camHalf: screenHalf} = stageGeometry()
   let camHalf = screenHalf
+  let close = false
   app.stage.addChild(world)
 
   world.addChild(new Graphics().rect(-2000, GROUND_PX, 4000, VIEW_H - GROUND_PX).fill(0x2a2f38))
@@ -470,13 +480,14 @@ export async function startGame(
 
     // The camera is sim state, not a view decision — corner position is
     // gameplay, so both machines must agree on where the corner is. Zoom is
-    // the view's: it frames tighter around the players and eases, and at full
-    // zoom-out the centre is exactly the sim's.
-    camHalf += (zoomTarget(snap, screenHalf) - camHalf) * ZOOM_EASE
+    // the view's: it frames tighter than the sim's screen, starting from the
+    // sim's centre and moving off it only as far as the tighter frame needs.
+    const [a, b] = snap.players
+    const gap = Math.abs(a.x - b.x)
+    close = close ? gap < ZOOM_OUT_AT : gap < ZOOM_IN_AT
+    camHalf += ((close ? ZOOM_CLOSE_HALF : screenHalf) - camHalf) * ZOOM_EASE
     const zoom = screenHalf / camHalf
-    const mid = (snap.players[0].x + snap.players[1].x) / 2
-    const centre =
-      camHalf >= screenHalf ? snap.camX : Math.min(Math.max(mid, -stageHalf + camHalf), stageHalf - camHalf)
+    const centre = frame(snap.camX, Math.min(a.x, b.x), Math.max(a.x, b.x), camHalf, stageHalf)
     world.scale.set(zoom)
     // Pinned at the ground line, so zooming grows the fighters upward.
     world.position.set(VIEW_W / 2 - centre * SCALE * zoom, GROUND_PX * (1 - zoom))
@@ -1077,11 +1088,19 @@ function conditions(link: Link | null): string {
   return `SIM-NET +${delayMs}±${jitterMs}ms ${lossPercent}% loss (dropped ${dropped}, ${rate}%)`
 }
 
-/** Half-width that keeps both fighters framed with margin, clamped to the zoom range. */
-function zoomTarget(snap: {players: {x: number; y: number}[]}, screenHalf: number): number {
-  const [a, b] = snap.players
-  const wide = Math.abs(a.x - b.x) / 2 + ZOOM_MARGIN_X
-  // Visible height above the ground is GROUND_PX / (SCALE * zoom) units.
-  const tall = ((Math.max(a.y, b.y) + ZOOM_MARGIN_Y) * SCALE * screenHalf) / GROUND_PX
-  return Math.min(Math.max(wide, tall, ZOOM_MIN_HALF), screenHalf)
+/**
+ * Centre of a frame `half` wide that starts at the sim's camera and moves only
+ * to keep both players `ZOOM_EDGE` inside it — the same dead zone the sim's
+ * camera uses, so a zoomed frame does not start sliding a standing player
+ * either. Players too far apart to fit are left to the sim's centre; at that
+ * spacing the zoom is on its way out anyway.
+ */
+function frame(camX: number, lo: number, hi: number, half: number, stageHalf: number): number {
+  const reach = half - ZOOM_EDGE
+  let c = camX
+  if (hi - lo <= 2 * reach) {
+    if (hi > c + reach) c = hi - reach
+    if (lo < c - reach) c = lo + reach
+  }
+  return Math.min(Math.max(c, -stageHalf + half), stageHalf - half)
 }
