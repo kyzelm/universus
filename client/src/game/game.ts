@@ -58,19 +58,17 @@ const GROUND_PX = 380
  * frames *tighter* than that, around both players, so it never hides anything
  * the sim treats as on screen.
  *
- * **Two levels, not a continuous function of distance.** A zoom that tracks
- * every unit of spacing rescales the scene on every step, so a player standing
- * still drifts across the screen whenever the other walks. Here the zoom only
- * changes when spacing crosses a threshold, with a gap between the in and out
- * thresholds so spacing that hovers at one of them does not flicker the zoom,
- * and it eases over about a second so the change reads as a camera move.
+ * **A continuous function of distance.** Full screen at `ZOOM_START` units of
+ * spacing and beyond, closing smoothly to `ZOOM_CLOSE_HALF` at `ZOOM_FULL`.
+ * The known cost (D114): a player standing still drifts a little on screen
+ * while the other walks, since every step of spacing rescales the scene.
+ * `ZOOM_SMOOTH` filters knockback jolts so hits do not pump the zoom.
  */
 const ZOOM_CLOSE_HALF = 160
-/** Zoom in below this spacing in units, back out above the second. */
-const ZOOM_IN_AT = 120
-const ZOOM_OUT_AT = 170
+const ZOOM_START = 240
+const ZOOM_FULL = 80
 /** Fraction of the gap to the target half-width closed per displayed frame. */
-const ZOOM_EASE = 0.05
+const ZOOM_SMOOTH = 0.08
 /** How close to the side of a zoomed frame a player gets before it shifts. */
 const ZOOM_EDGE = 40
 
@@ -252,7 +250,6 @@ export async function startGame(
   // Balance data, read once from the sim so the view frames what it collides.
   const {stageHalf, camHalf: screenHalf} = stageGeometry()
   let camHalf = screenHalf
-  let close = false
   app.stage.addChild(world)
 
   world.addChild(new Graphics().rect(-2000, GROUND_PX, 4000, VIEW_H - GROUND_PX).fill(0x2a2f38))
@@ -484,8 +481,9 @@ export async function startGame(
     // sim's centre and moving off it only as far as the tighter frame needs.
     const [a, b] = snap.players
     const gap = Math.abs(a.x - b.x)
-    close = close ? gap < ZOOM_OUT_AT : gap < ZOOM_IN_AT
-    camHalf += ((close ? ZOOM_CLOSE_HALF : screenHalf) - camHalf) * ZOOM_EASE
+    const t = Math.min(1, Math.max(0, (ZOOM_START - gap) / (ZOOM_START - ZOOM_FULL)))
+    const target = screenHalf + (ZOOM_CLOSE_HALF - screenHalf) * t * t * (3 - 2 * t)
+    camHalf += (target - camHalf) * ZOOM_SMOOTH
     const zoom = screenHalf / camHalf
     const centre = frame(snap.camX, Math.min(a.x, b.x), Math.max(a.x, b.x), camHalf, stageHalf)
     world.scale.set(zoom)
