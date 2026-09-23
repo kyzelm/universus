@@ -379,9 +379,9 @@ func TestAICharacterWithoutADPAntiAirsWithANormal(t *testing.T) {
 }
 
 // Out of blockstun the answer is the same question asked again: the dragon
-// punch if there is one, and the Drive Reversal — which every character has —
-// if there is not.
-func TestAICharacterWithoutADPReversesWithTheGauge(t *testing.T) {
+// punch if there is one. A character without one has no reversal since D115 cut
+// the Drive Reversal, and must not press a motion it does not own.
+func TestAICharacterWithoutADPDoesNotReverse(t *testing.T) {
 	certain(t)
 
 	// certain silences the two per-tier rolls; the reversal has a roll of its
@@ -403,9 +403,8 @@ func TestAICharacterWithoutADPReversesWithTheGauge(t *testing.T) {
 	if got := reversal(0); got != aiDP {
 		t.Errorf("a character with a dragon punch reversed with plan %d, want %d", got, aiDP)
 	}
-	if got := reversal(1); got != aiDriveReversal {
-		t.Errorf("a character without one reversed with plan %d, want the Drive Reversal (%d)",
-			got, aiDriveReversal)
+	if got := reversal(1); got == aiDP {
+		t.Errorf("a character without a dragon punch reversed with one: plan %d", got)
 	}
 }
 

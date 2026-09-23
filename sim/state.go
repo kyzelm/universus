@@ -64,7 +64,7 @@ type PlayerState struct {
 	// Burnout is 1 while the Drive gauge is refilling from empty. A modifier
 	// flag, not a state: a burnt-out player still walks, attacks and blocks —
 	// they do it with longer blockstun, chip damage on blocked specials, and no
-	// Drive mechanics at all.
+	// EX specials at all.
 	Burnout int32
 
 	// State and StateFrame are the state machine. StateFrame counts from 0 on
@@ -82,7 +82,7 @@ type PlayerState struct {
 	// Armor is how many hits the current move has already absorbed. Counted
 	// here rather than derived, because "one hit of armour" is a property of
 	// this performance of the move and not of the move itself — and it rolls
-	// back with everything else, or a Drive Impact that ate a jab on one
+	// back with everything else, or an armoured special that ate a jab on one
 	// machine eats a second one on the other.
 	Armor int32
 
@@ -577,24 +577,12 @@ func (s *GameState) applyHit(attacker, defender int, mv *Move, defenderIn uint16
 	// counts what it removed, and a hit that overkills counts what was left.
 	before := dp.Health
 
-	if dp.State == StateParry {
-		// **Drive Parry.** No damage, no blockstun, no pushback: the attack is
-		// absorbed and the defender is free on the next frame, which is what
-		// makes the parry an answer to pressure rather than a cheaper block.
-		// It pays the gauge back, so reading the opponent correctly is what
-		// refills the resource defence spends.
-		//
-		// A throw still goes through it — throws are resolved before this and a
-		// parrying player is throwable — so the stance has an answer, and the
-		// answer is the same one blocking has.
-		dp.gainDrive(balance.DriveParryGain)
-		dp.Events |= EventBlock
-	} else if dp.absorbs() {
-		// **Armour.** The defender is mid-Drive-Impact and this hit is one it
+	if dp.absorbs() {
+		// **Armour.** The defender is mid-armoured-move and this hit is one it
 		// eats: no hitstun, no knockback, no combo, no counter — their move
-		// carries on, which is the bar they spent. The damage is reduced and
-		// cannot kill, because a mechanic that trades a bar for a KO is one
-		// nobody spends a bar on.
+		// carries on, which is what they paid for. The damage is reduced and
+		// cannot kill, because armour that trades for a KO is armour nobody
+		// spends anything on.
 		//
 		// Checked before blocking, not inside it: an armoured player is in an
 		// attack and can never be holding back, so the block test would say no

@@ -333,24 +333,12 @@ func TestInputQueriesAreDeterministic(t *testing.T) {
 
 // ---- The pair window -------------------------------------------------------
 
-// Nothing makes a human press two keys on one frame, and a throw, a parry and
-// a Drive Impact are all a punch and a kick. Without a window the faster finger
-// decides: the single button selects its own normal, the state stops being
-// actionable, and the pair the player was making never happens.
+// Nothing makes a human press two keys on one frame, and a throw is a punch and
+// a kick. Without a window the faster finger decides: the single button selects
+// its own normal, the state stops being actionable, and the pair the player was
+// making never happens.
 func TestASecondButtonLandingLateStillMakesThePair(t *testing.T) {
 	window := BalanceOf().PairFrames
-
-	for skew := int32(1); skew < window; skew++ {
-		s := New()
-		for f := int32(0); f < skew; f++ {
-			s.Advance([2]uint16{InMP, 0})
-		}
-		s.Advance([2]uint16{ParryButtons, 0})
-
-		if s.Players[0].State != StateParry {
-			t.Errorf("MK %d frames after MP: state %d, want the parry", skew, s.Players[0].State)
-		}
-	}
 
 	for skew := int32(1); skew < window; skew++ {
 		s := New()
@@ -369,20 +357,20 @@ func TestASecondButtonLandingLateStillMakesThePair(t *testing.T) {
 // move is past its startup it is a commitment, whatever the window says.
 func TestAnActiveMoveIsNeverTakenBackByAPair(t *testing.T) {
 	s := New()
-	s.Advance([2]uint16{InMP, 0})
+	s.Advance([2]uint16{InLP, 0})
 
 	mv := s.Players[0].move()
 	if mv == nil {
-		t.Fatal("MP produced no move at all")
+		t.Fatal("LP produced no move at all")
 	}
 
 	for f := int32(0); f < mv.Startup; f++ {
-		s.Advance([2]uint16{InMP, 0})
+		s.Advance([2]uint16{InLP, 0})
 	}
-	s.Advance([2]uint16{ParryButtons, 0})
+	s.Advance([2]uint16{throwInput, 0})
 
-	if s.Players[0].State == StateParry {
-		t.Error("a parry came out of a move that was already active")
+	if mv := s.Players[0].move(); mv != nil && mv.IsThrow() {
+		t.Error("a throw came out of a move that was already active")
 	}
 }
 

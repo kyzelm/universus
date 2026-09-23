@@ -9,8 +9,8 @@ package sim
 // is a super that is available on one machine and not the other.
 
 // Units. **One bar is 1000 units, and a resource is never a float or a fraction
-// of a bar** — the design note is explicit, because the 0.5-bar Drive Parry has
-// to be an exact integer cost and half of an odd number is not.
+// of a bar** — the design note is explicit, so that a fractional cost is an
+// exact integer and half of an odd number never has to be rounded.
 const (
 	BarUnits = 1000
 
@@ -47,27 +47,6 @@ type Balance struct {
 	// DriveBlockCost is spent per blocked hit. **Blocking spends Drive** — this
 	// is the pressure loop, and the reason defence has a resource cost.
 	DriveBlockCost int32
-
-	// DriveParryDrain is what the parry stance costs per frame it is held, and
-	// DriveParryGain what a successful absorb hands back.
-	//
-	// The design writes the cost as "0.5 bar, held" (03 Game Design/Resource
-	// System.md). A per-frame drain is the reading that makes it a cost of
-	// *holding*: a flat charge on the press would make a parry held all round
-	// cost the same as one held for three frames, which is the stance nobody
-	// would ever leave. Authored so that the half bar buys about the length of
-	// a real parry attempt.
-	DriveParryDrain int32
-	DriveParryGain  int32
-
-	// Drive Rush: what it costs from the parry stance, what it costs as a
-	// cancel out of a connected normal, how fast it travels and for how long.
-	// The two prices are the design's own (1 bar and 3), and they are apart
-	// because they buy different things — approach against a combo.
-	DriveRushCost       int32
-	DriveRushCancelCost int32
-	DriveRushSpeed      Fix
-	DriveRushFrames     int32
 
 	// ArmorDamagePercent is how much of a move's damage an absorbed hit still
 	// deals to an armoured defender (see Move.Armor). Reduced rather than
@@ -228,20 +207,12 @@ func (s *GameState) updateResources() {
 	for i := range s.Players {
 		p := &s.Players[i]
 
-		// The parry drains rather than regenerates, and running the gauge out
-		// with it is Burnout like any other way of reaching zero — which is
-		// what stops the stance being free to sit in.
-		if p.State == StateParry {
-			p.spendDrive(balance.DriveParryDrain)
-			continue
-		}
-
 		p.Drive += p.driveRegen()
 		if p.Drive >= DriveMax {
 			p.Drive = DriveMax
 			// Burnout ends when the gauge is *full*, not when it is above zero.
-			// Ending it early would hand back the Drive mechanics for one bar
-			// and make being burnt out a formality.
+			// Ending it early would hand back EX specials for one bar and make
+			// being burnt out a formality.
 			p.Burnout = 0
 		}
 	}
@@ -272,7 +243,7 @@ func (p *PlayerState) driveRegen() int32 {
 
 // spendDrive takes n units and enters Burnout if that empties the gauge.
 //
-// It cannot fail: blocking is not optional, and a mechanic the player chooses
+// It cannot fail: blocking is not optional, and an EX special the player chooses
 // has already been refused at selection if the gauge could not pay for it
 // (moveFor). So this is a deduction, never a check — the one place that can
 // take Drive, which is what keeps "it came out" and "it was paid for" from
@@ -282,17 +253,6 @@ func (p *PlayerState) spendDrive(n int32) {
 	if p.Drive <= 0 {
 		p.Drive = 0
 		p.Burnout = 1
-	}
-}
-
-// gainDrive hands n units back, capped. Burnout is deliberately not cleared
-// here: it ends when the gauge is *full* and nowhere else (see
-// updateResources), so a parry landed while burnt out — which cannot happen —
-// would not shorten it either.
-func (p *PlayerState) gainDrive(n int32) {
-	p.Drive += n
-	if p.Drive > DriveMax {
-		p.Drive = DriveMax
 	}
 }
 

@@ -41,9 +41,9 @@ export interface Sheet {
 const ATTACK = STATE_NAMES.indexOf('attack')
 
 /**
- * State to tag. Three states borrow another's animation rather than owning
- * one — a pre-jump and a landing are both a crouch, and a Drive Rush is a
- * dash — which is the cheapest 21 frames in the budget (D113).
+ * State to tag. Two states borrow another's animation rather than owning
+ * one — a pre-jump and a landing are both a crouch — which is the cheapest
+ * frames in the budget (D113).
  *
  * Keyed by name rather than by index so that appending a state to
  * sim/fighter.go, which is the only way that list ever changes, fails here at
@@ -64,8 +64,6 @@ const STATE_TAG: Record<string, string> = {
   landing: 'crouch',
   thrown: 'thrown',
   knockdown: 'knockdown',
-  parry: 'parry',
-  rush: 'dash',
 }
 
 /** The tag a fighter in this state draws from, or '' if there is none. */

@@ -64,8 +64,8 @@ func TestThrowNeedsBothButtons(t *testing.T) {
 // **The second button may land late, up to the pair window.** This used to
 // assert the opposite — that LP then LK gave the jab and kept it, because
 // nothing retroactively changes a move that came out on the frame it was asked
-// for. Played on a keyboard, that rule means the throw, the parry and the Drive
-// Impact effectively do not exist, so the window replaces it: the jab is taken
+// for. Played on a keyboard, that rule means the throw effectively does not
+// exist, so the window replaces it: the jab is taken
 // back while it is still in startup and has not connected. Past that it is a
 // commitment, which TestAnActiveMoveIsNeverTakenBackByAPair covers.
 //

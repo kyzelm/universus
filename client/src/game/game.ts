@@ -866,7 +866,7 @@ function drawBars(
 
 /**
  * One segmented gauge. The segments are the point: a bar count is what the
- * player reads, since every Drive mechanic is priced in whole or half bars.
+ * player reads, since every Drive and super cost is priced in whole bars.
  */
 function drawGauge(
   g: Graphics,

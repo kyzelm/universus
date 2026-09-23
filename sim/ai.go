@@ -60,14 +60,13 @@ const (
 	aiThrow
 	aiJump
 
-	// The two plans for a character that does not own the Shoto's answers.
+	// The plan for a character that does not own the Shoto's answers.
 	// **The rule list asks what the character *has*, not what the archetype it
 	// was written against had** — a grappler pressing a dragon punch it does
 	// not own throws a jab, and pressing a quarter-circle it does not own
 	// presses nothing at all. That is an opponent standing still at the range
 	// it is supposed to be closing.
-	aiAntiAir       // the anti-air normal, for a character with no invincible reversal
-	aiDriveReversal // the escape every character has, for one with no DP
+	aiAntiAir // the anti-air normal, for a character with no invincible reversal
 
 	aiPlanCount
 )
@@ -193,11 +192,6 @@ func aiPress(plan, age int32, facing int32) uint16 {
 		// Crouching heavy punch: a hitbox rather than an invincible move, which
 		// is the trade a character without a reversal makes everywhere else too.
 		return press(age, InDown|InHP)
-	case aiDriveReversal:
-		// HP+HK. In blockstun it is the Drive Reversal — the one action that
-		// comes out of blockstun (D91) — and anywhere else it is a Drive
-		// Impact, which is a plausible thing to have pressed.
-		return press(age, InHP|InHK)
 	case aiJump:
 		// Pressed, not held: holding up would jump again on every landing,
 		// which is a plan nobody chose.
@@ -287,15 +281,12 @@ func aiDecide(s *GameState, i int, tier int32, r aiRandom) int32 {
 	// holds it and spends it on the first actionable frame, which is exactly
 	// how a player reverses (D83), and it is why nothing here needs to know how
 	// long the stun is.
-	case p.State == StateBlockstun && aiRoll(r, balance.AIReversalPercent):
-		if aiHasMotion(p.Char, MotionDP) {
-			return aiDP
-		}
-		// No invincible reversal of its own, so it spends the gauge for one.
-		// Refused outright in Burnout, which the AI does not check and does not
-		// need to: a refused move is a press that does nothing, and the next
-		// decision is a few frames away.
-		return aiDriveReversal
+	//
+	// A character with no dragon punch has no reversal since the Drive Reversal
+	// was cut (D115), and stays in the block.
+	case p.State == StateBlockstun && aiHasMotion(p.Char, MotionDP) &&
+		aiRoll(r, balance.AIReversalPercent):
+		return aiDP
 
 	// Fireball at range, and only with the screen clear of its own. One at a
 	// time is how the move is used, and it spaces the motions far enough apart

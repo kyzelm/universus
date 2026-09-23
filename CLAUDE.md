@@ -6,7 +6,7 @@ vault is the source of truth for *what* to build and *why*:
 ```
 /home/kyzelm/Obsidian/Universus/
   Universus.md                  home map, locked stack
-  00 Meta/Decision Log.md       D1–D113, every locked decision + reason
+  00 Meta/Decision Log.md       D1–D115, every locked decision + reason
   01 Thesis/Implementation Log.md  dated problems and fixes — chapter 5 is written from it
   06 Roadmap/Task Board.md      concrete tasks, M0–M3 broken down
   06 Roadmap/Build Roadmap.md   milestones, M0 pass criteria
@@ -147,7 +147,7 @@ results chapter and they are painful to retrofit.
 **M0 through M3 are code-complete.** Sim, rollback, netcode, training mode, scripted AI, bot-vs-bot
 harness, and the whole backend spine — auth, Postgres with embedded migrations, ranked and casual
 queues, match results, the ladder, disconnect handling, verification by re-simulation, all three
-anti-cheat checks, menus and character select. Decision Log runs to **D113**.
+anti-cheat checks, menus and character select. Decision Log runs to **D115**.
 
 M0's bars were measured, not estimated, and four cleared with margin (see the vault's *M0 Results*):
 sim step **p99 0.023 ms** against 0.5 · 8-frame rollback **p99 0.540 ms** against 4 · **10 001

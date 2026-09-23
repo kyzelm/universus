@@ -2,13 +2,10 @@ import {afterEach, expect, test} from 'vitest'
 import {
   createInput,
   IN_DOWN,
-  IN_HK,
   IN_HP,
   IN_LEFT,
   IN_LK,
   IN_LP,
-  IN_MK,
-  IN_MP,
   IN_RIGHT,
   IN_UP,
   packBits,
@@ -224,32 +221,6 @@ test('the throw key presses both buttons on the same frame', () => {
   release(target, 'KeyH')
   press(target, 'Numpad0')
   expect(input.poll()).toEqual([0, IN_LP | IN_LK])
-
-  input.dispose()
-})
-
-// The parry and the Impact are the same shape as the throw and were missing it:
-// two buttons that have to land together, and a medium punch or a heavy punch
-// if they do not. The parry also gates the Drive Rush, so losing it loses two
-// mechanics rather than one.
-test('the parry and impact keys press both buttons on the same frame', () => {
-  const target = new EventTarget()
-  const input = createInput(target)
-
-  press(target, 'KeyG')
-  expect(input.poll()).toEqual([IN_MP | IN_MK, 0])
-  release(target, 'KeyG')
-
-  press(target, 'KeyB')
-  expect(input.poll()).toEqual([IN_HP | IN_HK, 0])
-  release(target, 'KeyB')
-
-  press(target, 'Numpad1')
-  expect(input.poll()).toEqual([0, IN_MP | IN_MK])
-  release(target, 'Numpad1')
-
-  press(target, 'Numpad2')
-  expect(input.poll()).toEqual([0, IN_HP | IN_HK])
 
   input.dispose()
 })

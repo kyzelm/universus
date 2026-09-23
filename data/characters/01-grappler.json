@@ -94,53 +94,6 @@
       ]
     },
     {
-      "_comment": "Drive Impact. One bar, HP+HK, the same move every character has: one hit of armour, slow enough to react to, punishable on block. Identical in shape to the Shoto's and different in its numbers, which is the data-driven claim stated in the least interesting way possible.",
-      "id": "DI",
-      "input": { "stance": "stand", "button": "HP+HK" },
-      "drive": 1,
-      "armor": 1,
-      "startup": 26,
-      "active": 2,
-      "recovery": 32,
-      "damage": 900,
-      "hitstun": 26,
-      "blockstun": 16,
-      "hitstop": 12,
-      "attackLevel": "mid",
-      "knockdown": true,
-      "launch": [2.4, 0],
-      "knockback": [3.0, 0],
-      "boxes": [
-        { "frame": 0, "hurt": [[-14, 0, 28, 52]] },
-        { "frame": 26, "hurt": [[-14, 0, 38, 52]], "hit": [[12, 4, 44, 46]] },
-        { "frame": 28, "hurt": [[-14, 0, 28, 52]] }
-      ]
-    },
-    {
-      "_comment": "Drive Reversal. Two bars, HP+HK while blocking. The one invincible thing this character has, and it costs the gauge every time — which is the design's answer to an archetype that must not also own a free reversal.",
-      "id": "DR",
-      "input": { "stance": "stand", "button": "HP+HK" },
-      "reversal": true,
-      "drive": 2,
-      "startup": 7,
-      "active": 3,
-      "recovery": 30,
-      "damage": 700,
-      "hitstun": 20,
-      "blockstun": 14,
-      "hitstop": 10,
-      "attackLevel": "mid",
-      "knockdown": true,
-      "invuln": [0, 10],
-      "launch": [1.4, 0],
-      "knockback": [3.0, 0],
-      "boxes": [
-        { "frame": 0, "hurt": [[-14, 0, 28, 52]] },
-        { "frame": 7, "hurt": [[-14, 0, 34, 52]], "hit": [[10, 2, 40, 46]] },
-        { "frame": 10, "hurt": [[-14, 0, 28, 52]] }
-      ]
-    },
-    {
       "_comment": "EX command throw. Two bars, two punches, the same half-circle: the fastest and furthest of the four, and the one that beats a defender who thought they were out of range. Nothing new in code — an EX special is a special with a Drive cost.",
       "id": "63214EX",
       "input": { "stance": "stand", "button": "LP+MP", "motion": "hcf" },
@@ -338,7 +291,7 @@
       "blockstun": 11,
       "hitstop": 6,
       "attackLevel": "mid",
-      "cancel": ["special", "drive", "super1", "super2", "super3"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-14, 0, 28, 52]] },
         { "frame": 5, "hurt": [[-14, 0, 32, 52]], "hit": [[14, 32, 22, 12]] },
@@ -356,7 +309,7 @@
       "blockstun": 13,
       "hitstop": 8,
       "attackLevel": "mid",
-      "cancel": ["special", "drive", "super1", "super2", "super3"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-14, 0, 28, 52]] },
         { "frame": 7, "hurt": [[-14, 0, 34, 52]], "hit": [[14, 26, 28, 16]] },
@@ -394,7 +347,7 @@
       "blockstun": 10,
       "hitstop": 6,
       "attackLevel": "mid",
-      "cancel": ["special", "drive", "super1", "super2", "super3"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-14, 0, 28, 52]] },
         { "frame": 6, "hurt": [[-14, 0, 32, 52]], "hit": [[14, 16, 24, 14]] },
@@ -412,7 +365,7 @@
       "blockstun": 13,
       "hitstop": 9,
       "attackLevel": "mid",
-      "cancel": ["special", "drive", "super1", "super2", "super3"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-14, 0, 28, 52]] },
         { "frame": 9, "hurt": [[-14, 0, 36, 52]], "hit": [[14, 14, 32, 18]] },
@@ -451,7 +404,7 @@
       "blockstun": 10,
       "hitstop": 6,
       "attackLevel": "mid",
-      "cancel": ["special", "drive", "super1", "super2", "super3"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-14, 0, 28, 36]] },
         { "frame": 5, "hurt": [[-14, 0, 32, 36]], "hit": [[14, 20, 22, 12]] },
@@ -469,7 +422,7 @@
       "blockstun": 9,
       "hitstop": 5,
       "attackLevel": "low",
-      "cancel": ["special", "drive", "super1", "super2", "super3"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-14, 0, 28, 36]] },
         { "frame": 6, "hurt": [[-14, 0, 32, 36]], "hit": [[14, 2, 24, 10]] },
@@ -487,7 +440,7 @@
       "blockstun": 13,
       "hitstop": 8,
       "attackLevel": "mid",
-      "cancel": ["special", "drive", "super1", "super2", "super3"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-14, 0, 28, 36]] },
         { "frame": 7, "hurt": [[-14, 0, 34, 36]], "hit": [[14, 16, 28, 16]] },
@@ -526,7 +479,7 @@
       "blockstun": 13,
       "hitstop": 8,
       "attackLevel": "low",
-      "cancel": ["special", "drive", "super1", "super2", "super3"],
+      "cancel": ["special", "super1", "super2", "super3"],
       "boxes": [
         { "frame": 0, "hurt": [[-14, 0, 28, 36]] },
         { "frame": 9, "hurt": [[-14, 0, 36, 36]], "hit": [[14, 2, 32, 14]] },

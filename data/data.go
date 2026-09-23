@@ -177,19 +177,13 @@ type jsonCharacter struct {
 // how the values are tuned. All integers: a resource is never a float.
 type jsonBalance struct {
 	Drive struct {
-		Regen            int         `json:"regen"`
-		RegenWalkForward int         `json:"regenWalkForward"`
-		RegenBurnout     int         `json:"regenBurnout"`
-		BlockCost        int         `json:"blockCost"`
-		RushCost         int         `json:"rushCost"`
-		RushCancelCost   int         `json:"rushCancelCost"`
-		RushSpeed        json.Number `json:"rushSpeed"`
-		RushFrames       int         `json:"rushFrames"`
-		ParryDrain       int         `json:"parryDrain"`
-		ParryGain        int         `json:"parryGain"`
-		ArmorDamage      int         `json:"armorDamagePercent"`
-		BurnoutBlockstun int         `json:"burnoutBlockstun"`
-		BurnoutChip      int         `json:"burnoutChipPercent"`
+		Regen            int `json:"regen"`
+		RegenWalkForward int `json:"regenWalkForward"`
+		RegenBurnout     int `json:"regenBurnout"`
+		BlockCost        int `json:"blockCost"`
+		ArmorDamage      int `json:"armorDamagePercent"`
+		BurnoutBlockstun int `json:"burnoutBlockstun"`
+		BurnoutChip      int `json:"burnoutChipPercent"`
 	} `json:"drive"`
 
 	// Input. The pair window is how late the second button of a two-button
@@ -369,11 +363,6 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 		{"drive.regenWalkForward", jb.Drive.RegenWalkForward, &b.DriveRegenWalkF},
 		{"drive.regenBurnout", jb.Drive.RegenBurnout, &b.DriveRegenBurnout},
 		{"drive.blockCost", jb.Drive.BlockCost, &b.DriveBlockCost},
-		{"drive.rushCost", jb.Drive.RushCost, &b.DriveRushCost},
-		{"drive.rushCancelCost", jb.Drive.RushCancelCost, &b.DriveRushCancelCost},
-		{"drive.rushFrames", jb.Drive.RushFrames, &b.DriveRushFrames},
-		{"drive.parryDrain", jb.Drive.ParryDrain, &b.DriveParryDrain},
-		{"drive.parryGain", jb.Drive.ParryGain, &b.DriveParryGain},
 		{"drive.armorDamagePercent", jb.Drive.ArmorDamage, &b.ArmorDamagePercent},
 		{"drive.burnoutBlockstun", jb.Drive.BurnoutBlockstun, &b.BurnoutBlockstun},
 		{"drive.burnoutChipPercent", jb.Drive.BurnoutChip, &b.BurnoutChipPercent},
@@ -432,30 +421,14 @@ func (jb *jsonBalance) convert() (sim.Balance, error) {
 			b.MaxRounds, min, b.RoundsToWin)
 	}
 
-	if b.DriveRushSpeed, err = parseFix(jb.Drive.RushSpeed); err != nil {
-		return b, fmt.Errorf("drive.rushSpeed: %w", err)
-	}
-	// A rush that does not move is a bar spent on standing still, and one that
-	// lasts no frames is the same thing with extra steps.
-	if b.DriveRushSpeed <= 0 || b.DriveRushFrames <= 0 {
-		return b, fmt.Errorf("drive.rushSpeed and drive.rushFrames must be positive")
-	}
-
 	// A zero window is the behaviour this value exists to replace: the two
-	// buttons of a throw, a parry or a Drive Impact never land on the same
+	// buttons of a throw or an EX special never land on the same
 	// frame on a keyboard, so the first one out selects its own normal and the
 	// pair never happens. The upper bound is a sanity bound only — the real
 	// ceiling is per-move and lives in the sim, which refuses to take back a
 	// move that has left its startup however long the window is.
 	if b.PairFrames <= 0 || b.PairFrames > 8 {
 		return b, fmt.Errorf("input.pairFrames must be 1-8, got %d", b.PairFrames)
-	}
-
-	// A parry that drains nothing is a stance with no cost, which is a stance
-	// nobody ever leaves — and the symptom is a match where neither player
-	// stops holding two buttons.
-	if b.DriveParryDrain <= 0 {
-		return b, fmt.Errorf("drive.parryDrain must be positive, or the parry is free to hold")
 	}
 
 	// A tech window of zero is a throw nobody can escape, which is the mechanic
@@ -635,17 +608,13 @@ type jsonMove struct {
 	// whole roster bar three moves per character.
 	Super int `json:"super"`
 
-	// Drive bars the move costs: 1 for a Drive Impact, 2 for an EX special or
-	// a Drive Reversal. Absent on everything that does not spend the gauge.
+	// Drive bars the move costs: 2 for an EX special. Absent on everything
+	// that does not spend the gauge.
 	Drive int `json:"drive"`
 
-	// Hits the move absorbs while it comes out — Drive Impact's armour. Absent
-	// on everything else.
+	// Hits the move absorbs while it comes out. Absent on everything that is
+	// not armoured.
 	Armor int `json:"armor"`
-
-	// The Drive Reversal: the one move that comes out of blockstun instead of
-	// out of an actionable state. Absent everywhere else.
-	Reversal bool `json:"reversal"`
 
 	// Knockdown puts the defender on the floor once the hitstun ends. No
 	// duration here: one wakeup timing for the whole game (see the balance
@@ -722,7 +691,7 @@ var levels = map[string]int32{
 }
 
 var cancelCategories = map[string]uint16{
-	"chain": sim.CancelChain, "special": sim.CancelSpecial, "drive": sim.CancelDrive,
+	"chain": sim.CancelChain, "special": sim.CancelSpecial,
 	"super1": sim.CancelSuper1, "super2": sim.CancelSuper2, "super3": sim.CancelSuper3,
 }
 
@@ -950,31 +919,18 @@ func (jm *jsonMove) convert() (sim.Move, error) {
 	m.Armor = int32(jm.Armor)
 
 	// **Armour must be paid for, and there are three currencies.** Drive bars
-	// buy it on a Drive Impact, a super level buys it on the grappler's level
+	// buy it on an EX special, a super level buys it on the grappler's level
 	// 2, and a motion buys it on the grappler's armoured advance — a special
 	// with a slow startup and an exposed recovery is a commitment in its own
 	// right (03 Game Design/Roster Plan.md).
 	//
-	// What the rule actually forbids, and what it forbade when Drive Impact was
-	// the only armoured move in the game, is armour on a **plain normal**: a
+	// What the rule actually forbids, and what it forbade when the since-cut
+	// Drive Impact was the only armoured move in the game, is armour on a
+	// **plain normal**: a
 	// button with no cost and no motion that beats every other button, where
 	// the only way to notice is to lose to it.
 	if m.Armored() && m.Drive == 0 && m.Super == 0 && m.Motion == sim.MotionNone {
 		return m, fmt.Errorf("armor %d on a plain normal: it costs no drive, no super level and no motion", m.Armor)
-	}
-
-	if jm.Reversal {
-		m.Reversal = 1
-		// Both halves of what a Drive Reversal is. Without the price it is a
-		// free escape from every blockstring in the game; without invulnerable
-		// frames it loses to the pressure it exists to answer, and the way to
-		// find that out is to be counter-hit by the next jab.
-		if m.Drive == 0 {
-			return m, fmt.Errorf("a reversal must cost drive")
-		}
-		if m.InvulnEnd == m.InvulnStart {
-			return m, fmt.Errorf("a reversal with no invulnerable frames loses to the pressure it answers")
-		}
 	}
 
 	if jm.Knockdown {

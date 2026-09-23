@@ -39,17 +39,17 @@ ORIGIN = (CELL // 2, 120)
 # after D113 cut the ones the view cannot select between.
 FRAMES = {
     "idle": 6, "walk": 6, "crouch": 4, "dash": 5, "jump": 5,
-    "stun": 4, "block": 3, "thrown": 6, "down": 8, "parry": 4,
+    "stun": 4, "block": 3, "thrown": 6, "down": 8,
     "normal": 6, "air": 4, "special": 8, "super": 12, "throw": 6,
 }
 
-# The twelve state tags. StateAttack has none — its animation is the move.
-# StatePreJump and StateLanding reuse crouch; StateRush reuses dash.
+# The eleven state tags. StateAttack has none — its animation is the move.
+# StatePreJump and StateLanding reuse crouch.
 STATE_TAGS = [
     ("idle", "idle"), ("walk_f", "walk"), ("walk_b", "walk"),
     ("crouch", "crouch"), ("dash", "dash"), ("dash_b", "dash"),
     ("jump", "jump"), ("hitstun", "stun"), ("blockstun", "block"),
-    ("thrown", "thrown"), ("knockdown", "down"), ("parry", "parry"),
+    ("thrown", "thrown"), ("knockdown", "down"),
 ]
 
 # Silhouette metrics, in sim units at 1 px each, measured up from the feet.
@@ -156,8 +156,6 @@ def pose(cat, f, n):
         return dict(lean=-13 + 4 * t, bob=-2, tuck=0.1)
     if cat == "block":
         return dict(lean=-3, reach=6, squash=0.97)
-    if cat == "parry":
-        return dict(reach=10, squash=0.96, lean=1)
     if cat == "thrown":
         return dict(lean=-14 * (1 - t), squash=0.85, bob=int(8 * (1 - t)))
     if cat == "down":
@@ -302,7 +300,7 @@ def check(rosters):
         assert kai[mid] == mid, f"{mid} collapsed to {kai[mid]}"
 
     # A group of one keeps its own name: there is one 236236LP, not three.
-    for mid in ("236236LP", "236236LK", "214214LP", "236EX", "623EX", "DI", "DR", "LPLK"):
+    for mid in ("236236LP", "236236LK", "214214LP", "236EX", "623EX", "LPLK"):
         assert kai[mid] == mid, f"{mid} renamed to {kai[mid]}"
 
     print("collapse rule ok")

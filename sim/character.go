@@ -44,12 +44,6 @@ const (
 	CancelSuper1  uint16 = 1 << 2
 	CancelSuper2  uint16 = 1 << 3
 	CancelSuper3  uint16 = 1 << 4
-	// CancelDrive is the bit the comment above this block promised: a move that
-	// names it may be cancelled into a Drive Rush, which is the expensive
-	// three-bar entry. It is not a move, so it is a category with no move of
-	// its own — the only one, and the reason it is a category at all is that
-	// which normals allow it is data and not code.
-	CancelDrive uint16 = 1 << 5
 )
 
 // superCancel is the category of a super at the given level. Index 0 is unused:
@@ -201,26 +195,16 @@ type Move struct {
 	// numbers that vary between throws are the ones every move already has.
 	Throw int32
 
-	// Reversal marks the Drive Reversal: the move that comes out of blockstun
-	// rather than out of an actionable state. It is the only thing in the game
-	// that does, which is what makes it an escape from pressure rather than
-	// another button — and it is why blockstun is not simply made actionable.
-	Reversal int32
-
 	// Drive is the move's cost in Drive bars, or 0 for everything that does not
-	// spend the gauge (03 Game Design/Resource System.md). Three of the five
-	// Drive mechanics are moves and nothing else — Drive Impact costs 1, an EX
-	// special 2, a Drive Reversal 2 — so once a move can charge the gauge they
-	// are data rather than code, in the same way the three super levels are.
-	//
-	// Whole bars, unlike the half-bar Drive Parry: the parry is not a move, it
-	// is a stance with a drain, and its cost lives in the balance file.
+	// spend the gauge (03 Game Design/Resource System.md). Only EX specials do
+	// since D115 cut the other Drive mechanics, and they are data rather than
+	// code, in the same way the three super levels are.
 	Drive int32
 
-	// Armor is how many hits the move absorbs while it is coming out: the
-	// mechanism Drive Impact is built from. An absorbed hit deals reduced
-	// damage that cannot kill, and costs the defender no hitstun — the move
-	// keeps going, which is the whole point of spending a bar on it.
+	// Armor is how many hits the move absorbs while it is coming out. An
+	// absorbed hit deals reduced damage that cannot kill, and costs the
+	// defender no hitstun — the move keeps going, which is what the motion,
+	// the bars or the super level that paid for it bought.
 	//
 	// ponytail: armour covers startup and the active frames, and the recovery
 	// is exposed. A per-move window is the InvulnStart/InvulnEnd pair over
@@ -264,9 +248,6 @@ func (m *Move) DriveCost() int32 { return m.Drive * BarUnits }
 
 // Armored reports a move that absorbs hits on the way out.
 func (m *Move) Armored() bool { return m.Armor > 0 }
-
-// IsReversal reports the move that may be performed out of blockstun.
-func (m *Move) IsReversal() bool { return m.Reversal != 0 }
 
 // Category is the cancel category the move *is*, as opposed to the ones it
 // cancels into. Derived rather than authored: a super declares its level, a
