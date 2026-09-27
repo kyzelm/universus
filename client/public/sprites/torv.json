@@ -23,9 +23,471 @@
       "duration": 100
     },
     {
+      "filename": "torv 0.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 0.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 0.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 0.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 0.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 0.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 0.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
       "filename": "torv 1.aseprite",
       "frame": {
         "x": 192,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 1.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 1.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 1.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 1.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 1.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 1.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 1.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 2.aseprite",
+      "frame": {
+        "x": 384,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 2.aseprite",
+      "frame": {
+        "x": 384,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 2.aseprite",
+      "frame": {
+        "x": 384,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 2.aseprite",
+      "frame": {
+        "x": 384,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 2.aseprite",
+      "frame": {
+        "x": 384,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 2.aseprite",
+      "frame": {
+        "x": 384,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 2.aseprite",
+      "frame": {
+        "x": 384,
         "y": 0,
         "w": 192,
         "h": 160
@@ -89,9 +551,471 @@
       "duration": 100
     },
     {
+      "filename": "torv 3.aseprite",
+      "frame": {
+        "x": 576,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 3.aseprite",
+      "frame": {
+        "x": 576,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 3.aseprite",
+      "frame": {
+        "x": 576,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 3.aseprite",
+      "frame": {
+        "x": 576,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 3.aseprite",
+      "frame": {
+        "x": 576,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 3.aseprite",
+      "frame": {
+        "x": 576,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 3.aseprite",
+      "frame": {
+        "x": 576,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
       "filename": "torv 4.aseprite",
       "frame": {
         "x": 768,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 4.aseprite",
+      "frame": {
+        "x": 768,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 4.aseprite",
+      "frame": {
+        "x": 768,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 4.aseprite",
+      "frame": {
+        "x": 768,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 4.aseprite",
+      "frame": {
+        "x": 768,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 4.aseprite",
+      "frame": {
+        "x": 768,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 4.aseprite",
+      "frame": {
+        "x": 768,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 4.aseprite",
+      "frame": {
+        "x": 768,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 5.aseprite",
+      "frame": {
+        "x": 960,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 5.aseprite",
+      "frame": {
+        "x": 960,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 5.aseprite",
+      "frame": {
+        "x": 960,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 5.aseprite",
+      "frame": {
+        "x": 960,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 5.aseprite",
+      "frame": {
+        "x": 960,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 5.aseprite",
+      "frame": {
+        "x": 960,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 5.aseprite",
+      "frame": {
+        "x": 960,
         "y": 0,
         "w": 192,
         "h": 160
@@ -155,9 +1079,273 @@
       "duration": 100
     },
     {
+      "filename": "torv 6.aseprite",
+      "frame": {
+        "x": 1152,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 6.aseprite",
+      "frame": {
+        "x": 1152,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 6.aseprite",
+      "frame": {
+        "x": 1152,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 6.aseprite",
+      "frame": {
+        "x": 1152,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
       "filename": "torv 7.aseprite",
       "frame": {
         "x": 1344,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 7.aseprite",
+      "frame": {
+        "x": 1344,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 7.aseprite",
+      "frame": {
+        "x": 1344,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 7.aseprite",
+      "frame": {
+        "x": 1344,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 7.aseprite",
+      "frame": {
+        "x": 1344,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 8.aseprite",
+      "frame": {
+        "x": 1536,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 8.aseprite",
+      "frame": {
+        "x": 1536,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 8.aseprite",
+      "frame": {
+        "x": 1536,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 8.aseprite",
+      "frame": {
+        "x": 1536,
         "y": 0,
         "w": 192,
         "h": 160
@@ -221,9 +1409,273 @@
       "duration": 100
     },
     {
+      "filename": "torv 9.aseprite",
+      "frame": {
+        "x": 1728,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 9.aseprite",
+      "frame": {
+        "x": 1728,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 9.aseprite",
+      "frame": {
+        "x": 1728,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 9.aseprite",
+      "frame": {
+        "x": 1728,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
       "filename": "torv 10.aseprite",
       "frame": {
         "x": 1920,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 10.aseprite",
+      "frame": {
+        "x": 1920,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 10.aseprite",
+      "frame": {
+        "x": 1920,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 10.aseprite",
+      "frame": {
+        "x": 1920,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 10.aseprite",
+      "frame": {
+        "x": 1920,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 11.aseprite",
+      "frame": {
+        "x": 2112,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 11.aseprite",
+      "frame": {
+        "x": 2112,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 11.aseprite",
+      "frame": {
+        "x": 2112,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 11.aseprite",
+      "frame": {
+        "x": 2112,
         "y": 0,
         "w": 192,
         "h": 160
@@ -287,9 +1739,273 @@
       "duration": 100
     },
     {
+      "filename": "torv 12.aseprite",
+      "frame": {
+        "x": 2304,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 12.aseprite",
+      "frame": {
+        "x": 2304,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 12.aseprite",
+      "frame": {
+        "x": 2304,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 12.aseprite",
+      "frame": {
+        "x": 2304,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
       "filename": "torv 13.aseprite",
       "frame": {
         "x": 2496,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 13.aseprite",
+      "frame": {
+        "x": 2496,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 13.aseprite",
+      "frame": {
+        "x": 2496,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 13.aseprite",
+      "frame": {
+        "x": 2496,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 13.aseprite",
+      "frame": {
+        "x": 2496,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 14.aseprite",
+      "frame": {
+        "x": 2688,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 14.aseprite",
+      "frame": {
+        "x": 2688,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 14.aseprite",
+      "frame": {
+        "x": 2688,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 14.aseprite",
+      "frame": {
+        "x": 2688,
         "y": 0,
         "w": 192,
         "h": 160
@@ -353,9 +2069,273 @@
       "duration": 100
     },
     {
+      "filename": "torv 15.aseprite",
+      "frame": {
+        "x": 2880,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 15.aseprite",
+      "frame": {
+        "x": 2880,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 15.aseprite",
+      "frame": {
+        "x": 2880,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 15.aseprite",
+      "frame": {
+        "x": 2880,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
       "filename": "torv 16.aseprite",
       "frame": {
         "x": 0,
+        "y": 160,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 16.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 160,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 16.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 160,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 16.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 160,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 16.aseprite",
+      "frame": {
+        "x": 0,
+        "y": 160,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 17.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 160,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 17.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 160,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 17.aseprite",
+      "frame": {
+        "x": 192,
+        "y": 160,
+        "w": 192,
+        "h": 160
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 160
+      },
+      "duration": 100
+    },
+    {
+      "filename": "torv 17.aseprite",
+      "frame": {
+        "x": 192,
         "y": 160,
         "w": 192,
         "h": 160
@@ -4771,205 +6751,205 @@
       {
         "name": "idle",
         "from": 0,
-        "to": 5,
+        "to": 47,
         "direction": "forward"
       },
       {
         "name": "walk_f",
-        "from": 6,
-        "to": 11,
+        "from": 48,
+        "to": 77,
         "direction": "forward"
       },
       {
         "name": "walk_b",
-        "from": 12,
-        "to": 17,
+        "from": 78,
+        "to": 107,
         "direction": "forward"
       },
       {
         "name": "crouch",
-        "from": 18,
-        "to": 21,
+        "from": 108,
+        "to": 111,
         "direction": "forward"
       },
       {
         "name": "dash",
-        "from": 22,
-        "to": 26,
+        "from": 112,
+        "to": 116,
         "direction": "forward"
       },
       {
         "name": "dash_b",
-        "from": 27,
-        "to": 31,
+        "from": 117,
+        "to": 121,
         "direction": "forward"
       },
       {
         "name": "jump",
-        "from": 32,
-        "to": 36,
+        "from": 122,
+        "to": 126,
         "direction": "forward"
       },
       {
         "name": "hitstun",
-        "from": 37,
-        "to": 40,
+        "from": 127,
+        "to": 130,
         "direction": "forward"
       },
       {
         "name": "blockstun",
-        "from": 41,
-        "to": 43,
+        "from": 131,
+        "to": 133,
         "direction": "forward"
       },
       {
         "name": "thrown",
-        "from": 44,
-        "to": 49,
+        "from": 134,
+        "to": 139,
         "direction": "forward"
       },
       {
         "name": "knockdown",
-        "from": 50,
-        "to": 57,
+        "from": 140,
+        "to": 147,
         "direction": "forward"
       },
       {
         "name": "236236LP",
-        "from": 58,
-        "to": 69,
+        "from": 148,
+        "to": 159,
         "direction": "forward"
       },
       {
         "name": "236236LK",
-        "from": 70,
-        "to": 81,
+        "from": 160,
+        "to": 171,
         "direction": "forward"
       },
       {
         "name": "214214LP",
-        "from": 82,
-        "to": 93,
+        "from": 172,
+        "to": 183,
         "direction": "forward"
       },
       {
         "name": "63214EX",
-        "from": 94,
-        "to": 101,
-        "direction": "forward"
-      },
-      {
-        "name": "214EX",
-        "from": 102,
-        "to": 109,
-        "direction": "forward"
-      },
-      {
-        "name": "63214P",
-        "from": 110,
-        "to": 117,
-        "direction": "forward"
-      },
-      {
-        "name": "214P",
-        "from": 118,
-        "to": 125,
-        "direction": "forward"
-      },
-      {
-        "name": "LPLK",
-        "from": 126,
-        "to": 131,
-        "direction": "forward"
-      },
-      {
-        "name": "5LP",
-        "from": 132,
-        "to": 137,
-        "direction": "forward"
-      },
-      {
-        "name": "5MP",
-        "from": 138,
-        "to": 143,
-        "direction": "forward"
-      },
-      {
-        "name": "5HP",
-        "from": 144,
-        "to": 149,
-        "direction": "forward"
-      },
-      {
-        "name": "5LK",
-        "from": 150,
-        "to": 155,
-        "direction": "forward"
-      },
-      {
-        "name": "5MK",
-        "from": 156,
-        "to": 161,
-        "direction": "forward"
-      },
-      {
-        "name": "5HK",
-        "from": 162,
-        "to": 167,
-        "direction": "forward"
-      },
-      {
-        "name": "2LP",
-        "from": 168,
-        "to": 173,
-        "direction": "forward"
-      },
-      {
-        "name": "2LK",
-        "from": 174,
-        "to": 179,
-        "direction": "forward"
-      },
-      {
-        "name": "2MP",
-        "from": 180,
-        "to": 185,
-        "direction": "forward"
-      },
-      {
-        "name": "2HP",
-        "from": 186,
+        "from": 184,
         "to": 191,
         "direction": "forward"
       },
       {
-        "name": "2MK",
+        "name": "214EX",
         "from": 192,
-        "to": 197,
+        "to": 199,
         "direction": "forward"
       },
       {
-        "name": "2HK",
-        "from": 198,
-        "to": 203,
-        "direction": "forward"
-      },
-      {
-        "name": "jLP",
-        "from": 204,
+        "name": "63214P",
+        "from": 200,
         "to": 207,
         "direction": "forward"
       },
       {
-        "name": "jHP",
+        "name": "214P",
         "from": 208,
-        "to": 211,
+        "to": 215,
+        "direction": "forward"
+      },
+      {
+        "name": "LPLK",
+        "from": 216,
+        "to": 221,
+        "direction": "forward"
+      },
+      {
+        "name": "5LP",
+        "from": 222,
+        "to": 227,
+        "direction": "forward"
+      },
+      {
+        "name": "5MP",
+        "from": 228,
+        "to": 233,
+        "direction": "forward"
+      },
+      {
+        "name": "5HP",
+        "from": 234,
+        "to": 239,
+        "direction": "forward"
+      },
+      {
+        "name": "5LK",
+        "from": 240,
+        "to": 245,
+        "direction": "forward"
+      },
+      {
+        "name": "5MK",
+        "from": 246,
+        "to": 251,
+        "direction": "forward"
+      },
+      {
+        "name": "5HK",
+        "from": 252,
+        "to": 257,
+        "direction": "forward"
+      },
+      {
+        "name": "2LP",
+        "from": 258,
+        "to": 263,
+        "direction": "forward"
+      },
+      {
+        "name": "2LK",
+        "from": 264,
+        "to": 269,
+        "direction": "forward"
+      },
+      {
+        "name": "2MP",
+        "from": 270,
+        "to": 275,
+        "direction": "forward"
+      },
+      {
+        "name": "2HP",
+        "from": 276,
+        "to": 281,
+        "direction": "forward"
+      },
+      {
+        "name": "2MK",
+        "from": 282,
+        "to": 287,
+        "direction": "forward"
+      },
+      {
+        "name": "2HK",
+        "from": 288,
+        "to": 293,
+        "direction": "forward"
+      },
+      {
+        "name": "jLP",
+        "from": 294,
+        "to": 297,
+        "direction": "forward"
+      },
+      {
+        "name": "jHP",
+        "from": 298,
+        "to": 301,
         "direction": "forward"
       },
       {
         "name": "jHK",
-        "from": 212,
-        "to": 215,
+        "from": 302,
+        "to": 305,
         "direction": "forward"
       }
     ],

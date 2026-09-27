@@ -63,6 +63,12 @@ FRAMES = {
     "normal": 6, "air": 4, "special": 8, "super": 12, "throw": 6,
 }
 
+# Game frames each placeholder drawing is held in the tags that loop. One
+# frame per drawing is right for attacks, which must fit their frame data,
+# and wrong for a loop: a 1 px bob cycling every 0.1 s reads as a shake.
+# Drawn art sets this itself, through Aseprite's frame durations.
+HOLD = {"idle": 8, "walk": 5}
+
 # The eleven state tags. StateAttack has none — its animation is the move.
 # StatePreJump and StateLanding reuse crouch.
 STATE_TAGS = [
@@ -384,7 +390,7 @@ def build(key, character, art=None, out=None):
                 img.paste(cell, (cx, cy))
             else:
                 draw(d, body, pose(cat, f, n), cx + origin[0], cy + origin[1])
-                reps = 1
+                reps = HOLD.get(cat, 1)
             # A held pose is one cell listed several times, not several cells.
             frames += [{
                 "filename": f"{key} {i}.aseprite",
@@ -448,7 +454,7 @@ def check_composite(roster):
         tags = {t["name"]: t for t in sheet["meta"]["frameTags"]}
         assert (tags["idle"]["from"], tags["idle"]["to"]) == (0, 6), tags["idle"]  # 100 ms = 6, + 1
         assert tags["walk_f"]["to"] - tags["walk_f"]["from"] + 1 == 6
-        assert tags["walk_b"]["to"] - tags["walk_b"]["from"] + 1 == FRAMES["walk"]  # placeholder
+        assert tags["walk_b"]["to"] - tags["walk_b"]["from"] + 1 == FRAMES["walk"] * HOLD["walk"]
         assert len(tags) == len(tags_for(roster)[0]) and sheet["meta"]["moveTags"]
 
         # Behind: 70 (idle). In front: 130 (idle). Above: 159 (idle). Below: 20 (walk).
