@@ -66,6 +66,20 @@ const STATE_TAG: Record<string, string> = {
   knockdown: 'knockdown',
 }
 
+/**
+ * Tags that cycle for as long as the state lasts. Everything else plays once
+ * and holds its last frame, which is right for an attack's recovery, a crouch
+ * settling, or a body on the floor — and wrong for standing and walking,
+ * which have no end and would freeze after their first cycle.
+ */
+const LOOPS = new Set(['idle', 'walk_f', 'walk_b'])
+
+/** Which frame of a run of `length` a fighter `stateFrame` frames in shows. */
+export function frameOf(tag: string, stateFrame: number, length: number): number {
+  const f = Math.max(stateFrame, 0)
+  return LOOPS.has(tag) ? f % length : Math.min(f, length - 1)
+}
+
 /** The tag a fighter in this state draws from, or '' if there is none. */
 export function tagFor(meta: SheetMeta, state: number, moveIndex: number): string {
   if (state === ATTACK) return meta.meta.moveTags[moveIndex] ?? ''
@@ -122,8 +136,9 @@ export function buildSheet(meta: SheetMeta, base: Texture): Sheet {
       // are for the two things it cannot cover: a move index of -1, which the
       // sim uses for "no move", and a state frame that has outrun its
       // animation. Neither is an error and neither may throw on a frame.
-      const run = runs.get(tagFor(meta, state, moveIndex)) ?? idle
-      return run[Math.min(Math.max(stateFrame, 0), run.length - 1)]
+      const tag = tagFor(meta, state, moveIndex)
+      const run = runs.get(tag) ?? idle
+      return run[frameOf(runs.has(tag) ? tag : 'idle', stateFrame, run.length)]
     },
   }
 }

@@ -4,7 +4,7 @@ import '../../public/wasm_exec.js'
 
 import {advance, initSim, readSnapshot, reset, STATE_NAMES} from '../sim/wasm'
 import {IN_HP} from './input'
-import {missingTags, tagFor, type SheetMeta} from './sprites'
+import {frameOf, missingTags, tagFor, type SheetMeta} from './sprites'
 
 beforeAll(async () => {
   await initSim(readFileSync('public/main.wasm'))
@@ -64,6 +64,13 @@ test('a missing tag is reported rather than rendered', () => {
   broken.meta.moveTags = [...meta.meta.moveTags, '421K']
 
   expect(missingTags(broken)).toEqual(['421K', 'jump'])
+})
+
+test('standing and walking loop; everything else holds its last frame', () => {
+  expect([6, 7, 13].map((f) => frameOf('idle', f, 6))).toEqual([0, 1, 1])
+  expect(frameOf('walk_b', 6, 6)).toBe(0)
+  expect([5, 40].map((f) => frameOf('5HP', f, 6))).toEqual([5, 5])
+  expect(frameOf('knockdown', 99, 8)).toBe(7)
 })
 
 test('a move index the sim uses for no move resolves to nothing, not a crash', () => {
