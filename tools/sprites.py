@@ -6,12 +6,16 @@ silhouettes at the real dimensions, wearing the real tag names (D113), so the
 view's sprite path can be written and tested against the real Aseprite export
 format before a single frame is drawn.
 
-**Drawn art goes in art/, never over the files this writes.** Export from
-Aseprite to art/kai.{png,json} (JSON Array, untrimmed, tags named per D113,
-a slice named "origin" whose pivot is the feet) and rerun this script: drawn
-tags replace their placeholders one at a time, so a sheet with only an idle
-drawn still loads. The canvas can be any size and can change mid-drawing;
-the placeholders are redrawn to match it. Nothing in the client changes.
+**Drawn art goes in art/<character>/, never over the files this writes.**
+Export from Aseprite into that folder (JSON Array, untrimmed, tags named per
+D113, a slice named "origin" whose pivot is the feet) and rerun this script:
+drawn tags replace their placeholders one at a time, so a sheet with only an
+idle drawn still loads. Any number of exports per character — one file per
+animation, per group, or one for everything — each with its own canvas size;
+they are lined up on their origin slices. Nothing in the client changes.
+
+Every character in data/characters/ gets a sheet, named after its "name"
+lowercased, which is the name the client asks for.
 
 Deliberately ugly for the same reason the game has drawn rectangles since M1:
 placeholder art that looks finished is placeholder art nobody replaces.
@@ -22,7 +26,7 @@ tag is the name the sim already has.
 
     python3 tools/sprites.py
 
-Reads art/{kai,torv}.{png,json} if present; writes client/public/sprites/{kai,torv}.{png,json}.
+Reads art/<name>/*.{png,json} if present; writes client/public/sprites/<name>.{png,json}.
 """
 
 import json
@@ -35,8 +39,10 @@ from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "client" / "public" / "sprites"
-# Hand-drawn Aseprite exports, {kai,torv}.{png,json}. Sources, not what ships.
+# Hand-drawn Aseprite exports, art/<name>/*.{png,json}. Sources, not what ships.
 ART = ROOT / "art"
+# The largest texture every WebGL device is safe to assume.
+MAX_TEXTURE = 4096
 FRAME_MS = 1000 / 60
 
 # The placeholder canvas, used until a character has a drawn export, whose
@@ -85,6 +91,9 @@ BODIES = {
         fill=(196, 150, 118), shade=(134, 100, 78), tails=False,
     ),
 }
+# A character added to the roster before anyone gives it a silhouette. Grey,
+# so it is obviously nobody's final look.
+DEFAULT_BODY = dict(BODIES["kai"], fill=(170, 170, 170), shade=(110, 110, 110), tails=False)
 
 
 def strength_groups(moves):
@@ -243,34 +252,23 @@ def draw(d, body, p, ox, oy):
         box(-hw_h - 11, bot - 8, -hw_h - 4, bot - 3, shade)
 
 
-def drawn(key, art):
-    """The hand-drawn export for key: ({tag: [(cell, sim frames), ...]}, cell
-    size, origin). No tags and the placeholder canvas when nothing is drawn.
-
-    Empty when nothing has been drawn yet. Aseprite's export is a *source*
-    here, not the file the client loads: it carries no move table, and an
-    artist working tag by tag has a sheet that is mostly missing, which the
-    loader refuses outright. So the published sheet is a composite — drawn
-    tags where they exist, placeholders everywhere else — and the game runs
-    at every stage of the drawing.
+def read_export(src):
+    """One Aseprite export: ({tag: [(cell, sim frames), ...]}, canvas, origin).
 
     A frame's Aseprite duration becomes that many sim frames, because the view
     shows texture N on the Nth frame of a state. What plays in Aseprite's
     preview is what plays in the game, at 60 fps rounding.
 
-    The canvas size and the feet come from the export, not from here, so the
-    canvas can grow mid-drawing. Aseprite exports no origin, but it does
-    export slice pivots, and resizing the canvas moves a slice with the
-    pixels. The feet are the pivot of a slice named "origin". Without one
-    the fighter would float or sink against its boxes, so it is required.
+    The canvas and the feet come from the export, so the canvas can grow
+    mid-drawing. Aseprite exports no origin, but it does export slice pivots,
+    and resizing the canvas moves a slice with the pixels. The feet are the
+    pivot of a slice named "origin". Without one the fighter would float or
+    sink against its boxes, so it is required.
     """
-    src = art / f"{key}.json"
-    if not src.exists():
-        return {}, CELL, ORIGIN
     sheet = json.loads(src.read_text())
     if not isinstance(sheet["frames"], list):
         raise SystemExit(f"{src}: export the sheet as JSON Array, not Hash")
-    img = Image.open(art / pathlib.Path(sheet["meta"]["image"]).name).convert("RGBA")
+    img = Image.open(src.parent / pathlib.Path(sheet["meta"]["image"]).name).convert("RGBA")
 
     # Untrimmed frames are the whole canvas, so every one is the same size.
     sizes = {(fr["frame"]["w"], fr["frame"]["h"]) for fr in sheet["frames"]}
@@ -313,9 +311,48 @@ def drawn(key, art):
     return out, cell, origin
 
 
+def drawn(key, art):
+    """Every drawn tag for key, lined up in one cell: (tags, cell, origin).
+
+    Aseprite's exports are *sources* here, not the file the client loads: they
+    carry no move table, and an artist working tag by tag has a sheet that is
+    mostly missing, which the loader refuses outright. So the published sheet
+    is a composite — drawn tags where they exist, placeholders everywhere
+    else — and the game runs at every stage of the drawing.
+
+    The exports may have different canvases, so each is placed in a shared
+    cell big enough for all of them *measured from the feet*: the most room
+    any export has behind, in front of, above and below its origin. The
+    placeholder canvas takes part, so placeholders never clip. One cell, one
+    anchor, which is all the client knows how to read.
+    """
+    exports = []
+    for src in sorted((art / key).glob("*.json")):
+        exports.append((src, *read_export(src)))
+
+    left, up = ORIGIN
+    right, down = CELL[0] - ORIGIN[0], CELL[1] - ORIGIN[1]
+    for _, _, (w, h), (ox, oy) in exports:
+        left, right, up, down = max(left, ox), max(right, w - ox), max(up, oy), max(down, h - oy)
+    cell, origin = (left + right, up + down), (left, up)
+
+    tags, source = {}, {}
+    for src, found, _, (ox, oy) in exports:
+        for name, cells in found.items():
+            if name in tags:
+                raise SystemExit(f"{src}: tag {name!r} is also in {source[name]}; draw it once")
+            padded = []
+            for crop, reps in cells:
+                c = Image.new("RGBA", cell, (0, 0, 0, 0))
+                c.paste(crop, (left - ox, up - oy))
+                padded.append((c, reps))
+            tags[name], source[name] = padded, src.name
+    return tags, cell, origin
+
+
 def build(key, character, art=None, out=None):
     art, out = art or ART, out or OUT
-    body = BODIES[key]
+    body = BODIES.get(key, DEFAULT_BODY)
     tags, move_tags = tags_for(character)
     # Placeholders are drawn on the drawn canvas at the drawn feet, so the
     # two kinds of cell share one size and one anchor.
@@ -327,8 +364,13 @@ def build(key, character, art=None, out=None):
         print(f"{key}: art tag {name!r} matches no state or move, ignored", file=sys.stderr)
 
     total = sum(len(have[n]) if n in have else FRAMES[cat] for n, cat in tags)
-    rows = (total + COLS - 1) // COLS
-    img = Image.new("RGBA", (COLS * cw, rows * ch), (0, 0, 0, 0))
+    cols = min(COLS, MAX_TEXTURE // cw)
+    rows = (total + cols - 1) // cols
+    if rows * ch > MAX_TEXTURE:
+        raise SystemExit(f"{key}: {total} cells of {cw}x{ch} need a {cols * cw}x{rows * ch} "
+                         f"sheet, over the {MAX_TEXTURE} px texture limit — shrink the largest "
+                         "canvas, or move effects out of the character's exports")
+    img = Image.new("RGBA", (cols * cw, rows * ch), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
     frames, frame_tags, i = [], [], 0
@@ -336,7 +378,7 @@ def build(key, character, art=None, out=None):
         first = len(frames)
         n = FRAMES[cat]
         for f in range(len(have[name]) if name in have else n):
-            cx, cy = (i % COLS) * cw, (i // COLS) * ch
+            cx, cy = (i % cols) * cw, (i // cols) * ch
             if name in have:
                 cell, reps = have[name][f]
                 img.paste(cell, (cx, cy))
@@ -376,30 +418,47 @@ def build(key, character, art=None, out=None):
 
 
 def check_composite(roster):
-    """A drawn tag replaces its placeholder, durations become sim frames, the
-    canvas and feet come from the export, and every other tag survives —
-    asserted on a two-frame sheet in a temp dir."""
-    w, h = 200, 170  # not the placeholder canvas, so adopting it is visible
+    """Drawn tags replace their placeholders, durations become sim frames, and
+    two exports with different canvases land in one cell lined up on their
+    feet — asserted on two tiny exports in a temp dir."""
+
+    def export(d, name, w, h, origin, tag, durations):
+        Image.new("RGBA", (len(durations) * w, h), (255, 0, 0, 255)).save(d / f"{name}.png")
+        (d / f"{name}.json").write_text(json.dumps({
+            "frames": [{"frame": {"x": i * w, "y": 0, "w": w, "h": h}, "duration": ms}
+                       for i, ms in enumerate(durations)],
+            "meta": {"image": f"{name}.png", "frameTags": [{"name": tag, "from": 0,
+                                                             "to": len(durations) - 1}],
+                     "slices": [{"name": "origin", "keys": [{"frame": 0,
+                                 "bounds": {"x": origin[0] - 5, "y": origin[1] - 5, "w": 10, "h": 10},
+                                 "pivot": {"x": 5, "y": 5}}]}]},
+        }))
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp = pathlib.Path(tmp)
-        Image.new("RGBA", (2 * w, h), (255, 0, 0, 255)).save(tmp / "kai.png")
-        frame = lambda x, ms: {"frame": {"x": x, "y": 0, "w": w, "h": h}, "duration": ms}
-        (tmp / "kai.json").write_text(json.dumps({
-            "frames": [frame(0, 100), frame(w, 17)],
-            "meta": {"image": "kai.png", "frameTags": [{"name": "idle", "from": 0, "to": 1}],
-                     "slices": [{"name": "origin", "keys": [{"frame": 0,
-                                 "bounds": {"x": 60, "y": 150, "w": 20, "h": 10},
-                                 "pivot": {"x": 10, "y": 9}}]}]},
-        }))
+        (tmp / "kai").mkdir()
+        # Wider behind the feet and taller than the placeholder canvas...
+        export(tmp / "kai", "idle", 200, 170, (70, 159), "idle", [100, 17])
+        # ...and one that is small, but deeper below its feet than either.
+        export(tmp / "kai", "walk", 100, 100, (50, 80), "walk_f", [100])
         build("kai", roster, art=tmp, out=tmp / "out")
         sheet = json.loads((tmp / "out/kai.json").read_text())
+        img = Image.open(tmp / "out/kai.png")
 
-    tags = {t["name"]: t for t in sheet["meta"]["frameTags"]}
-    assert (tags["idle"]["from"], tags["idle"]["to"]) == (0, 6), tags["idle"]  # 100 ms = 6 frames, + 1
-    assert tags["walk_f"]["to"] - tags["walk_f"]["from"] + 1 == FRAMES["walk"]
-    assert len(tags) == len(tags_for(roster)[0]) and sheet["meta"]["moveTags"]
-    assert {(f["frame"]["w"], f["frame"]["h"]) for f in sheet["frames"]} == {(w, h)}
-    assert sheet["meta"]["origin"] == {"x": 70, "y": 159}, sheet["meta"]["origin"]
+        tags = {t["name"]: t for t in sheet["meta"]["frameTags"]}
+        assert (tags["idle"]["from"], tags["idle"]["to"]) == (0, 6), tags["idle"]  # 100 ms = 6, + 1
+        assert tags["walk_f"]["to"] - tags["walk_f"]["from"] + 1 == 6
+        assert tags["walk_b"]["to"] - tags["walk_b"]["from"] + 1 == FRAMES["walk"]  # placeholder
+        assert len(tags) == len(tags_for(roster)[0]) and sheet["meta"]["moveTags"]
+
+        # Behind: 70 (idle). In front: 130 (idle). Above: 159 (idle). Below: 20 (walk).
+        assert {(f["frame"]["w"], f["frame"]["h"]) for f in sheet["frames"]} == {(200, 179)}
+        assert sheet["meta"]["origin"] == {"x": 70, "y": 159}, sheet["meta"]["origin"]
+        # The walk cell's feet are on the shared feet: its 100x100 canvas starts
+        # at (70-50, 159-80) inside its cell, and nothing is drawn left of it.
+        r = sheet["frames"][tags["walk_f"]["from"]]["frame"]
+        assert img.getpixel((r["x"] + 20, r["y"] + 79))[3] == 255
+        assert img.getpixel((r["x"] + 19, r["y"] + 79))[3] == 0
     print("composite ok")
 
 
@@ -410,7 +469,7 @@ def check(rosters):
     two ways to be wrong: collapsing a normal (5LP and 5HP are different
     animations) or renaming a super that had no sibling to merge with.
     """
-    kai, torv = (strength_groups(r["moves"]) for r in rosters)
+    kai, torv = (strength_groups(rosters[name]["moves"]) for name in ("kai", "torv"))
 
     # Three strengths of one special, one animation (D21, D113).
     assert kai["236LP"] == kai["236MP"] == kai["236HP"] == "236P", kai["236LP"]
@@ -429,11 +488,13 @@ def check(rosters):
 
 
 if __name__ == "__main__":
-    paths = ((ROOT / "data/characters/00-shoto.json", "kai"),
-             (ROOT / "data/characters/01-grappler.json", "torv"))
-    rosters = [json.loads(p.read_text()) for p, _ in paths]
+    # The whole roster, keyed by the name the client lowercases to find a sheet.
+    rosters = {}
+    for p in sorted((ROOT / "data" / "characters").glob("*.json")):
+        c = json.loads(p.read_text())
+        rosters[c["name"].lower()] = c
     check(rosters)
-    check_composite(rosters[0])
-    for (_, key), c in zip(paths, rosters):
+    check_composite(rosters["kai"])
+    for key, c in rosters.items():
         tags, total, art, size = build(key, c)
         print(f"{key:5} {tags:3} tags ({art} drawn) {total:4} cells  {size[0]}x{size[1]}")
