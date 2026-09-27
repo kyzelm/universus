@@ -4,8 +4,13 @@
 **These are not art and are not meant to become art.** They are flat two-tone
 silhouettes at the real dimensions, wearing the real tag names (D113), so the
 view's sprite path can be written and tested against the real Aseprite export
-format before a single frame is drawn. When the hand-drawn sheets arrive they
-replace these files and nothing in the client changes.
+format before a single frame is drawn.
+
+**Drawn art goes in art/, never over the files this writes.** Export from
+Aseprite to art/kai.{png,json} (JSON Array, untrimmed 128x128 cells, feet at
+ORIGIN, tags named per D113) and rerun this script: drawn tags replace their
+placeholders one at a time, so a sheet with only an idle drawn still loads.
+Nothing in the client changes.
 
 Deliberately ugly for the same reason the game has drawn rectangles since M1:
 placeholder art that looks finished is placeholder art nobody replaces.
@@ -16,17 +21,22 @@ tag is the name the sim already has.
 
     python3 tools/sprites.py
 
-Writes client/public/sprites/{kai,torv}.{png,json}.
+Reads art/{kai,torv}.{png,json} if present; writes client/public/sprites/{kai,torv}.{png,json}.
 """
 
 import json
 import pathlib
 import re
+import sys
+import tempfile
 
 from PIL import Image, ImageDraw
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "client" / "public" / "sprites"
+# Hand-drawn Aseprite exports, {kai,torv}.{png,json}. Sources, not what ships.
+ART = ROOT / "art"
+FRAME_MS = 1000 / 60
 
 # One cell holds the tallest fighter plus the reach of an extended limb.
 CELL = 128
@@ -229,56 +239,127 @@ def draw(d, body, p, ox, oy):
         box(-hw_h - 11, bot - 8, -hw_h - 4, bot - 3, shade)
 
 
-def build(key, character):
+def drawn(key, art):
+    """The hand-drawn export for key, as {tag: [(cell, sim frames), ...]}.
+
+    Empty when nothing has been drawn yet. Aseprite's export is a *source*
+    here, not the file the client loads: it carries no move table, and an
+    artist working tag by tag has a sheet that is mostly missing, which the
+    loader refuses outright. So the published sheet is a composite — drawn
+    tags where they exist, placeholders everywhere else — and the game runs
+    at every stage of the drawing.
+
+    A frame's Aseprite duration becomes that many sim frames, because the view
+    shows texture N on the Nth frame of a state. What plays in Aseprite's
+    preview is what plays in the game, at 60 fps rounding.
+    """
+    src = art / f"{key}.json"
+    if not src.exists():
+        return {}
+    sheet = json.loads(src.read_text())
+    if not isinstance(sheet["frames"], list):
+        raise SystemExit(f"{src}: export the sheet as JSON Array, not Hash")
+    img = Image.open(art / pathlib.Path(sheet["meta"]["image"]).name).convert("RGBA")
+
+    out = {}
+    for t in sheet["meta"]["frameTags"]:
+        # ponytail: forward only. Reverse and ping-pong are frame orderings a
+        # few lines could expand, add them when an animation asks for one.
+        if t.get("direction", "forward") != "forward":
+            raise SystemExit(f"{src}: tag {t['name']} is {t['direction']}, only forward is read")
+        cells = []
+        for fr in sheet["frames"][t["from"]:t["to"] + 1]:
+            r = fr["frame"]
+            # Every cell shares one size and one origin (ORIGIN, at the feet),
+            # which is what lets a composite mix drawn and placeholder cells.
+            if fr.get("trimmed") or (r["w"], r["h"]) != (CELL, CELL):
+                raise SystemExit(f"{src}: tag {t['name']} has a {r['w']}x{r['h']} "
+                                 f"or trimmed cell; export untrimmed {CELL}x{CELL}")
+            cell = img.crop((r["x"], r["y"], r["x"] + CELL, r["y"] + CELL))
+            cells.append((cell, max(1, round(fr["duration"] / FRAME_MS))))
+        out[t["name"]] = cells
+    return out
+
+
+def build(key, character, art=None, out=None):
+    art, out = art or ART, out or OUT
     body = BODIES[key]
     tags, move_tags = tags_for(character)
-    total = sum(FRAMES[cat] for _, cat in tags)
-    rows = (total + COLS - 1) // COLS
+    have = drawn(key, art)
 
+    # A drawn tag the roster never asks for is almost always a typo, and a
+    # typo'd tag is silently a placeholder forever. Say so every run.
+    for name in sorted(set(have) - {n for n, _ in tags}):
+        print(f"{key}: art tag {name!r} matches no state or move, ignored", file=sys.stderr)
+
+    total = sum(len(have[n]) if n in have else FRAMES[cat] for n, cat in tags)
+    rows = (total + COLS - 1) // COLS
     img = Image.new("RGBA", (COLS * CELL, rows * CELL), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
     frames, frame_tags, i = [], [], 0
     for name, cat in tags:
+        first = len(frames)
         n = FRAMES[cat]
-        frame_tags.append({"name": name, "from": i, "to": i + n - 1, "direction": "forward"})
-        for f in range(n):
+        for f in range(len(have[name]) if name in have else n):
             cx, cy = (i % COLS) * CELL, (i // COLS) * CELL
-            draw(d, body, pose(cat, f, n), cx + ORIGIN[0], cy + ORIGIN[1])
-            frames.append({
+            if name in have:
+                cell, reps = have[name][f]
+                img.paste(cell, (cx, cy))
+            else:
+                draw(d, body, pose(cat, f, n), cx + ORIGIN[0], cy + ORIGIN[1])
+                reps = 1
+            # A held pose is one cell listed several times, not several cells.
+            frames += [{
                 "filename": f"{key} {i}.aseprite",
                 "frame": {"x": cx, "y": cy, "w": CELL, "h": CELL},
                 "rotated": False, "trimmed": False,
                 "spriteSourceSize": {"x": 0, "y": 0, "w": CELL, "h": CELL},
                 "sourceSize": {"w": CELL, "h": CELL},
-                "duration": 100,
-            })
+                "duration": round(FRAME_MS) if name in have else 100,
+            }] * reps
             i += 1
+        frame_tags.append({"name": name, "from": first, "to": len(frames) - 1, "direction": "forward"})
 
-    OUT.mkdir(parents=True, exist_ok=True)
-    img.save(OUT / f"{key}.png")
-    (OUT / f"{key}.json").write_text(json.dumps({
+    out.mkdir(parents=True, exist_ok=True)
+    img.save(out / f"{key}.png")
+    (out / f"{key}.json").write_text(json.dumps({
         "frames": frames,
         "meta": {
-            "app": "tools/sprites.py", "version": "placeholder",
+            "app": "tools/sprites.py", "version": "composite" if have else "placeholder",
             "image": f"{key}.png", "format": "RGBA8888",
             "size": {"w": img.width, "h": img.height}, "scale": "1",
             "origin": {"x": ORIGIN[0], "y": ORIGIN[1]},
             "frameTags": frame_tags,
-            # Move index to tag, in roster order. Not an Aseprite field — the
-            # hand-drawn sheets will need it merged in, which is the price of
-            # keeping move ids out of sim.Move.
-            #
-            # ponytail: nothing proves this table still matches the embedded
-            # character data. Add a move and rebuild without regenerating and
-            # the view plays the wrong animation, silently and cosmetically
-            # only. Upgrade path is a CI step that reruns this generator and
-            # fails on a diff, which makes the drift impossible rather than
-            # merely detectable.
+            # Move index to tag, in roster order. Not an Aseprite field, which
+            # is why the drawn export is a source and this file is generated:
+            # the price of keeping move ids out of sim.Move. CI reruns this
+            # script and refuses a diff, so the table cannot drift.
             "moveTags": move_tags,
         },
     }, indent=2) + "\n")
-    return len(tags), total, img.size
+    return len(tags), total, len(have), img.size
+
+
+def check_composite(roster):
+    """A drawn tag replaces its placeholder, durations become sim frames, and
+    every other tag survives — asserted on a two-frame sheet in a temp dir."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        Image.new("RGBA", (2 * CELL, CELL), (255, 0, 0, 255)).save(tmp / "kai.png")
+        frame = lambda x, ms: {"frame": {"x": x, "y": 0, "w": CELL, "h": CELL}, "duration": ms}
+        (tmp / "kai.json").write_text(json.dumps({
+            "frames": [frame(0, 100), frame(CELL, 17)],
+            "meta": {"image": "kai.png", "frameTags": [{"name": "idle", "from": 0, "to": 1}]},
+        }))
+        build("kai", roster, art=tmp, out=tmp / "out")
+        sheet = json.loads((tmp / "out/kai.json").read_text())
+
+    tags = {t["name"]: t for t in sheet["meta"]["frameTags"]}
+    assert (tags["idle"]["from"], tags["idle"]["to"]) == (0, 6), tags["idle"]  # 100 ms = 6 frames, + 1
+    assert tags["walk_f"]["to"] - tags["walk_f"]["from"] + 1 == FRAMES["walk"]
+    assert len(tags) == len(tags_for(roster)[0]) and sheet["meta"]["moveTags"]
+    print("composite ok")
 
 
 def check(rosters):
@@ -311,6 +392,7 @@ if __name__ == "__main__":
              (ROOT / "data/characters/01-grappler.json", "torv"))
     rosters = [json.loads(p.read_text()) for p, _ in paths]
     check(rosters)
+    check_composite(rosters[0])
     for (_, key), c in zip(paths, rosters):
-        tags, total, size = build(key, c)
-        print(f"{key:5} {tags:3} tags {total:4} frames  {size[0]}x{size[1]}")
+        tags, total, art, size = build(key, c)
+        print(f"{key:5} {tags:3} tags ({art} drawn) {total:4} cells  {size[0]}x{size[1]}")

@@ -55,6 +55,7 @@ server/     Go backend: auth, matchmaking, signaling, relay, verification. impor
 client/     TypeScript, Vite, PixiJS view + net layer
 tools/      tools/replay = headless replay/checksum harness; frame data editor later
 data/       character + balance JSON
+art/        hand-drawn Aseprite exports, sources for tools/sprites.py
 testdata/   input log corpus — every desync bug ever found lands here as a regression log
 ```
 
@@ -167,7 +168,9 @@ format and animation is chosen from the render snapshot alone. The drawing has n
   the raw embedded bytes, so a cosmetic rename would refuse a handshake against identical frame data.
 - `tools/sprites.py` generates placeholder sheets and the move-index-to-tag table. CI reruns it and
   fails on a JSON diff, so the table cannot drift from the roster.
-- Hand-drawn sheets replace `client/public/sprites/*` at the same paths; the client does not change.
+- Hand-drawn Aseprite exports go in `art/{kai,torv}.{png,json}`, never over `client/public/sprites/*`.
+  The generator composites them over the placeholders tag by tag and adds the move table, so a
+  half-drawn sheet still loads. Frame durations become sim frames. Rerun it after every export.
 
 Then M5: measurement matrix, camera latency rig, deploy, and ~68 pages of thesis. **M5 starting late
 is the failure mode** — cut features, never weeks from M5.
