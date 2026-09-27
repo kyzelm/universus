@@ -147,7 +147,13 @@ async function botMatch(corruptAt = -1, pair = 0) {
   // pass for the worst possible reason.
   A.advance(0, 0)
   expect([A.frame(), B.frame()]).toEqual([1, 0])
-  B.advance(0, 0)
+  // Then undone. **A sim one frame ahead of its driver is a desync the harness
+  // made itself**: the driver rewinds by its own frame numbers, so the first
+  // rollback on each end silently drops one frame of inputs, and the two ends
+  // take their first rollback at different frames. It healed once the input
+  // ring forgot it, which is why fifty seeds were needed to see it once.
+  expect(A.rewind(0)).toBe(true)
+  expect([A.frame(), A.checksum()]).toEqual([0, B.checksum()])
 
   vi.useFakeTimers()
 
