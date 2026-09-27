@@ -279,9 +279,16 @@ def drawn(key, art):
                          "export untrimmed")
     cell = sizes.pop()
 
-    # ponytail: the first key of the slice. A slice keyed per frame would be
-    # an origin that moves, which is the bug this exists to prevent.
+    # A slice keyed per frame is an origin that moves, which is the bug this
+    # exists to prevent — the feet are the sim's position, and the boxes hang
+    # off it. Refused rather than read from the first key, or a nudge on frame
+    # 40 would be silently ignored and the drawing would drift from its boxes.
     slices = [sl for sl in sheet["meta"].get("slices", []) if sl["name"] == "origin"]
+    if slices and len(slices[0]["keys"]) > 1:
+        frames = [k["frame"] for k in slices[0]["keys"]]
+        raise SystemExit(f"{src}: slice 'origin' moves on frames {frames}; it must stay put — "
+                         "the feet are the fighter's position. Undo the move, or delete the "
+                         "slice and make it again on frame 1")
     key0 = slices[0]["keys"][0] if slices else {}
     if "pivot" not in key0:
         raise SystemExit(f"{src}: no slice named 'origin' with a pivot at the feet "
