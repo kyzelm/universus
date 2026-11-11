@@ -1,0 +1,13 @@
+*.exe
+*.wasm
+/bin/
+
+*.test
+*.out
+
+.DS_Store
+.idea/
+.vscode/
+
+*.env
+*.env.local
